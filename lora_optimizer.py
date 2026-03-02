@@ -1,13 +1,7 @@
 """
-Z-Image LoRA Merger for ComfyUI
-Custom nodes for combining multiple LoRAs without overexposure on distilled models.
-
-Problem: Standard LoRA application adds effects additively, causing overexposure
-on distilled models like Z-Image Turbo, SDXL-Turbo, LCM, etc.
-
-Solution: Various blending strategies to normalize the combined LoRA effect.
-
-Author: DanrisiUA (https://github.com/DanrisiUA)
+ComfyUI-LoRA-Optimizer
+Auto-optimizer node for combining multiple LoRAs via diff-based merging
+with TIES conflict resolution and automatic parameter selection.
 """
 
 import torch
@@ -24,171 +18,10 @@ import comfy.sd
 import comfy.lora
 
 
-class ZImageLoRAMerger:
+class LoRAStack:
     """
-    Node for combining multiple LoRAs with various blending strategies,
-    optimized for Z-Image Turbo and other distilled models.
-    """
-    
-    BLEND_MODES = [
-        "normalize",      # Normalizes total strength to target_strength
-        "average",        # Averages LoRA effects
-        "sqrt_scale",     # Scales each LoRA by 1/sqrt(n)
-        "linear_decay",   # Linear decay: 1, 0.5, 0.33, ...
-        "geometric_decay",# Geometric decay: 1, 0.5, 0.25, ...
-        "additive",       # Standard additive (for comparison)
-    ]
-    
-    def __init__(self):
-        self.loaded_loras = {}
-    
-    @classmethod
-    def INPUT_TYPES(cls):
-        lora_list = folder_paths.get_filename_list("loras")
-        return {
-            "required": {
-                "model": ("MODEL", {"tooltip": "The model to apply LoRA to"}),
-                "clip": ("CLIP", {"tooltip": "The CLIP model"}),
-                "blend_mode": (cls.BLEND_MODES, {"default": "normalize", "tooltip": "LoRA blending mode"}),
-                "target_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05, 
-                                              "tooltip": "Target total strength (for normalize/average)"}),
-                "lora_1": (["None"] + lora_list, {"tooltip": "First LoRA"}),
-                "strength_1": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-                "lora_2": (["None"] + lora_list, {"tooltip": "Second LoRA"}),
-                "strength_2": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-            },
-            "optional": {
-                "lora_3": (["None"] + lora_list, {"tooltip": "Third LoRA"}),
-                "strength_3": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-                "lora_4": (["None"] + lora_list, {"tooltip": "Fourth LoRA"}),
-                "strength_4": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-                "lora_5": (["None"] + lora_list, {"tooltip": "Fifth LoRA"}),
-                "strength_5": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-                "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
-                                                       "tooltip": "Strength multiplier for CLIP"}),
-            }
-        }
-    
-    RETURN_TYPES = ("MODEL", "CLIP")
-    RETURN_NAMES = ("model", "clip")
-    FUNCTION = "merge_loras"
-    CATEGORY = "loaders/lora"
-    DESCRIPTION = "Combines multiple LoRAs with normalization for Z-Image Turbo and other distilled models"
-    
-    def _load_lora(self, lora_name):
-        """Loads LoRA file with caching"""
-        if lora_name == "None" or lora_name is None:
-            return None
-            
-        if lora_name in self.loaded_loras:
-            return self.loaded_loras[lora_name]
-        
-        lora_path = folder_paths.get_full_path_or_raise("loras", lora_name)
-        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
-        self.loaded_loras[lora_name] = lora
-        return lora
-    
-    def _calculate_blend_factors(self, strengths, blend_mode, target_strength):
-        """
-        Calculates blending coefficients for each LoRA
-        based on the selected mode.
-        """
-        n = len(strengths)
-        if n == 0:
-            return []
-        
-        if blend_mode == "additive":
-            # Standard additive application
-            return strengths
-        
-        elif blend_mode == "normalize":
-            # Normalizes so that sum of squared strengths = target_strength^2
-            # This preserves the "energy" of the effect
-            sum_sq = sum(s*s for s in strengths)
-            if sum_sq == 0:
-                return [0.0] * n
-            scale = target_strength / math.sqrt(sum_sq)
-            return [s * scale for s in strengths]
-        
-        elif blend_mode == "average":
-            # Simple averaging with target_strength
-            scale = target_strength / n
-            return [s * scale for s in strengths]
-        
-        elif blend_mode == "sqrt_scale":
-            # Scales by 1/sqrt(n) - maintains balance when adding LoRAs
-            scale = 1.0 / math.sqrt(n)
-            return [s * scale for s in strengths]
-        
-        elif blend_mode == "linear_decay":
-            # Each subsequent LoRA has less weight: 1, 0.5, 0.33, 0.25, ...
-            factors = [1.0 / (i + 1) for i in range(n)]
-            total = sum(factors)
-            return [strengths[i] * factors[i] * target_strength / total for i in range(n)]
-        
-        elif blend_mode == "geometric_decay":
-            # Geometric decay: 1, 0.5, 0.25, 0.125, ...
-            factors = [0.5 ** i for i in range(n)]
-            total = sum(factors)
-            return [strengths[i] * factors[i] * target_strength / total for i in range(n)]
-        
-        else:
-            return strengths
-    
-    def merge_loras(self, model, clip, blend_mode, target_strength,
-                    lora_1, strength_1, lora_2, strength_2,
-                    lora_3="None", strength_3=1.0,
-                    lora_4="None", strength_4=1.0,
-                    lora_5="None", strength_5=1.0,
-                    clip_strength_multiplier=1.0):
-        """
-        Main function for combining LoRAs.
-        """
-        
-        # Collect active LoRAs
-        loras_data = []
-        for lora_name, strength in [
-            (lora_1, strength_1),
-            (lora_2, strength_2),
-            (lora_3, strength_3),
-            (lora_4, strength_4),
-            (lora_5, strength_5),
-        ]:
-            if lora_name != "None" and lora_name is not None and strength != 0:
-                lora = self._load_lora(lora_name)
-                if lora is not None:
-                    loras_data.append((lora, strength))
-        
-        if len(loras_data) == 0:
-            return (model, clip)
-        
-        # Calculate blend factors
-        original_strengths = [s for _, s in loras_data]
-        blended_strengths = self._calculate_blend_factors(
-            original_strengths, blend_mode, target_strength
-        )
-        
-        logging.info(f"Z-Image LoRA Merger: {blend_mode} mode, {len(loras_data)} LoRAs")
-        logging.info(f"  Original strengths: {original_strengths}")
-        logging.info(f"  Blended strengths:  {[round(s, 4) for s in blended_strengths]}")
-        
-        # Apply LoRAs sequentially with calculated coefficients
-        new_model = model
-        new_clip = clip
-        
-        for i, ((lora, _), strength) in enumerate(zip(loras_data, blended_strengths)):
-            clip_strength = strength * clip_strength_multiplier
-            new_model, new_clip = comfy.sd.load_lora_for_models(
-                new_model, new_clip, lora, strength, clip_strength
-            )
-        
-        return (new_model, new_clip)
-
-
-class ZImageLoRAStack:
-    """
-    Node for creating a LoRA stack that can be used with ZImageLoRAStackApply.
-    Allows more flexible LoRA management through connections.
+    Node for creating a LoRA stack (input format for LoRAOptimizer).
+    Chain multiple Stack nodes to build a list of any length.
     """
     
     def __init__(self):
@@ -211,7 +44,7 @@ class ZImageLoRAStack:
     RETURN_NAMES = ("lora_stack",)
     FUNCTION = "add_to_stack"
     CATEGORY = "loaders/lora"
-    DESCRIPTION = "Adds LoRA to stack for later application with ZImageLoRAStackApply"
+    DESCRIPTION = "Adds a LoRA to the stack for use with LoRA Optimizer"
     
     def add_to_stack(self, lora_name, strength, lora_stack=None):
         lora_list = list(lora_stack) if lora_stack else []
@@ -228,278 +61,17 @@ class ZImageLoRAStack:
         return (lora_list,)
 
 
-class ZImageLoRAStackApply:
+class _LoRAMergeBase:
     """
-    Applies a LoRA stack with various blending modes.
+    Base class for diff-based LoRA merging.
+
+    Computes full weight diffs (Up @ Down x alpha) for LoRAs of any rank,
+    then merges the diffs. Supports TIES-Merging (NeurIPS 2023) for
+    resolving sign conflicts.
+
+    Not a registered ComfyUI node — subclassed by LoRAOptimizer.
     """
-    
-    BLEND_MODES = ZImageLoRAMerger.BLEND_MODES
-    
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("MODEL", {"tooltip": "The model to apply LoRA to"}),
-                "clip": ("CLIP", {"tooltip": "The CLIP model"}),
-                "lora_stack": ("LORA_STACK", {"tooltip": "LoRA stack"}),
-                "blend_mode": (cls.BLEND_MODES, {"default": "normalize"}),
-                "target_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-            }
-        }
-    
-    RETURN_TYPES = ("MODEL", "CLIP")
-    RETURN_NAMES = ("model", "clip")
-    FUNCTION = "apply_stack"
-    CATEGORY = "loaders/lora"
-    DESCRIPTION = "Applies LoRA stack with selected blending mode"
-    
-    def _calculate_blend_factors(self, strengths, blend_mode, target_strength):
-        """Same logic as ZImageLoRAMerger"""
-        n = len(strengths)
-        if n == 0:
-            return []
-        
-        if blend_mode == "additive":
-            return strengths
-        elif blend_mode == "normalize":
-            sum_sq = sum(s*s for s in strengths)
-            if sum_sq == 0:
-                return [0.0] * n
-            scale = target_strength / math.sqrt(sum_sq)
-            return [s * scale for s in strengths]
-        elif blend_mode == "average":
-            scale = target_strength / n
-            return [s * scale for s in strengths]
-        elif blend_mode == "sqrt_scale":
-            scale = 1.0 / math.sqrt(n)
-            return [s * scale for s in strengths]
-        elif blend_mode == "linear_decay":
-            factors = [1.0 / (i + 1) for i in range(n)]
-            total = sum(factors)
-            return [strengths[i] * factors[i] * target_strength / total for i in range(n)]
-        elif blend_mode == "geometric_decay":
-            factors = [0.5 ** i for i in range(n)]
-            total = sum(factors)
-            return [strengths[i] * factors[i] * target_strength / total for i in range(n)]
-        else:
-            return strengths
-    
-    def apply_stack(self, model, clip, lora_stack, blend_mode, target_strength, clip_strength_multiplier):
-        if not lora_stack or len(lora_stack) == 0:
-            return (model, clip)
-        
-        original_strengths = [item["strength"] for item in lora_stack]
-        blended_strengths = self._calculate_blend_factors(
-            original_strengths, blend_mode, target_strength
-        )
-        
-        logging.info(f"Z-Image LoRA Stack Apply: {blend_mode} mode, {len(lora_stack)} LoRAs")
-        logging.info(f"  Original strengths: {original_strengths}")
-        logging.info(f"  Blended strengths:  {[round(s, 4) for s in blended_strengths]}")
-        
-        new_model = model
-        new_clip = clip
-        
-        for item, strength in zip(lora_stack, blended_strengths):
-            clip_strength = strength * clip_strength_multiplier
-            new_model, new_clip = comfy.sd.load_lora_for_models(
-                new_model, new_clip, item["lora"], strength, clip_strength
-            )
-        
-        return (new_model, new_clip)
 
-
-class ZImageLoRAMergeToSingle:
-    """
-    Merges weights of multiple LoRAs into a single "virtual" LoRA
-    by pre-merging weights before applying to the model.
-    
-    This can give better results than sequential application,
-    especially for overlapping weights.
-    """
-    
-    MERGE_METHODS = [
-        "weighted_sum",    # Weighted sum
-        "add_difference",  # A + (B - C) * weight
-        "weighted_average",# Weighted average
-    ]
-    
-    def __init__(self):
-        self.loaded_loras = {}
-    
-    @classmethod
-    def INPUT_TYPES(cls):
-        lora_list = folder_paths.get_filename_list("loras")
-        return {
-            "required": {
-                "model": ("MODEL",),
-                "clip": ("CLIP",),
-                "merge_method": (cls.MERGE_METHODS, {"default": "weighted_average"}),
-                "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
-                                              "tooltip": "Strength of the merged LoRA"}),
-                "lora_1": (["None"] + lora_list,),
-                "weight_1": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "lora_2": (["None"] + lora_list,),
-                "weight_2": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-            },
-            "optional": {
-                "lora_3": (["None"] + lora_list,),
-                "weight_3": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-            }
-        }
-    
-    RETURN_TYPES = ("MODEL", "CLIP")
-    RETURN_NAMES = ("model", "clip")
-    FUNCTION = "merge_to_single"
-    CATEGORY = "loaders/lora"
-    DESCRIPTION = "Merges multiple LoRAs into one before applying - optimal for Z-Image Turbo"
-    
-    def _load_lora(self, lora_name):
-        if lora_name == "None" or lora_name is None:
-            return None
-        if lora_name in self.loaded_loras:
-            return self.loaded_loras[lora_name]
-        lora_path = folder_paths.get_full_path_or_raise("loras", lora_name)
-        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
-        self.loaded_loras[lora_name] = lora
-        return lora
-    
-    def _merge_lora_weights(self, loras_with_weights, method):
-        """
-        Merges LoRA weights into a single dictionary.
-        Handles LoRAs with different ranks - incompatible layers are taken
-        proportionally from the LoRA that has them.
-        """
-        if len(loras_with_weights) == 0:
-            return {}
-        
-        if len(loras_with_weights) == 1:
-            lora, weight = loras_with_weights[0]
-            return {k: v * weight for k, v in lora.items()}
-        
-        # Collect all keys
-        all_keys = set()
-        for lora, _ in loras_with_weights:
-            all_keys.update(lora.keys())
-        
-        merged = {}
-        skipped_keys = 0
-        
-        for key in all_keys:
-            tensors_weights = []
-            for lora, weight in loras_with_weights:
-                if key in lora:
-                    tensors_weights.append((lora[key], weight))
-            
-            if len(tensors_weights) == 0:
-                continue
-            
-            if len(tensors_weights) == 1:
-                merged[key] = tensors_weights[0][0] * tensors_weights[0][1]
-                continue
-            
-            # Get reference shape and dtype
-            ref_tensor = tensors_weights[0][0]
-            ref_shape = ref_tensor.shape
-            device = ref_tensor.device
-            dtype = ref_tensor.dtype
-            
-            # Filter only tensors with compatible shapes
-            compatible_tensors = [(t, w) for t, w in tensors_weights if t.shape == ref_shape]
-            
-            # If shapes don't match, take weighted sum of compatible ones only
-            # or first tensor if none are compatible
-            if len(compatible_tensors) < len(tensors_weights):
-                skipped_keys += 1
-                if len(compatible_tensors) == 0:
-                    # No compatible - take first with its weight
-                    merged[key] = ref_tensor * tensors_weights[0][1]
-                    continue
-                elif len(compatible_tensors) == 1:
-                    merged[key] = compatible_tensors[0][0] * compatible_tensors[0][1]
-                    continue
-                tensors_weights = compatible_tensors
-            
-            if method == "weighted_sum":
-                result = torch.zeros_like(ref_tensor)
-                for tensor, weight in tensors_weights:
-                    result += tensor.to(device=device, dtype=dtype) * weight
-                merged[key] = result
-                
-            elif method == "weighted_average":
-                result = torch.zeros_like(ref_tensor)
-                total_weight = sum(w for _, w in tensors_weights)
-                if total_weight > 0:
-                    for tensor, weight in tensors_weights:
-                        result += tensor.to(device=device, dtype=dtype) * (weight / total_weight)
-                merged[key] = result
-                
-            elif method == "add_difference":
-                # First LoRA + difference with others
-                result = tensors_weights[0][0].clone() * tensors_weights[0][1]
-                for tensor, weight in tensors_weights[1:]:
-                    diff = tensor.to(device=device, dtype=dtype) - tensors_weights[0][0]
-                    result += diff * weight
-                merged[key] = result
-        
-        if skipped_keys > 0:
-            logging.warning(f"Z-Image LoRA Merge: {skipped_keys} keys had incompatible shapes (different LoRA ranks) - used first compatible tensor")
-        
-        return merged
-    
-    def merge_to_single(self, model, clip, merge_method, output_strength,
-                        lora_1, weight_1, lora_2, weight_2,
-                        lora_3="None", weight_3=1.0,
-                        clip_strength_multiplier=1.0):
-        
-        loras_with_weights = []
-        for lora_name, weight in [(lora_1, weight_1), (lora_2, weight_2), (lora_3, weight_3)]:
-            if lora_name != "None" and lora_name is not None and weight != 0:
-                lora = self._load_lora(lora_name)
-                if lora is not None:
-                    loras_with_weights.append((lora, weight))
-        
-        if len(loras_with_weights) == 0:
-            return (model, clip)
-        
-        logging.info(f"Z-Image LoRA Merge: {merge_method}, {len(loras_with_weights)} LoRAs -> 1")
-        
-        merged_lora = self._merge_lora_weights(loras_with_weights, merge_method)
-        
-        clip_strength = output_strength * clip_strength_multiplier
-        new_model, new_clip = comfy.sd.load_lora_for_models(
-            model, clip, merged_lora, output_strength, clip_strength
-        )
-        
-        return (new_model, new_clip)
-
-
-class ZImageLoRATrueMerge:
-    """
-    "True" LoRA merging by computing full weight diffs.
-
-    Works for LoRAs of ANY rank!
-
-    Instead of merging raw A/B matrices (impossible for different ranks),
-    computes the full diff = A @ B × alpha for each LoRA,
-    then merges these diffs and applies as a single patch.
-
-    Supports TIES-Merging (Trim, Elect Sign, Disjoint Merge — NeurIPS 2023)
-    for resolving sign conflicts and filtering redundant noise, recommended
-    for distilled/turbo models when stacking multiple LoRAs.
-
-    Warning: Requires more memory and time than standard application.
-    """
-    
-    MERGE_MODES = [
-        "weighted_average",  # Weighted average of diffs
-        "weighted_sum",      # Weighted sum (can be brighter)
-        "normalize",         # Energy normalization
-        "ties",              # TIES-Merging: Trim, Elect Sign, Disjoint Merge
-    ]
-    
     def __init__(self):
         self.loaded_loras = {}
 
@@ -509,40 +81,6 @@ class ZImageLoRATrueMerge:
             return torch.device("cuda")
         return torch.device("cpu")
 
-    @classmethod
-    def INPUT_TYPES(cls):
-        lora_list = folder_paths.get_filename_list("loras")
-        return {
-            "required": {
-                "model": ("MODEL", {"tooltip": "The model to apply LoRA to"}),
-                "clip": ("CLIP", {"tooltip": "The CLIP model"}),
-                "merge_mode": (cls.MERGE_MODES, {"default": "weighted_average"}),
-                "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
-                                              "tooltip": "Strength of the merged effect"}),
-                "lora_1": (["None"] + lora_list,),
-                "strength_1": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-                "lora_2": (["None"] + lora_list,),
-                "strength_2": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-            },
-            "optional": {
-                "lora_3": (["None"] + lora_list,),
-                "strength_3": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-                "lora_4": (["None"] + lora_list,),
-                "strength_4": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
-                "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "density": ("FLOAT", {"default": 0.5, "min": 0.01, "max": 1.0, "step": 0.01,
-                                      "tooltip": "TIES: fraction of top-magnitude weights to keep (lower = more aggressive pruning)"}),
-                "majority_sign_method": (["frequency", "total"], {"default": "frequency",
-                                         "tooltip": "TIES: how to elect majority sign — 'frequency' counts votes, 'total' sums magnitudes"}),
-            }
-        }
-
-    RETURN_TYPES = ("MODEL", "CLIP")
-    RETURN_NAMES = ("model", "clip")
-    FUNCTION = "true_merge"
-    CATEGORY = "loaders/lora"
-    DESCRIPTION = "True LoRA merging for any rank combination. Supports TIES-Merging for distilled/turbo models."
-    
     def _load_lora(self, lora_name):
         """Loads LoRA file with caching"""
         if lora_name == "None" or lora_name is None:
@@ -786,147 +324,9 @@ class ZImageLoRATrueMerge:
             return result.cpu() if to_cpu else result
 
         return None
-    
-    def true_merge(self, model, clip, merge_mode, output_strength,
-                   lora_1, strength_1, lora_2, strength_2,
-                   lora_3="None", strength_3=1.0,
-                   lora_4="None", strength_4=1.0,
-                   clip_strength_multiplier=1.0,
-                   density=0.5, majority_sign_method="frequency"):
-        """
-        Main function for true LoRA merging.
-        """
-
-        # Collect active LoRAs
-        loras_data = []
-        for lora_name, strength in [
-            (lora_1, strength_1),
-            (lora_2, strength_2),
-            (lora_3, strength_3),
-            (lora_4, strength_4),
-        ]:
-            if lora_name != "None" and lora_name is not None and strength != 0:
-                lora = self._load_lora(lora_name)
-                if lora is not None:
-                    loras_data.append((lora_name, lora, strength))
-
-        if len(loras_data) == 0:
-            return (model, clip)
-
-        logging.info(f"Z-Image LoRA True Merge: {merge_mode} mode, {len(loras_data)} LoRAs")
-        if merge_mode == "ties":
-            logging.info(f"  TIES params: density={density}, majority_sign={majority_sign_method}")
-        for name, _, strength in loras_data:
-            logging.info(f"  - {name}: strength={strength}")
-        
-        # Get key_map for model
-        model_keys = {}
-        if model is not None:
-            model_keys = comfy.lora.model_lora_keys_unet(model.model, {})
-        
-        clip_keys = {}
-        if clip is not None:
-            clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
-        
-        # Collect all keys from all LoRAs
-        all_lora_prefixes = set()
-        for _, lora_dict, _ in loras_data:
-            for key in lora_dict.keys():
-                # Extract prefix (before .lora_up, .lora_down, etc.)
-                for suffix in [".lora_up.weight", ".lora_down.weight", "_lora.up.weight", 
-                              "_lora.down.weight", ".lora_B.weight", ".lora_A.weight",
-                              ".lora.up.weight", ".lora.down.weight", ".alpha"]:
-                    if key.endswith(suffix):
-                        prefix = key[:-len(suffix)]
-                        all_lora_prefixes.add(prefix)
-                        break
-        
-        # For each key, compute merged diff
-        model_patches = {}
-        clip_patches = {}
-        processed_keys = 0
-        
-        for lora_prefix in all_lora_prefixes:
-            # Find target key in model
-            target_key = None
-            is_clip = False
-            
-            if lora_prefix in model_keys:
-                target_key = model_keys[lora_prefix]
-            elif lora_prefix in clip_keys:
-                target_key = clip_keys[lora_prefix]
-                is_clip = True
-            
-            if target_key is None:
-                continue
-            
-            # Handle tuple keys (for sliced weights, e.g. Flux linear1_qkv)
-            offset = None
-            if isinstance(target_key, tuple):
-                actual_key = target_key[0]
-                if len(target_key) > 1:
-                    offset = target_key[1]
-            else:
-                actual_key = target_key
-
-            # Get target weight shape (use sliced shape when offset present)
-            try:
-                if is_clip:
-                    target_weight = comfy.utils.get_attr(clip.cond_stage_model, actual_key)
-                else:
-                    target_weight = comfy.utils.get_attr(model.model, actual_key)
-                target_shape = list(target_weight.shape)
-                if offset is not None:
-                    target_shape[offset[0]] = offset[2]
-                target_shape = torch.Size(target_shape)
-            except (AttributeError, RuntimeError, IndexError):
-                continue
-
-            # Compute diff for each LoRA
-            diffs_with_weights = []
-            for _, lora_dict, strength in loras_data:
-                lora_info = self._get_lora_key_info(lora_dict, lora_prefix)
-                if lora_info is None:
-                    continue
-                
-                mat_up, mat_down, alpha, mid = lora_info
-                diff = self._compute_lora_diff(mat_up, mat_down, alpha, mid, target_shape)
-                
-                if diff is not None:
-                    diffs_with_weights.append((diff, strength))
-            
-            if len(diffs_with_weights) == 0:
-                continue
-            
-            # Merge diffs
-            merged_diff = self._merge_diffs(diffs_with_weights, merge_mode,
-                                            density=density, majority_sign_method=majority_sign_method)
-            if merged_diff is not None:
-                if is_clip:
-                    clip_patches[target_key] = ("diff", (merged_diff,))
-                else:
-                    model_patches[target_key] = ("diff", (merged_diff,))
-                processed_keys += 1
-        
-        logging.info(f"  Processed {processed_keys} weight keys")
-        
-        # Apply to model
-        new_model = model
-        new_clip = clip
-
-        if model is not None and len(model_patches) > 0:
-            new_model = model.clone()
-            new_model.add_patches(model_patches, output_strength)
-
-        if clip is not None and len(clip_patches) > 0:
-            new_clip = clip.clone()
-            clip_strength = output_strength * clip_strength_multiplier
-            new_clip.add_patches(clip_patches, clip_strength)
-        
-        return (new_model, new_clip)
 
 
-class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
+class LoRAOptimizer(_LoRAMergeBase):
     """
     Auto-optimizer that analyzes a LoRA stack (sign conflicts, magnitude
     distributions, overlap) and automatically selects the best merge mode
@@ -963,7 +363,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         - Standard tuples: [(lora_name, model_strength, clip_strength), ...]
           Used by Efficiency Nodes, Comfyroll, and other popular node packs.
           LoRAs are loaded from disk (cached in self.loaded_loras).
-        - ZImageLoRAStack dicts: [{"name": str, "lora": dict, "strength": float}, ...]
+        - LoRAStack dicts: [{"name": str, "lora": dict, "strength": float}, ...]
           Already loaded, clip_strength defaults to None (use global multiplier).
 
         Returns list of dicts with keys: name, lora, strength, clip_strength.
@@ -979,7 +379,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
             normalized = []
             for entry in lora_stack:
                 if not isinstance(entry, (tuple, list)) or len(entry) < 3:
-                    logging.warning("[Z-Image Optimizer] Skipping malformed tuple entry (expected 3 elements)")
+                    logging.warning("[LoRA Optimizer] Skipping malformed tuple entry (expected 3 elements)")
                     continue
                 lora_name, model_str, clip_str = entry[0], entry[1], entry[2]
 
@@ -992,7 +392,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                         lora_dict = comfy.utils.load_torch_file(lora_path, safe_load=True)
                         self.loaded_loras[lora_name] = lora_dict
                     except Exception as e:
-                        logging.warning(f"[Z-Image Optimizer] Failed to load LoRA '{lora_name}': {e}")
+                        logging.warning(f"[LoRA Optimizer] Failed to load LoRA '{lora_name}': {e}")
                         continue
 
                 normalized.append({
@@ -1004,11 +404,11 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
             return normalized
 
         elif isinstance(first, dict):
-            # ZImageLoRAStack format: already loaded dicts
+            # LoRAStack format: already loaded dicts
             normalized = []
             for item in lora_stack:
                 if not isinstance(item, dict) or "lora" not in item or "strength" not in item or "name" not in item:
-                    logging.warning("[Z-Image Optimizer] Skipping malformed dict entry (expected keys: name, lora, strength)")
+                    logging.warning("[LoRA Optimizer] Skipping malformed dict entry (expected keys: name, lora, strength)")
                     continue
                 normalized.append({
                     "name": item["name"],
@@ -1018,7 +418,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                 })
             return normalized
 
-        logging.warning("[Z-Image Optimizer] Unrecognized stack format")
+        logging.warning("[LoRA Optimizer] Unrecognized stack format")
         return []
 
     @classmethod
@@ -1027,7 +427,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
             "required": {
                 "model": ("MODEL", {"tooltip": "The model to apply LoRA to"}),
                 "clip": ("CLIP", {"tooltip": "The CLIP model"}),
-                "lora_stack": ("LORA_STACK", {"tooltip": "LoRA stack - accepts standard (name, model_str, clip_str) tuples or ZImageLoRAStack dicts"}),
+                "lora_stack": ("LORA_STACK", {"tooltip": "LoRA stack - accepts standard (name, model_str, clip_str) tuples or LoRAStack dicts"}),
                 "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
                                               "tooltip": "Strength of the merged effect"}),
             },
@@ -1082,12 +482,12 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
     def _save_report_to_disk(self, cache_key, lora_combo, auto_strength, report, selected_params):
         """
         Persist the analysis report as JSON for later reference.
-        Saved to {user_dir}/zimage_lora_reports/{cache_key}.json.
+        Saved to {user_dir}/lora_optimizer_reports/{cache_key}.json.
         Failures are silently logged — never blocks the merge.
         """
         try:
             user_dir = folder_paths.get_user_directory()
-            report_dir = os.path.join(user_dir, "zimage_lora_reports")
+            report_dir = os.path.join(user_dir, "lora_optimizer_reports")
             os.makedirs(report_dir, exist_ok=True)
             report_path = os.path.join(report_dir, f"{cache_key}.json")
             data = {
@@ -1101,7 +501,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                 json.dump(data, f, indent=2)
             return report_path
         except Exception as e:
-            logging.warning(f"[Z-Image Optimizer] Failed to save report: {e}")
+            logging.warning(f"[LoRA Optimizer] Failed to save report: {e}")
             return None
 
     def _sample_conflict(self, diff_a, diff_b, device=None):
@@ -1539,7 +939,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         """Format analysis as a multi-line report string."""
         lines = []
         lines.append("=" * 50)
-        lines.append("Z-IMAGE LORA OPTIMIZER - ANALYSIS REPORT")
+        lines.append("LORA OPTIMIZER - ANALYSIS REPORT")
         lines.append("=" * 50)
 
         # Per-LoRA Analysis
@@ -1621,7 +1021,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         Pass 2: Recompute diffs per-prefix, merge immediately, discard
         Peak memory: ~260MB (one prefix's diffs at a time) vs ~50GB (all diffs).
         """
-        # Normalize stack format (standard tuples or ZImageLoRAStack dicts)
+        # Normalize stack format (standard tuples or LoRAStack dicts)
         if not lora_stack or len(lora_stack) == 0:
             return (model, clip, "No LoRAs in stack.")
 
@@ -1649,7 +1049,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
 
             report = (
                 "=" * 50 + "\n"
-                "Z-IMAGE LORA OPTIMIZER - ANALYSIS REPORT\n"
+                "LORA OPTIMIZER - ANALYSIS REPORT\n"
                 "=" * 50 + "\n\n"
                 "Single LoRA detected — bypassing analysis.\n"
                 f"  Name: {item['name']}\n"
@@ -1659,7 +1059,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
             )
             return (new_model, new_clip, report)
 
-        logging.info(f"[Z-Image Optimizer] Starting analysis of {len(active_loras)} LoRAs")
+        logging.info(f"[LoRA Optimizer] Starting analysis of {len(active_loras)} LoRAs")
         t_start = time.time()
 
         # Get key maps
@@ -1689,9 +1089,9 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         # =====================================================================
         # Pass 1 — Analysis (streaming: diffs computed, sampled, and discarded)
         # =====================================================================
-        logging.info("[Z-Image Optimizer] Pass 1: Analyzing weight diffs (streaming)...")
-        logging.info(f"[Z-Image Optimizer]   {len(all_lora_prefixes)} key prefixes across {len(active_loras)} LoRAs")
-        logging.info(f"[Z-Image Optimizer]   Compute device: {compute_device}"
+        logging.info("[LoRA Optimizer] Pass 1: Analyzing weight diffs (streaming)...")
+        logging.info(f"[LoRA Optimizer]   {len(all_lora_prefixes)} key prefixes across {len(active_loras)} LoRAs")
+        logging.info(f"[LoRA Optimizer]   Compute device: {compute_device}"
                      f" ({'sequential' if use_gpu else 'threaded'})")
         t_pass1 = time.time()
 
@@ -1753,9 +1153,9 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         # Log per-LoRA summaries
         for i, stat in enumerate(per_lora_stats):
             avg_r = sum(stat["ranks"]) / len(stat["ranks"]) if stat["ranks"] else 0
-            logging.info(f"[Z-Image Optimizer]   {stat['name']} ({i+1}/{len(active_loras)}): "
+            logging.info(f"[LoRA Optimizer]   {stat['name']} ({i+1}/{len(active_loras)}): "
                          f"{stat['key_count']} keys, avg rank {avg_r:.0f}")
-        logging.info(f"[Z-Image Optimizer]   Total: {prefix_count} prefixes ({time.time() - t_pass1:.1f}s)")
+        logging.info(f"[LoRA Optimizer]   Total: {prefix_count} prefixes ({time.time() - t_pass1:.1f}s)")
 
         # =====================================================================
         # Decision — finalize stats, auto-select params (scalars only)
@@ -1797,10 +1197,10 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                 "conflicts": pair_conflict,
                 "ratio": ratio,
             })
-            logging.info(f"[Z-Image Optimizer]   {pair_label} -> {ratio:.1%} conflict")
+            logging.info(f"[LoRA Optimizer]   {pair_label} -> {ratio:.1%} conflict")
 
         avg_conflict_ratio = total_conflict / total_overlap if total_overlap > 0 else 0
-        logging.info(f"[Z-Image Optimizer]   Average conflict ratio: {avg_conflict_ratio:.1%}")
+        logging.info(f"[LoRA Optimizer]   Average conflict ratio: {avg_conflict_ratio:.1%}")
 
         # Magnitude ratio
         valid_l2 = [m for m in l2_means if m > 0]
@@ -1822,10 +1222,10 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         )
         del all_magnitude_samples
 
-        logging.info(f"[Z-Image Optimizer] Decision: {mode} (conflict {avg_conflict_ratio:.1%} "
+        logging.info(f"[LoRA Optimizer] Decision: {mode} (conflict {avg_conflict_ratio:.1%} "
                      f"{'>' if avg_conflict_ratio > 0.25 else '<='} 25% threshold)")
         if mode == "ties":
-            logging.info(f"[Z-Image Optimizer]   density={density:.2f}, sign_method={sign_method}")
+            logging.info(f"[LoRA Optimizer]   density={density:.2f}, sign_method={sign_method}")
 
         # Auto-strength adjustment
         auto_strength_info = None
@@ -1851,9 +1251,9 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                 "names": [item["name"] for item in active_loras],
             }
 
-            logging.info(f"[Z-Image Optimizer] Auto-strength: {strength_reasoning[0]}")
+            logging.info(f"[LoRA Optimizer] Auto-strength: {strength_reasoning[0]}")
             for i in range(len(active_loras)):
-                logging.info(f"[Z-Image Optimizer]   {active_loras[i]['name']}: "
+                logging.info(f"[LoRA Optimizer]   {active_loras[i]['name']}: "
                              f"{active_loras[i]['strength']} -> {new_strengths[i]:.4f}")
 
         # Free GPU cache between passes if requested
@@ -1863,7 +1263,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         # =====================================================================
         # Pass 2 — Merge (recompute diffs per-prefix, merge, discard)
         # =====================================================================
-        logging.info(f"[Z-Image Optimizer] Pass 2: Merging {len(all_key_targets)} keys..."
+        logging.info(f"[LoRA Optimizer] Pass 2: Merging {len(all_key_targets)} keys..."
                      f" ({'sequential' if use_gpu else 'threaded'})")
         t_pass2 = time.time()
         model_patches = {}
@@ -1978,7 +1378,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                 for future in concurrent.futures.as_completed(futures):
                     _collect_merge_result(future.result())
 
-        logging.info(f"[Z-Image Optimizer]   Model patches: {len(model_patches)}, "
+        logging.info(f"[LoRA Optimizer]   Model patches: {len(model_patches)}, "
                      f"CLIP patches: {len(clip_patches)} ({time.time() - t_pass2:.1f}s)")
 
         # Apply patches
@@ -2024,28 +1424,20 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         selected_params = {"mode": mode, "density": density, "sign_method": sign_method}
         report_path = self._save_report_to_disk(cache_key, lora_combo, auto_strength, report, selected_params)
         if report_path:
-            logging.info(f"[Z-Image Optimizer] Report saved to: {report_path}")
+            logging.info(f"[LoRA Optimizer] Report saved to: {report_path}")
 
-        logging.info(f"[Z-Image Optimizer] Done! {processed_keys} keys processed ({time.time() - t_start:.1f}s total)")
+        logging.info(f"[LoRA Optimizer] Done! {processed_keys} keys processed ({time.time() - t_start:.1f}s total)")
 
         return (new_model, new_clip, report)
 
 
 # Node registration
 NODE_CLASS_MAPPINGS = {
-    "ZImageLoRAMerger": ZImageLoRAMerger,
-    "ZImageLoRAStack": ZImageLoRAStack,
-    "ZImageLoRAStackApply": ZImageLoRAStackApply,
-    "ZImageLoRAMergeToSingle": ZImageLoRAMergeToSingle,
-    "ZImageLoRATrueMerge": ZImageLoRATrueMerge,
-    "ZImageLoRAOptimizer": ZImageLoRAOptimizer,
+    "LoRAStack": LoRAStack,
+    "LoRAOptimizer": LoRAOptimizer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ZImageLoRAMerger": "Z-Image LoRA Merger",
-    "ZImageLoRAStack": "Z-Image LoRA Stack",
-    "ZImageLoRAStackApply": "Z-Image LoRA Stack Apply",
-    "ZImageLoRAMergeToSingle": "Z-Image LoRA Merge to Single",
-    "ZImageLoRATrueMerge": "Z-Image LoRA True Merge",
-    "ZImageLoRAOptimizer": "Z-Image LoRA Optimizer",
+    "LoRAStack": "LoRA Stack",
+    "LoRAOptimizer": "LoRA Optimizer",
 }

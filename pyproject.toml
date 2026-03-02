@@ -1,10 +1,9 @@
 [project]
-name = "comfyui-zimage-lora-merger"
-description = "Custom nodes for combining multiple LoRAs without overexposure on distilled models like Z-Image Turbo"
+name = "comfyui-lora-optimizer"
+description = "Auto-optimizer node for combining multiple LoRAs via diff-based merging with TIES conflict resolution"
 version = "1.0.0"
 license = { file = "LICENSE" }
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/DanrisiUA/ComfyUI-ZImage-LoRA-Merger"
-
+Repository = "https://github.com/ethanfel/ComfyUI-LoRA-Optimizer"
