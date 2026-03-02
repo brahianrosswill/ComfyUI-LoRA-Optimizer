@@ -1211,6 +1211,10 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         magnitudes, then discard diffs. Returns lightweight scalars/samples
         so the caller never accumulates full-rank diff tensors.
 
+        All GPU work (diff computation, conflict sampling, magnitude sampling)
+        stays on GPU until the final small results are copied to CPU, avoiding
+        the GPU→CPU→GPU bounce that kills pipelining.
+
         Returns (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
                  target_info, skip_count) or None if prefix should be skipped.
 
@@ -1252,7 +1256,11 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
             return None
 
         # --- Compute diffs for all active LoRAs ---
-        diffs = {}  # lora_index -> diff tensor
+        # Keep diffs on GPU (device) for conflict + magnitude analysis.
+        # _compute_lora_diff normally returns CPU when device=cuda, so we
+        # call it with device=None and manually move matrices to GPU.
+        use_gpu = device is not None and device.type != "cpu"
+        diffs = {}  # lora_index -> diff tensor (on device)
         eff_strengths = {}  # lora_index -> effective strength
         partial_stats = []
         skip_count = 0
@@ -1264,50 +1272,74 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
 
             mat_up, mat_down, alpha, mid = lora_info
             rank = mat_down.shape[0]
-            diff = self._compute_lora_diff(mat_up, mat_down, alpha, mid, target_shape, device=device)
 
-            if diff is not None:
-                if is_clip and item["clip_strength"] is not None:
-                    eff_strength = item["clip_strength"]
-                else:
-                    eff_strength = item["strength"]
-                diffs[i] = diff
-                eff_strengths[i] = eff_strength
-                l2 = diff.float().norm().item() * abs(item["strength"])
-                partial_stats.append((i, rank, l2))
-            else:
+            # Compute diff on GPU but DON'T copy back to CPU yet
+            if use_gpu:
+                mat_up = mat_up.to(device)
+                mat_down = mat_down.to(device)
+                if mid is not None:
+                    mid = mid.to(device)
+            scale = alpha / rank
+
+            if mid is not None:
+                final_shape = [mat_down.shape[1], mat_down.shape[0], mid.shape[2], mid.shape[3]]
+                mat_down = (
+                    torch.mm(
+                        mat_down.transpose(0, 1).flatten(start_dim=1).float(),
+                        mid.transpose(0, 1).flatten(start_dim=1).float(),
+                    )
+                    .reshape(final_shape)
+                    .transpose(0, 1)
+                )
+
+            diff = torch.mm(
+                mat_up.flatten(start_dim=1).float(),
+                mat_down.flatten(start_dim=1).float()
+            )
+            try:
+                diff = diff.reshape(target_shape)
+            except RuntimeError:
                 skip_count += 1
+                continue
+
+            diff = diff * scale
+
+            if is_clip and item["clip_strength"] is not None:
+                eff_strength = item["clip_strength"]
+            else:
+                eff_strength = item["strength"]
+            diffs[i] = diff
+            eff_strengths[i] = eff_strength
+            l2 = diff.float().norm().item() * abs(item["strength"])
+            partial_stats.append((i, rank, l2))
 
         if len(diffs) == 0:
             if skip_count > 0:
                 return (lora_prefix, [], {}, [], (target_key, is_clip), skip_count)
             return None
 
-        # --- Pairwise conflict analysis (sign-corrected) ---
+        # --- Pairwise conflict analysis (sign-corrected, stays on device) ---
         pair_conflicts = {}
         lora_indices = sorted(diffs.keys())
         for ai in range(len(lora_indices)):
             for bi in range(ai + 1, len(lora_indices)):
                 i, j = lora_indices[ai], lora_indices[bi]
-                # Sign-correct: negative strength inverts direction
                 diff_i = diffs[i] if eff_strengths[i] >= 0 else -diffs[i]
                 diff_j = diffs[j] if eff_strengths[j] >= 0 else -diffs[j]
                 ov, conf = self._sample_conflict(diff_i, diff_j, device=device)
                 pair_conflicts[(i, j)] = (ov, conf)
 
-        # --- Magnitude sampling for density estimation ---
+        # --- Magnitude sampling (sample on device, copy only small result) ---
         magnitude_samples = []
-        seed = hash(lora_prefix) & 0xFFFFFFFF
-        g = torch.Generator().manual_seed(seed)
         for i in lora_indices:
-            flat = diffs[i].flatten().abs().float().cpu() * abs(eff_strengths[i])
+            flat = diffs[i].flatten().abs().float() * abs(eff_strengths[i])
             n = flat.numel()
             if n > n_magnitude_samples:
-                indices = torch.randperm(n, generator=g)[:n_magnitude_samples]
+                indices = torch.randint(0, n, (n_magnitude_samples,), device=flat.device)
                 flat = flat[indices]
-            magnitude_samples.append(flat)
+            magnitude_samples.append(flat.cpu())
 
-        # Diffs go out of scope here — freed
+        # Diffs go out of scope here — GPU memory freed
         return (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
                 (target_key, is_clip), skip_count)
 
