@@ -1807,14 +1807,15 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         # =====================================================================
         # Pass 2 — Merge (recompute diffs per-prefix, merge, discard)
         # =====================================================================
-        logging.info(f"[Z-Image Optimizer] Pass 2: Merging {len(all_key_targets)} keys...")
+        logging.info(f"[Z-Image Optimizer] Pass 2: Merging {len(all_key_targets)} keys..."
+                     f" ({'sequential' if use_gpu else 'threaded'})")
         t_pass2 = time.time()
         model_patches = {}
         clip_patches = {}
         processed_keys = 0
 
-        for lora_prefix, (target_key, is_clip_key) in all_key_targets.items():
-            # Resolve target shape
+        def _merge_one_prefix(lora_prefix, target_key, is_clip_key):
+            """Recompute diffs for one prefix, merge, return patch or None."""
             offset = None
             if isinstance(target_key, tuple):
                 actual_key = target_key[0]
@@ -1833,9 +1834,8 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                     target_shape[offset[0]] = offset[2]
                 target_shape = torch.Size(target_shape)
             except (AttributeError, RuntimeError, IndexError):
-                continue
+                return None
 
-            # Recompute diffs for all active LoRAs at this prefix
             diffs_list = []
             for i, item in enumerate(active_loras):
                 lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
@@ -1848,34 +1848,51 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                 if diff is None:
                     continue
 
-                # Determine effective strength
                 if is_clip_key and item["clip_strength"] is not None:
                     eff_strength = item["clip_strength"]
                 else:
                     eff_strength = item["strength"]
 
-                # Apply auto-strength scale ratio
                 if scale_ratios:
                     eff_strength *= scale_ratios.get(i, 1.0)
 
                 diffs_list.append((diff, eff_strength))
 
             if len(diffs_list) == 0:
-                continue
+                return None
 
             merged_diff = self._merge_diffs(
                 diffs_list, mode,
                 density=density, majority_sign_method=sign_method,
                 compute_device=compute_device
             )
-            # diffs_list goes out of scope after this iteration -> freed
+            if merged_diff is None:
+                return None
+            return (target_key, is_clip_key, merged_diff)
 
-            if merged_diff is not None:
-                if is_clip_key:
-                    clip_patches[target_key] = ("diff", (merged_diff,))
-                else:
-                    model_patches[target_key] = ("diff", (merged_diff,))
-                processed_keys += 1
+        def _collect_merge_result(result):
+            nonlocal processed_keys
+            if result is None:
+                return
+            target_key, is_clip_key, merged_diff = result
+            if is_clip_key:
+                clip_patches[target_key] = ("diff", (merged_diff,))
+            else:
+                model_patches[target_key] = ("diff", (merged_diff,))
+            processed_keys += 1
+
+        if use_gpu:
+            for lora_prefix, (target_key, is_clip_key) in all_key_targets.items():
+                _collect_merge_result(_merge_one_prefix(lora_prefix, target_key, is_clip_key))
+        else:
+            max_workers = min(4, max(1, len(all_key_targets)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_merge_one_prefix, lora_prefix, target_key, is_clip_key): lora_prefix
+                    for lora_prefix, (target_key, is_clip_key) in all_key_targets.items()
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    _collect_merge_result(future.result())
 
         logging.info(f"[Z-Image Optimizer]   Model patches: {len(model_patches)}, "
                      f"CLIP patches: {len(clip_patches)} ({time.time() - t_pass2:.1f}s)")
