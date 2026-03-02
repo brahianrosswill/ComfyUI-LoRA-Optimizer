@@ -1,39 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a1a2e"/>
-      <stop offset="50%" style="stop-color:#16213e"/>
-      <stop offset="100%" style="stop-color:#0f3460"/>
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="50%" style="stop-color:#1e1b4b"/>
+      <stop offset="100%" style="stop-color:#0f172a"/>
+    </linearGradient>
+    <linearGradient id="bar-fill" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e94560"/>
+      <stop offset="100%" style="stop-color:#a78bfa"/>
     </linearGradient>
     <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" style="stop-color:#e94560"/>
-      <stop offset="100%" style="stop-color:#533483"/>
-    </linearGradient>
-    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#e94560;stop-opacity:0.3"/>
-      <stop offset="50%" style="stop-color:#533483;stop-opacity:0.1"/>
-      <stop offset="100%" style="stop-color:#e94560;stop-opacity:0"/>
+      <stop offset="100%" style="stop-color:#a78bfa"/>
     </linearGradient>
   </defs>
+
+  <!-- Background -->
   <rect width="900" height="200" rx="12" fill="url(#bg)"/>
-  <rect x="0" y="188" width="900" height="4" rx="2" fill="url(#accent)"/>
-  <!-- Decorative circles -->
-  <circle cx="780" cy="40" r="80" fill="url(#glow)" opacity="0.4"/>
-  <circle cx="120" cy="160" r="60" fill="url(#glow)" opacity="0.3"/>
-  <!-- LoRA merge icon -->
-  <g transform="translate(60, 60)">
-    <path d="M0,40 Q20,0 40,40 Q60,80 80,40" stroke="#e94560" stroke-width="3" fill="none" opacity="0.7"/>
-    <path d="M10,40 Q30,10 50,40 Q70,70 90,40" stroke="#533483" stroke-width="3" fill="none" opacity="0.7"/>
-    <path d="M5,40 Q25,5 45,40 Q65,75 85,40" stroke="#8e44ad" stroke-width="3.5" fill="none"/>
+  <rect x="0" y="192" width="900" height="8" rx="0" fill="url(#accent)" opacity="0.4"/>
+
+  <!-- Optimizer icon: analysis bars -->
+  <g transform="translate(56, 52)">
+    <!-- Bar chart representing analysis -->
+    <rect x="0" y="50" width="14" height="46" rx="3" fill="#e94560" opacity="0.8"/>
+    <rect x="20" y="28" width="14" height="68" rx="3" fill="#c026d3" opacity="0.8"/>
+    <rect x="40" y="10" width="14" height="86" rx="3" fill="#a78bfa" opacity="0.8"/>
+    <rect x="60" y="36" width="14" height="60" rx="3" fill="#7c3aed" opacity="0.8"/>
+    <rect x="80" y="56" width="14" height="40" rx="3" fill="#64ffda" opacity="0.8"/>
+    <!-- Optimization line -->
+    <polyline points="7,46 27,24 47,6 67,32 87,52"
+              stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+    <circle cx="47" cy="6" r="3" fill="#64ffda"/>
   </g>
+
   <!-- Title -->
-  <text x="180" y="90" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700" fill="#ffffff" letter-spacing="-0.5">LoRA Optimizer</text>
-  <text x="180" y="125" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#8892b0" letter-spacing="0.5">Auto-optimized LoRA merging for ComfyUI</text>
+  <text x="180" y="88" font-family="Segoe UI, Arial, sans-serif" font-size="44" font-weight="700" fill="#ffffff" letter-spacing="-0.5">LoRA Optimizer</text>
+  <text x="180" y="120" font-family="Segoe UI, Arial, sans-serif" font-size="17" fill="#94a3b8" letter-spacing="0.3">Analyze. Decide. Merge. Automatically.</text>
+
   <!-- Tags -->
-  <rect x="180" y="140" width="100" height="26" rx="13" fill="#e94560" opacity="0.15"/>
-  <text x="230" y="158" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#e94560" text-anchor="middle" font-weight="600">2 Nodes</text>
-  <rect x="290" y="140" width="130" height="26" rx="13" fill="#533483" opacity="0.15"/>
-  <text x="355" y="158" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#a78bfa" text-anchor="middle" font-weight="600">TIES Merging</text>
-  <rect x="430" y="140" width="130" height="26" rx="13" fill="#0f3460" opacity="0.3"/>
-  <text x="495" y="158" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#64ffda" text-anchor="middle" font-weight="600">Auto-Optimizer</text>
+  <rect x="180" y="136" width="120" height="26" rx="13" fill="#a78bfa" opacity="0.12"/>
+  <text x="240" y="154" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#a78bfa" text-anchor="middle" font-weight="600">TIES Merging</text>
+
+  <rect x="310" y="136" width="120" height="26" rx="13" fill="#64ffda" opacity="0.12"/>
+  <text x="370" y="154" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#64ffda" text-anchor="middle" font-weight="600">Auto-Params</text>
+
+  <rect x="440" y="136" width="130" height="26" rx="13" fill="#e94560" opacity="0.12"/>
+  <text x="505" y="154" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#e94560" text-anchor="middle" font-weight="600">Low Memory</text>
+
+  <!-- ComfyUI badge -->
+  <text x="862" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#64748b" text-anchor="end" font-weight="600">ComfyUI</text>
 </svg>

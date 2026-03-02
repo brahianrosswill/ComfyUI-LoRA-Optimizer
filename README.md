@@ -35,13 +35,13 @@ Builds a list of LoRAs for the optimizer. Chain multiple Stack nodes to add any 
 
 **Outputs:** `LORA_STACK`
 
-Also accepts standard tuple-format stacks from Efficiency Nodes, Comfyroll, and similar packs.
-
 ---
 
 ### LoRA Optimizer
 
 The auto-optimizer. Takes a `LORA_STACK`, analyzes the LoRAs, and automatically selects the best merge mode and parameters. Outputs the merged result plus a detailed analysis report explaining what it chose and why.
+
+Also accepts standard tuple-format stacks `(lora_name, model_strength, clip_strength)` from Efficiency Nodes, Comfyroll, and similar packs.
 
 Uses a **two-pass streaming architecture** for low memory usage:
 - **Pass 1 (Analysis):** Computes weight diffs per prefix, samples conflict and magnitude statistics, then discards the diffs. Only lightweight scalars are kept.
