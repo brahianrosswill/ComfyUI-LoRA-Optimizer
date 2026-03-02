@@ -476,7 +476,8 @@ class LoRAOptimizer(_LoRAMergeBase):
 
     @classmethod
     def IS_CHANGED(cls, model, clip, lora_stack, output_strength,
-                   clip_strength_multiplier=1.0, auto_strength="disabled"):
+                   clip_strength_multiplier=1.0, auto_strength="disabled",
+                   free_vram_between_passes="disabled"):
         return cls._compute_cache_key(lora_stack, output_strength,
                                       clip_strength_multiplier, auto_strength)
 
