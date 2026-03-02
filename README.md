@@ -25,6 +25,10 @@ total effect = strength1 + strength2  -->  easily exceeds 1.0
 
 The optimizer solves this by computing full weight diffs, detecting sign conflicts, and merging with the optimal strategy.
 
+<p align="center">
+  <img src="assets/comparison.png" alt="Before/After Comparison" width="100%">
+</p>
+
 ## Nodes
 
 ### LoRA Stack
