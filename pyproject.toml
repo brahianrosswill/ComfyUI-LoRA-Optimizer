@@ -1,9 +1,14 @@
 [project]
 name = "comfyui-lora-optimizer"
 description = "Auto-optimizer node for combining multiple LoRAs via diff-based merging with TIES conflict resolution"
-version = "1.0.0"
+version = "1.0.1"
 license = { file = "LICENSE" }
 dependencies = []
 
 [project.urls]
 Repository = "https://github.com/ethanfel/ComfyUI-LoRA-Optimizer"
+
+[tool.comfy]
+PublisherId = "ethanfel"
+DisplayName = "LoRA Optimizer"
+Icon = "https://raw.githubusercontent.com/ethanfel/ComfyUI-LoRA-Optimizer/main/assets/banner.svg"
