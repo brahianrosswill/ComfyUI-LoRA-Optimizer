@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420">
+  <defs>
+    <linearGradient id="wbg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="420" rx="12" fill="url(#wbg)"/>
+
+  <!-- Title -->
+  <text x="450" y="35" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#8892b0" text-anchor="middle" font-weight="600" letter-spacing="2">NODE OVERVIEW</text>
+
+  <!-- Path A: Direct Merge -->
+  <text x="155" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#e94560" text-anchor="middle" font-weight="700" letter-spacing="1">DIRECT MERGE</text>
+  <!-- LoRA Merger node -->
+  <rect x="40" y="82" width="230" height="56" rx="8" fill="#1e2a3a" stroke="#e94560" stroke-width="1.5"/>
+  <text x="155" y="106" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="600">Z-Image LoRA Merger</text>
+  <text x="155" y="126" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#8892b0" text-anchor="middle">normalize / average / sqrt / decay</text>
+
+  <!-- Path B: Stack Workflow -->
+  <text x="450" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#533483" text-anchor="middle" font-weight="700" letter-spacing="1">STACK WORKFLOW</text>
+  <!-- Stack nodes -->
+  <rect x="335" y="82" width="120" height="56" rx="8" fill="#1e2a3a" stroke="#533483" stroke-width="1.5"/>
+  <text x="395" y="106" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="600">LoRA Stack</text>
+  <text x="395" y="126" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#8892b0" text-anchor="middle">build chain</text>
+
+  <!-- Arrow -->
+  <line x1="455" y1="110" x2="485" y2="110" stroke="#533483" stroke-width="1.5"/>
+  <polygon points="485,105 495,110 485,115" fill="#533483"/>
+
+  <rect x="498" y="82" width="120" height="56" rx="8" fill="#1e2a3a" stroke="#533483" stroke-width="1.5"/>
+  <text x="558" y="106" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="600">Stack Apply</text>
+  <text x="558" y="126" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#8892b0" text-anchor="middle">blend modes</text>
+
+  <!-- Path C: Weight Merge -->
+  <text x="765" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#0f3460" text-anchor="middle" font-weight="700" letter-spacing="1">WEIGHT MERGE</text>
+  <rect x="650" y="82" width="230" height="56" rx="8" fill="#1e2a3a" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="765" y="106" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="600">Merge to Single</text>
+  <text x="765" y="126" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#8892b0" text-anchor="middle">weighted sum / average / diff</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="160" x2="860" y2="160" stroke="#2a3a4a" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="450" y="186" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#64ffda" text-anchor="middle" font-weight="700" letter-spacing="2">ADVANCED</text>
+
+  <!-- True Merge -->
+  <rect x="40" y="200" width="390" height="80" rx="8" fill="#1e2a3a" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="235" y="228" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#ffffff" text-anchor="middle" font-weight="700">Z-Image LoRA True Merge</text>
+  <text x="235" y="248" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#a78bfa" text-anchor="middle">Any-rank merging via full weight diff computation</text>
+  <text x="235" y="268" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#8892b0" text-anchor="middle">weighted_average | weighted_sum | normalize | TIES merging</text>
+
+  <!-- Optimizer -->
+  <rect x="470" y="200" width="390" height="80" rx="8" fill="#1e2a3a" stroke="#64ffda" stroke-width="1.5"/>
+  <rect x="740" y="200" width="70" height="20" rx="10" fill="#064e3b"/>
+  <text x="775" y="214" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#64ffda" text-anchor="middle" font-weight="700">NEW</text>
+  <text x="665" y="228" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#ffffff" text-anchor="middle" font-weight="700">Z-Image LoRA Optimizer</text>
+  <text x="665" y="248" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#64ffda" text-anchor="middle">Auto-analyzes conflicts and selects best strategy</text>
+  <text x="665" y="268" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#8892b0" text-anchor="middle">sign conflicts | magnitude analysis | auto TIES/average</text>
+
+  <!-- Connection: Stack -> True Merge / Optimizer -->
+  <text x="450" y="316" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#8892b0" text-anchor="middle">LORA_STACK input</text>
+  <!-- Arrow from Stack to True Merge -->
+  <path d="M395,138 L395,155 L160,155 L160,195 L235,195 L235,200" stroke="#533483" stroke-width="1" fill="none" stroke-dasharray="3,3" opacity="0.5"/>
+  <!-- Arrow from Stack to Optimizer -->
+  <path d="M395,138 L395,155 L700,155 L700,195 L665,195 L665,200" stroke="#533483" stroke-width="1" fill="none" stroke-dasharray="3,3" opacity="0.5"/>
+
+  <!-- Output diagram -->
+  <text x="450" y="350" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#8892b0" text-anchor="middle" font-weight="600" letter-spacing="1">ALL NODES OUTPUT</text>
+
+  <!-- Output boxes -->
+  <rect x="150" y="365" width="100" height="36" rx="6" fill="#1e3a2a" stroke="#22c55e" stroke-width="1"/>
+  <text x="200" y="388" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#22c55e" text-anchor="middle" font-weight="600">MODEL</text>
+
+  <rect x="280" y="365" width="100" height="36" rx="6" fill="#1e3a2a" stroke="#22c55e" stroke-width="1"/>
+  <text x="330" y="388" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#22c55e" text-anchor="middle" font-weight="600">CLIP</text>
+
+  <rect x="500" y="365" width="200" height="36" rx="6" fill="#1e2a3a" stroke="#64ffda" stroke-width="1"/>
+  <text x="600" y="388" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#64ffda" text-anchor="middle" font-weight="600">ANALYSIS REPORT</text>
+  <text x="600" y="408" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#8892b0" text-anchor="middle">Optimizer only</text>
+</svg>

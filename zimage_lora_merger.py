@@ -451,7 +451,7 @@ class ZImageLoRAMergeToSingle:
         
         loras_with_weights = []
         for lora_name, weight in [(lora_1, weight_1), (lora_2, weight_2), (lora_3, weight_3)]:
-            if lora_name != "None" and lora_name is not None and weight > 0:
+            if lora_name != "None" and lora_name is not None and weight != 0:
                 lora = self._load_lora(lora_name)
                 if lora is not None:
                     loras_with_weights.append((lora, weight))
@@ -474,13 +474,17 @@ class ZImageLoRAMergeToSingle:
 class ZImageLoRATrueMerge:
     """
     "True" LoRA merging by computing full weight diffs.
-    
+
     Works for LoRAs of ANY rank!
-    
+
     Instead of merging raw A/B matrices (impossible for different ranks),
     computes the full diff = A @ B × alpha for each LoRA,
-    then averages these diffs and applies as a single patch.
-    
+    then merges these diffs and applies as a single patch.
+
+    Supports TIES-Merging (Trim, Elect Sign, Disjoint Merge — NeurIPS 2023)
+    for resolving sign conflicts and filtering redundant noise, recommended
+    for distilled/turbo models when stacking multiple LoRAs.
+
     Warning: Requires more memory and time than standard application.
     """
     
@@ -488,6 +492,7 @@ class ZImageLoRATrueMerge:
         "weighted_average",  # Weighted average of diffs
         "weighted_sum",      # Weighted sum (can be brighter)
         "normalize",         # Energy normalization
+        "ties",              # TIES-Merging: Trim, Elect Sign, Disjoint Merge
     ]
     
     def __init__(self):
@@ -514,14 +519,18 @@ class ZImageLoRATrueMerge:
                 "lora_4": (["None"] + lora_list,),
                 "strength_4": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
                 "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
+                "density": ("FLOAT", {"default": 0.5, "min": 0.01, "max": 1.0, "step": 0.01,
+                                      "tooltip": "TIES: fraction of top-magnitude weights to keep (lower = more aggressive pruning)"}),
+                "majority_sign_method": (["frequency", "total"], {"default": "frequency",
+                                         "tooltip": "TIES: how to elect majority sign — 'frequency' counts votes, 'total' sums magnitudes"}),
             }
         }
-    
+
     RETURN_TYPES = ("MODEL", "CLIP")
     RETURN_NAMES = ("model", "clip")
     FUNCTION = "true_merge"
     CATEGORY = "loaders/lora"
-    DESCRIPTION = "True LoRA merging for any rank combination by computing full weight diffs"
+    DESCRIPTION = "True LoRA merging for any rank combination. Supports TIES-Merging for distilled/turbo models."
     
     def _load_lora(self, lora_name):
         """Loads LoRA file with caching"""
@@ -584,8 +593,8 @@ class ZImageLoRATrueMerge:
             final_shape = [mat_down.shape[1], mat_down.shape[0], mid.shape[2], mid.shape[3]]
             mat_down = (
                 torch.mm(
-                    mat_down.transpose(0, 1).flatten(start_dim=1),
-                    mid.transpose(0, 1).flatten(start_dim=1),
+                    mat_down.transpose(0, 1).flatten(start_dim=1).float(),
+                    mid.transpose(0, 1).flatten(start_dim=1).float(),
                 )
                 .reshape(final_shape)
                 .transpose(0, 1)
@@ -605,23 +614,92 @@ class ZImageLoRATrueMerge:
             return None
         
         return diff * scale
-    
-    def _merge_diffs(self, diffs_with_weights, mode):
+
+    @staticmethod
+    def _ties_trim(tensor, density):
+        """
+        TIES Step 1: Trim — keep only the top-k% values by absolute magnitude.
+        Everything else is zeroed out (noise removal).
+        """
+        flat = tensor.flatten()
+        n = flat.numel()
+        k = max(1, int(n * density))
+        if k >= n:
+            return tensor.clone()
+        _, indices = torch.topk(flat.abs(), k)
+        mask = torch.zeros_like(flat, dtype=torch.bool)
+        mask[indices] = True
+        return (flat * mask).reshape(tensor.shape)
+
+    @staticmethod
+    def _ties_elect_sign(trimmed_diffs, method="frequency"):
+        """
+        TIES Step 2: Elect Sign — determine majority sign direction per weight position.
+
+        Args:
+            trimmed_diffs: list of trimmed diff tensors (same shape)
+            method: "frequency" (count votes) or "total" (sum magnitudes)
+
+        Returns:
+            majority_sign: tensor of +1/-1 per position
+        """
+        stacked = torch.stack(trimmed_diffs)  # [N, *shape]
+        if method == "total":
+            # Sum of signed values — magnitude-weighted vote
+            total = stacked.sum(dim=0)
+        else:
+            # Count of positive vs negative (frequency vote)
+            total = (stacked > 0).float().sum(dim=0) - (stacked < 0).float().sum(dim=0)
+        # +1 where majority is positive or tied, -1 where majority is negative
+        majority_sign = torch.where(total >= 0,
+                                    torch.ones_like(total),
+                                    -torch.ones_like(total))
+        return majority_sign
+
+    @staticmethod
+    def _ties_disjoint_merge(trimmed_diffs, weights, majority_sign):
+        """
+        TIES Step 3: Disjoint Merge — average only contributors that agree
+        with the elected majority sign at each position.
+
+        Args:
+            trimmed_diffs: list of trimmed diff tensors
+            weights: list of scalar weights corresponding to each diff
+            majority_sign: tensor of +1/-1 per position
+
+        Returns:
+            merged tensor
+        """
+        result = torch.zeros_like(trimmed_diffs[0], dtype=torch.float32)
+        contributor_count = torch.zeros_like(result)
+
+        for diff, weight in zip(trimmed_diffs, weights):
+            diff_f = diff.to(dtype=torch.float32)
+            # Mask: keep only positions where diff sign matches majority
+            sign_match = (diff_f.sign() == majority_sign) & (diff_f != 0)
+            result += torch.where(sign_match, diff_f * weight, torch.zeros_like(diff_f))
+            contributor_count += sign_match.float()
+
+        # Average by number of contributors (avoid div-by-zero)
+        contributor_count = contributor_count.clamp(min=1.0)
+        return result / contributor_count
+
+    def _merge_diffs(self, diffs_with_weights, mode, density=0.5, majority_sign_method="frequency"):
         """
         Merges a list of diffs with their weights.
         """
         if len(diffs_with_weights) == 0:
             return None
-        
+
         if len(diffs_with_weights) == 1:
             diff, weight = diffs_with_weights[0]
             return diff * weight
-        
+
         # All diffs should have the same shape (verified during computation)
         ref_diff = diffs_with_weights[0][0]
         device = ref_diff.device
         dtype = ref_diff.dtype
-        
+
         if mode == "weighted_average":
             result = torch.zeros_like(ref_diff, dtype=torch.float32)
             total_weight = sum(abs(w) for _, w in diffs_with_weights)
@@ -630,13 +708,13 @@ class ZImageLoRATrueMerge:
             for diff, weight in diffs_with_weights:
                 result += diff.to(device=device, dtype=torch.float32) * (weight / total_weight)
             return result.to(dtype)
-        
+
         elif mode == "weighted_sum":
             result = torch.zeros_like(ref_diff, dtype=torch.float32)
             for diff, weight in diffs_with_weights:
                 result += diff.to(device=device, dtype=torch.float32) * weight
             return result.to(dtype)
-        
+
         elif mode == "normalize":
             # Normalization by "energy" (sum of squared weights)
             weights = [w for _, w in diffs_with_weights]
@@ -644,23 +722,47 @@ class ZImageLoRATrueMerge:
             if sum_sq == 0:
                 return torch.zeros_like(ref_diff)
             scale = 1.0 / math.sqrt(sum_sq)
-            
+
             result = torch.zeros_like(ref_diff, dtype=torch.float32)
             for diff, weight in diffs_with_weights:
                 result += diff.to(device=device, dtype=torch.float32) * weight * scale
             return result.to(dtype)
-        
+
+        elif mode == "ties":
+            # TIES-Merging: Trim, Elect Sign, Disjoint Merge
+            # Pre-multiply diffs by sign(weight) so negative strengths vote correctly,
+            # then use abs(weight) for magnitude in disjoint merge.
+            diffs = []
+            abs_weights = []
+            for d, w in diffs_with_weights:
+                d_f = d.to(device=device, dtype=torch.float32)
+                if w < 0:
+                    d_f = -d_f
+                diffs.append(d_f)
+                abs_weights.append(abs(w))
+
+            # Step 1: Trim each diff
+            trimmed = [self._ties_trim(d, density) for d in diffs]
+
+            # Step 2: Elect majority sign
+            majority_sign = self._ties_elect_sign(trimmed, majority_sign_method)
+
+            # Step 3: Disjoint merge
+            result = self._ties_disjoint_merge(trimmed, abs_weights, majority_sign)
+            return result.to(dtype)
+
         return None
     
     def true_merge(self, model, clip, merge_mode, output_strength,
                    lora_1, strength_1, lora_2, strength_2,
                    lora_3="None", strength_3=1.0,
                    lora_4="None", strength_4=1.0,
-                   clip_strength_multiplier=1.0):
+                   clip_strength_multiplier=1.0,
+                   density=0.5, majority_sign_method="frequency"):
         """
         Main function for true LoRA merging.
         """
-        
+
         # Collect active LoRAs
         loras_data = []
         for lora_name, strength in [
@@ -673,11 +775,13 @@ class ZImageLoRATrueMerge:
                 lora = self._load_lora(lora_name)
                 if lora is not None:
                     loras_data.append((lora_name, lora, strength))
-        
+
         if len(loras_data) == 0:
             return (model, clip)
-        
+
         logging.info(f"Z-Image LoRA True Merge: {merge_mode} mode, {len(loras_data)} LoRAs")
+        if merge_mode == "ties":
+            logging.info(f"  TIES params: density={density}, majority_sign={majority_sign_method}")
         for name, _, strength in loras_data:
             logging.info(f"  - {name}: strength={strength}")
         
@@ -704,7 +808,8 @@ class ZImageLoRATrueMerge:
                         break
         
         # For each key, compute merged diff
-        merged_patches = {}
+        model_patches = {}
+        clip_patches = {}
         processed_keys = 0
         
         for lora_prefix in all_lora_prefixes:
@@ -717,29 +822,32 @@ class ZImageLoRATrueMerge:
             elif lora_prefix in clip_keys:
                 target_key = clip_keys[lora_prefix]
                 is_clip = True
-            else:
-                # Try to find directly
-                for k in model_keys:
-                    if lora_prefix in k or k in lora_prefix:
-                        target_key = model_keys[k]
-                        break
             
             if target_key is None:
                 continue
             
-            # Handle tuple keys (for sliced weights)
-            actual_key = target_key[0] if isinstance(target_key, tuple) else target_key
-            
-            # Get target weight shape
+            # Handle tuple keys (for sliced weights, e.g. Flux linear1_qkv)
+            offset = None
+            if isinstance(target_key, tuple):
+                actual_key = target_key[0]
+                if len(target_key) > 1:
+                    offset = target_key[1]
+            else:
+                actual_key = target_key
+
+            # Get target weight shape (use sliced shape when offset present)
             try:
                 if is_clip:
                     target_weight = comfy.utils.get_attr(clip.cond_stage_model, actual_key)
                 else:
                     target_weight = comfy.utils.get_attr(model.model, actual_key)
-                target_shape = target_weight.shape
-            except:
+                target_shape = list(target_weight.shape)
+                if offset is not None:
+                    target_shape[offset[0]] = offset[2]
+                target_shape = torch.Size(target_shape)
+            except (AttributeError, RuntimeError, IndexError):
                 continue
-            
+
             # Compute diff for each LoRA
             diffs_with_weights = []
             for _, lora_dict, strength in loras_data:
@@ -757,9 +865,13 @@ class ZImageLoRATrueMerge:
                 continue
             
             # Merge diffs
-            merged_diff = self._merge_diffs(diffs_with_weights, merge_mode)
+            merged_diff = self._merge_diffs(diffs_with_weights, merge_mode,
+                                            density=density, majority_sign_method=majority_sign_method)
             if merged_diff is not None:
-                merged_patches[target_key] = ("diff", (merged_diff,))
+                if is_clip:
+                    clip_patches[target_key] = ("diff", (merged_diff,))
+                else:
+                    model_patches[target_key] = ("diff", (merged_diff,))
                 processed_keys += 1
         
         logging.info(f"  Processed {processed_keys} weight keys")
@@ -767,21 +879,514 @@ class ZImageLoRATrueMerge:
         # Apply to model
         new_model = model
         new_clip = clip
-        
-        if model is not None and len(merged_patches) > 0:
+
+        if model is not None and len(model_patches) > 0:
             new_model = model.clone()
-            # Filter patches for model
-            model_patches = {k: v for k, v in merged_patches.items() 
-                           if not isinstance(k, str) or not k.startswith("clip")}
             new_model.add_patches(model_patches, output_strength)
-        
-        if clip is not None and len(merged_patches) > 0:
+
+        if clip is not None and len(clip_patches) > 0:
             new_clip = clip.clone()
             clip_strength = output_strength * clip_strength_multiplier
-            # Apply all patches to clip (key filtering is more complex)
-            new_clip.add_patches(merged_patches, clip_strength)
+            new_clip.add_patches(clip_patches, clip_strength)
         
         return (new_model, new_clip)
+
+
+class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
+    """
+    Auto-optimizer that analyzes a LoRA stack (sign conflicts, magnitude
+    distributions, overlap) and automatically selects the best merge mode
+    and parameters, then performs the merge.
+
+    Outputs the merged model/clip plus an analysis report explaining
+    what was chosen and why.
+
+    Warning: Expands all LoRA diffs into full-rank tensors and holds them
+    in memory for cross-key analysis. Memory usage scales with
+    (n_loras * n_keys * weight_size). For SDXL (~800 keys) with 4 LoRAs
+    this can exceed 10GB. Pairwise conflict analysis is O(n^2) in the
+    number of LoRAs. For large stacks (4+) or SDXL models, consider using
+    ZImageLoRATrueMerge with manually chosen parameters instead.
+    """
+
+    def __init__(self):
+        self.loaded_loras = {}
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL", {"tooltip": "The model to apply LoRA to"}),
+                "clip": ("CLIP", {"tooltip": "The CLIP model"}),
+                "lora_stack": ("LORA_STACK", {"tooltip": "LoRA stack from ZImageLoRAStack"}),
+                "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                                              "tooltip": "Strength of the merged effect"}),
+            },
+            "optional": {
+                "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                                                       "tooltip": "Strength multiplier for CLIP"}),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", "CLIP", "STRING")
+    RETURN_NAMES = ("model", "clip", "analysis_report")
+    FUNCTION = "optimize_merge"
+    CATEGORY = "loaders/lora"
+    DESCRIPTION = "Auto-analyzes LoRA stack and selects optimal merge strategy. Outputs merged model + analysis report."
+
+    def _sample_conflict(self, diff_a, diff_b):
+        """
+        Compute sign conflict ratio between two diff tensors.
+        Samples up to 100k positions for large tensors.
+        Returns (n_overlap, n_conflict).
+        """
+        flat_a = diff_a.flatten().float().cpu()
+        flat_b = diff_b.flatten().float().cpu()
+
+        if flat_a.numel() != flat_b.numel():
+            return (0, 0)
+
+        n = flat_a.numel()
+        if n > 100000:
+            g = torch.Generator().manual_seed(42)
+            indices = torch.randperm(n, generator=g)[:100000]
+            flat_a = flat_a[indices]
+            flat_b = flat_b[indices]
+
+        # Only consider positions where both are non-zero
+        mask = (flat_a != 0) & (flat_b != 0)
+        n_overlap = mask.sum().item()
+        if n_overlap == 0:
+            return (0, 0)
+
+        n_conflict = (flat_a[mask].sign() != flat_b[mask].sign()).sum().item()
+        return (n_overlap, n_conflict)
+
+    def _estimate_density(self, all_key_diffs):
+        """
+        Estimate TIES density parameter from magnitude distribution.
+        Uses fraction of values above 10% of the max magnitude as a
+        sparsity proxy. Returns float in [0.1, 0.9].
+        """
+        samples = []
+        max_samples_per_key = 1000
+        g = torch.Generator().manual_seed(42)
+
+        for key, diffs_list in all_key_diffs.items():
+            for diff, strength in diffs_list:
+                flat = diff.flatten().abs().float().cpu() * abs(strength)
+                n = flat.numel()
+                if n > max_samples_per_key:
+                    indices = torch.randperm(n, generator=g)[:max_samples_per_key]
+                    flat = flat[indices]
+                samples.append(flat)
+
+        if len(samples) == 0:
+            return 0.5
+
+        all_samples = torch.cat(samples)
+        if all_samples.numel() == 0:
+            return 0.5
+
+        max_val = all_samples.max().item()
+        if max_val <= 0:
+            return 0.5
+
+        # Fraction of values above 10% of max magnitude
+        noise_floor = max_val * 0.1
+        above_noise = (all_samples > noise_floor).float().mean().item()
+
+        return max(0.1, min(0.9, above_noise))
+
+    def _auto_select_params(self, avg_conflict_ratio, magnitude_ratio, all_key_diffs):
+        """
+        Decision logic for auto-selecting merge parameters.
+        Returns (mode, density, sign_method, reasoning_lines).
+        """
+        reasoning = []
+
+        # Select mode based on sign conflict
+        if avg_conflict_ratio > 0.25:
+            mode = "ties"
+            reasoning.append(f"Sign conflict ratio {avg_conflict_ratio:.1%} > 25% threshold -> TIES mode selected")
+            reasoning.append("  TIES resolves sign conflicts via trim + elect sign + disjoint merge")
+        else:
+            mode = "weighted_average"
+            reasoning.append(f"Sign conflict ratio {avg_conflict_ratio:.1%} <= 25% threshold -> weighted_average mode selected")
+            reasoning.append("  Low conflict means LoRAs are mostly compatible, simple averaging works well")
+
+        # Auto-density (TIES only)
+        if mode == "ties":
+            density = self._estimate_density(all_key_diffs)
+            reasoning.append(f"Auto-density estimated at {density:.2f} from magnitude distribution")
+        else:
+            density = 0.5  # unused but set for completeness
+
+        # Sign method (only relevant for TIES mode)
+        if mode == "ties":
+            if magnitude_ratio > 2.0:
+                sign_method = "total"
+                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x > 2x -> 'total' sign method (magnitude-weighted voting)")
+                reasoning.append("  Stronger LoRA gets more influence in sign election")
+            else:
+                sign_method = "frequency"
+                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x <= 2x -> 'frequency' sign method (equal voting)")
+                reasoning.append("  Similar-strength LoRAs get equal votes")
+        else:
+            sign_method = "frequency"  # unused, default for completeness
+
+        return (mode, density, sign_method, reasoning)
+
+    def _build_report(self, lora_stats, pairwise_conflicts, collection_stats,
+                      mode, density, sign_method, reasoning, merge_summary):
+        """Format analysis as a multi-line report string."""
+        lines = []
+        lines.append("=" * 50)
+        lines.append("Z-IMAGE LORA OPTIMIZER - ANALYSIS REPORT")
+        lines.append("=" * 50)
+
+        # Per-LoRA Analysis
+        lines.append("")
+        lines.append("--- Per-LoRA Analysis ---")
+        for stat in lora_stats:
+            lines.append(f"  {stat['name']}:")
+            lines.append(f"    Strength: {stat['strength']}")
+            lines.append(f"    Keys: {stat['key_count']}")
+            if stat['key_count'] > 0:
+                lines.append(f"    Avg rank: {stat['avg_rank']:.0f}")
+                lines.append(f"    L2 norm (mean): {stat['l2_mean']:.4f}")
+            else:
+                lines.append(f"    Avg rank: N/A (no compatible keys)")
+                lines.append(f"    L2 norm (mean): N/A")
+
+        # Pairwise Analysis
+        if pairwise_conflicts:
+            lines.append("")
+            lines.append("--- Pairwise Analysis ---")
+            for pc in pairwise_conflicts:
+                lines.append(f"  {pc['pair']}:")
+                lines.append(f"    Overlapping positions: {pc['overlap']}")
+                lines.append(f"    Sign conflicts: {pc['conflicts']} ({pc['ratio']:.1%})")
+
+        # Collection Statistics
+        lines.append("")
+        lines.append("--- Collection Statistics ---")
+        lines.append(f"  Total LoRAs: {collection_stats['n_loras']}")
+        lines.append(f"  Total unique keys: {collection_stats['total_keys']}")
+        lines.append(f"  Avg sign conflict ratio: {collection_stats['avg_conflict']:.1%}")
+        lines.append(f"  Magnitude ratio (max/min L2): {collection_stats['magnitude_ratio']:.2f}x")
+
+        # Auto-Selected Parameters
+        lines.append("")
+        lines.append("--- Auto-Selected Parameters ---")
+        lines.append(f"  Merge mode: {mode}")
+        if mode == "ties":
+            lines.append(f"  Density: {density:.2f}")
+            lines.append(f"  Sign method: {sign_method}")
+
+        # Reasoning
+        lines.append("")
+        lines.append("--- Reasoning ---")
+        for r in reasoning:
+            lines.append(f"  {r}")
+
+        # Merge Summary
+        lines.append("")
+        lines.append("--- Merge Summary ---")
+        lines.append(f"  Keys processed: {merge_summary['keys_processed']}")
+        lines.append(f"  Model patches: {merge_summary['model_patches']}")
+        lines.append(f"  CLIP patches: {merge_summary['clip_patches']}")
+        if merge_summary.get('skipped_keys', 0) > 0:
+            lines.append(f"  Skipped keys: {merge_summary['skipped_keys']} (shape mismatch, e.g. sliced weights)")
+        lines.append(f"  Output strength: {merge_summary['output_strength']}")
+        lines.append(f"  CLIP strength: {merge_summary['clip_strength']}")
+
+        lines.append("")
+        lines.append("=" * 50)
+        return "\n".join(lines)
+
+    def optimize_merge(self, model, clip, lora_stack, output_strength, clip_strength_multiplier=1.0):
+        """
+        Main entry point. Three phases:
+        1. Compute diffs + collect per-LoRA stats
+        2. Analyze: sign conflicts, magnitude ratio -> auto-select params
+        3. Merge with chosen params, build report
+        """
+        # Filter zero-strength LoRAs and validate stack entries
+        if not lora_stack or len(lora_stack) == 0:
+            return (model, clip, "No LoRAs in stack.")
+
+        active_loras = []
+        for item in lora_stack:
+            if not isinstance(item, dict) or "lora" not in item or "strength" not in item or "name" not in item:
+                logging.warning("Z-Image LoRA Optimizer: skipping malformed stack entry (expected keys: name, lora, strength)")
+                continue
+            if item["strength"] != 0:
+                active_loras.append(item)
+
+        if len(active_loras) == 0:
+            return (model, clip, "No LoRAs in stack (all zero strength or malformed).")
+
+        # Single LoRA: skip analysis, apply directly via ComfyUI's standard
+        # additive LoRA application (faster than diff-based pipeline).
+        if len(active_loras) == 1:
+            item = active_loras[0]
+            lora_dict = item["lora"]
+            strength = item["strength"]
+
+            clip_strength = output_strength * clip_strength_multiplier
+            new_model, new_clip = comfy.sd.load_lora_for_models(
+                model, clip, lora_dict, output_strength * strength, clip_strength * strength
+            )
+
+            report = (
+                "=" * 50 + "\n"
+                "Z-IMAGE LORA OPTIMIZER - ANALYSIS REPORT\n"
+                "=" * 50 + "\n\n"
+                "Single LoRA detected — bypassing analysis.\n"
+                f"  Name: {item['name']}\n"
+                f"  Strength: {strength}\n"
+                f"  Applied directly with output_strength={output_strength}\n"
+                "\n" + "=" * 50
+            )
+            return (new_model, new_clip, report)
+
+        logging.info(f"Z-Image LoRA Optimizer: analyzing {len(active_loras)} LoRAs")
+
+        # Get key maps
+        model_keys = {}
+        if model is not None:
+            model_keys = comfy.lora.model_lora_keys_unet(model.model, {})
+
+        clip_keys = {}
+        if clip is not None:
+            clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
+
+        # Collect all LoRA key prefixes
+        all_lora_prefixes = set()
+        for item in active_loras:
+            for key in item["lora"].keys():
+                for suffix in [".lora_up.weight", ".lora_down.weight", "_lora.up.weight",
+                              "_lora.down.weight", ".lora_B.weight", ".lora_A.weight",
+                              ".lora.up.weight", ".lora.down.weight", ".alpha"]:
+                    if key.endswith(suffix):
+                        prefix = key[:-len(suffix)]
+                        all_lora_prefixes.add(prefix)
+                        break
+
+        # Phase 1: Compute diffs and collect per-LoRA stats
+        # all_key_diffs[lora_prefix] = list of (diff, strength) for _merge_diffs
+        # per_lora_diffs[lora_prefix][lora_index] = diff  (for pairwise analysis)
+        # all_key_targets[lora_prefix] = (target_key, is_clip)
+        all_key_diffs = {}
+        all_key_targets = {}
+        per_lora_diffs = {}
+        skipped_keys = 0
+        per_lora_stats = [{
+            "name": item["name"],
+            "strength": item["strength"],
+            "ranks": [],
+            "key_count": 0,
+            "l2_norms": [],
+        } for item in active_loras]
+
+        estimated_diffs = len(active_loras) * len(all_lora_prefixes)
+        if estimated_diffs > 2000:
+            logging.warning(
+                f"Z-Image LoRA Optimizer: analyzing up to {estimated_diffs} diff tensors. "
+                "This may use significant memory. Consider ZImageLoRATrueMerge for large stacks."
+            )
+
+        for lora_prefix in all_lora_prefixes:
+            target_key = None
+            is_clip = False
+
+            if lora_prefix in model_keys:
+                target_key = model_keys[lora_prefix]
+            elif lora_prefix in clip_keys:
+                target_key = clip_keys[lora_prefix]
+                is_clip = True
+
+            if target_key is None:
+                continue
+
+            # Handle tuple keys (for sliced weights, e.g. Flux linear1_qkv)
+            offset = None
+            if isinstance(target_key, tuple):
+                actual_key = target_key[0]
+                if len(target_key) > 1:
+                    offset = target_key[1]
+            else:
+                actual_key = target_key
+
+            # Get target weight shape (use sliced shape when offset present)
+            try:
+                if is_clip:
+                    target_weight = comfy.utils.get_attr(clip.cond_stage_model, actual_key)
+                else:
+                    target_weight = comfy.utils.get_attr(model.model, actual_key)
+                target_shape = list(target_weight.shape)
+                if offset is not None:
+                    target_shape[offset[0]] = offset[2]
+                target_shape = torch.Size(target_shape)
+            except (AttributeError, RuntimeError, IndexError):
+                continue
+
+            diffs_for_key = []
+            lora_diffs_for_key = {}
+            for i, item in enumerate(active_loras):
+                lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
+                if lora_info is None:
+                    continue
+
+                mat_up, mat_down, alpha, mid = lora_info
+                rank = mat_down.shape[0]
+                diff = self._compute_lora_diff(mat_up, mat_down, alpha, mid, target_shape)
+
+                if diff is not None:
+                    diffs_for_key.append((diff, item["strength"]))
+                    # Store sign-corrected diff for conflict analysis;
+                    # negative strength inverts the LoRA's direction
+                    lora_diffs_for_key[i] = diff if item["strength"] >= 0 else -diff
+                    per_lora_stats[i]["ranks"].append(rank)
+                    per_lora_stats[i]["key_count"] += 1
+                    per_lora_stats[i]["l2_norms"].append(diff.float().norm().item() * abs(item["strength"]))
+                else:
+                    skipped_keys += 1
+
+            if len(diffs_for_key) > 0:
+                all_key_diffs[lora_prefix] = diffs_for_key
+                all_key_targets[lora_prefix] = (target_key, is_clip)
+                per_lora_diffs[lora_prefix] = lora_diffs_for_key
+
+        if len(all_key_diffs) == 0:
+            return (model, clip, "No compatible LoRA keys found. "
+                    "LoRAs may be incompatible with this model architecture.")
+
+        # Finalize per-LoRA stats
+        lora_stats = []
+        l2_means = []
+        for stat in per_lora_stats:
+            avg_rank = sum(stat["ranks"]) / len(stat["ranks"]) if stat["ranks"] else 0
+            l2_mean = sum(stat["l2_norms"]) / len(stat["l2_norms"]) if stat["l2_norms"] else 0
+            l2_means.append(l2_mean)
+            lora_stats.append({
+                "name": stat["name"],
+                "strength": stat["strength"],
+                "key_count": stat["key_count"],
+                "avg_rank": avg_rank,
+                "l2_mean": l2_mean,
+            })
+
+        # Phase 2: Pairwise sign conflict analysis
+        pairwise_conflicts = []
+        total_overlap = 0
+        total_conflict = 0
+
+        for i in range(len(active_loras)):
+            for j in range(i + 1, len(active_loras)):
+                pair_overlap = 0
+                pair_conflict = 0
+                for lora_prefix, lora_diffs in per_lora_diffs.items():
+                    if i in lora_diffs and j in lora_diffs:
+                        ov, conf = self._sample_conflict(lora_diffs[i], lora_diffs[j])
+                        pair_overlap += ov
+                        pair_conflict += conf
+
+                total_overlap += pair_overlap
+                total_conflict += pair_conflict
+
+                ratio = pair_conflict / pair_overlap if pair_overlap > 0 else 0
+                name_i = active_loras[i]['name']
+                name_j = active_loras[j]['name']
+                if name_i == name_j:
+                    pair_label = f"{name_i} [#{i+1}, str={active_loras[i]['strength']}] vs {name_j} [#{j+1}, str={active_loras[j]['strength']}]"
+                else:
+                    pair_label = f"{name_i} vs {name_j}"
+                pairwise_conflicts.append({
+                    "pair": pair_label,
+                    "overlap": pair_overlap,
+                    "conflicts": pair_conflict,
+                    "ratio": ratio,
+                })
+
+        avg_conflict_ratio = total_conflict / total_overlap if total_overlap > 0 else 0
+
+        # Magnitude ratio
+        valid_l2 = [m for m in l2_means if m > 0]
+        if len(valid_l2) >= 2:
+            magnitude_ratio = max(valid_l2) / min(valid_l2)
+        else:
+            magnitude_ratio = 1.0
+
+        collection_stats = {
+            "n_loras": len(active_loras),
+            "total_keys": len(all_key_diffs),
+            "avg_conflict": avg_conflict_ratio,
+            "magnitude_ratio": magnitude_ratio,
+        }
+
+        # Auto-select parameters
+        mode, density, sign_method, reasoning = self._auto_select_params(
+            avg_conflict_ratio, magnitude_ratio, all_key_diffs
+        )
+
+        logging.info(f"Z-Image LoRA Optimizer: auto-selected mode={mode}, density={density:.2f}, sign={sign_method}")
+
+        # Drop analysis index (tensors remain live in all_key_diffs until Phase 3)
+        del per_lora_diffs
+
+        # Phase 3: Merge using stored diffs
+        model_patches = {}
+        clip_patches = {}
+        processed_keys = 0
+
+        for lora_prefix, diffs_list in all_key_diffs.items():
+            target_key, is_clip_key = all_key_targets[lora_prefix]
+
+            merged_diff = self._merge_diffs(
+                diffs_list, mode,
+                density=density, majority_sign_method=sign_method
+            )
+
+            if merged_diff is not None:
+                if is_clip_key:
+                    clip_patches[target_key] = ("diff", (merged_diff,))
+                else:
+                    model_patches[target_key] = ("diff", (merged_diff,))
+                processed_keys += 1
+
+        # Apply patches
+        new_model = model
+        new_clip = clip
+
+        clip_strength_out = output_strength * clip_strength_multiplier
+
+        if model is not None and len(model_patches) > 0:
+            new_model = model.clone()
+            new_model.add_patches(model_patches, output_strength)
+
+        if clip is not None and len(clip_patches) > 0:
+            new_clip = clip.clone()
+            new_clip.add_patches(clip_patches, clip_strength_out)
+
+        merge_summary = {
+            "keys_processed": processed_keys,
+            "model_patches": len(model_patches),
+            "clip_patches": len(clip_patches),
+            "skipped_keys": skipped_keys,
+            "output_strength": output_strength,
+            "clip_strength": clip_strength_out,
+        }
+
+        report = self._build_report(
+            lora_stats, pairwise_conflicts, collection_stats,
+            mode, density, sign_method, reasoning, merge_summary
+        )
+
+        logging.info(f"Z-Image LoRA Optimizer: done. {processed_keys} keys processed.")
+
+        return (new_model, new_clip, report)
 
 
 # Node registration
@@ -791,6 +1396,7 @@ NODE_CLASS_MAPPINGS = {
     "ZImageLoRAStackApply": ZImageLoRAStackApply,
     "ZImageLoRAMergeToSingle": ZImageLoRAMergeToSingle,
     "ZImageLoRATrueMerge": ZImageLoRATrueMerge,
+    "ZImageLoRAOptimizer": ZImageLoRAOptimizer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -799,4 +1405,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ZImageLoRAStackApply": "Z-Image LoRA Stack Apply",
     "ZImageLoRAMergeToSingle": "Z-Image LoRA Merge to Single",
     "ZImageLoRATrueMerge": "Z-Image LoRA True Merge",
+    "ZImageLoRAOptimizer": "Z-Image LoRA Optimizer",
 }
