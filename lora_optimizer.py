@@ -1020,7 +1020,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         lines.append("=" * 50)
         return "\n".join(lines)
 
-    def optimize_merge(self, model, clip, lora_stack, output_strength, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled"):
+    def optimize_merge(self, model, clip, lora_stack, output_strength, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix"):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
@@ -1069,7 +1069,8 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Check instance-level patch cache (survives ComfyUI re-execution
         # triggered by downstream seed changes or similar non-LoRA changes)
         cache_key = self._compute_cache_key(lora_stack, output_strength,
-                                            clip_strength_multiplier, auto_strength)
+                                            clip_strength_multiplier, auto_strength,
+                                            optimization_mode)
         if cache_key in self._merge_cache:
             model_patches, clip_patches, report, clip_strength_out = self._merge_cache[cache_key]
             new_model = model
@@ -1318,6 +1319,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         model_patches = {}
         clip_patches = {}
         processed_keys = 0
+        strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "ties": 0}
 
         def _merge_one_prefix(lora_prefix, target_key, is_clip_key):
             """Recompute diffs for one prefix, merge, return patch or None."""
@@ -1394,25 +1396,44 @@ class LoRAOptimizer(_LoRAMergeBase):
             if len(diffs_list) == 0:
                 return None
 
+            # Determine strategy for this prefix
+            if optimization_mode == "per_prefix" and lora_prefix in prefix_stats:
+                pf = prefix_stats[lora_prefix]
+                if pf["n_loras"] <= 1 or len(diffs_list) <= 1:
+                    # Single LoRA on this prefix: weighted_sum, full strength
+                    pf_mode = "weighted_sum"
+                    pf_density = 0.5
+                    pf_sign = "frequency"
+                else:
+                    pf_mode, pf_density, pf_sign, _ = self._auto_select_params(
+                        pf["conflict_ratio"], pf["magnitude_ratio"],
+                        magnitude_samples=pf.get("magnitude_samples")
+                    )
+            else:
+                pf_mode = mode
+                pf_density = density
+                pf_sign = sign_method
+
             merged_diff = self._merge_diffs(
-                diffs_list, mode,
-                density=density, majority_sign_method=sign_method,
+                diffs_list, pf_mode,
+                density=pf_density, majority_sign_method=pf_sign,
                 compute_device=compute_device
             )
             if merged_diff is None:
                 return None
-            return (target_key, is_clip_key, merged_diff)
+            return (target_key, is_clip_key, merged_diff, pf_mode)
 
         def _collect_merge_result(result):
             nonlocal processed_keys
             if result is None:
                 return
-            target_key, is_clip_key, merged_diff = result
+            target_key, is_clip_key, merged_diff, used_mode = result
             if is_clip_key:
                 clip_patches[target_key] = ("diff", (merged_diff,))
             else:
                 model_patches[target_key] = ("diff", (merged_diff,))
             processed_keys += 1
+            strategy_counts[used_mode] = strategy_counts.get(used_mode, 0) + 1
 
         if use_gpu:
             for lora_prefix, (target_key, is_clip_key) in all_key_targets.items():
