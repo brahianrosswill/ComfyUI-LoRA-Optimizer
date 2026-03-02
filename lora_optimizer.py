@@ -203,17 +203,20 @@ class _LoRAMergeBase:
         Returns:
             majority_sign: tensor of +1/-1 per position
         """
-        stacked = torch.stack(trimmed_diffs)  # [N, *shape]
+        # Iterate instead of torch.stack to avoid allocating [N, *shape] tensor
+        ref = trimmed_diffs[0]
+        total = torch.zeros_like(ref, dtype=torch.float32)
         if method == "total":
-            # Sum of signed values — magnitude-weighted vote
-            total = stacked.sum(dim=0)
+            for d in trimmed_diffs:
+                total.add_(d.to(dtype=torch.float32))
         else:
-            # Count of positive vs negative (frequency vote)
-            total = (stacked > 0).float().sum(dim=0) - (stacked < 0).float().sum(dim=0)
+            # sign() returns -1/0/+1: zeros don't vote, matching original behavior
+            for d in trimmed_diffs:
+                total.add_(d.sign())
         # +1 where majority is positive or tied, -1 where majority is negative
         majority_sign = torch.where(total >= 0,
-                                    torch.ones_like(total),
-                                    -torch.ones_like(total))
+                                    torch.tensor(1.0, device=total.device, dtype=total.dtype),
+                                    torch.tensor(-1.0, device=total.device, dtype=total.dtype))
         return majority_sign
 
     @staticmethod
@@ -235,15 +238,17 @@ class _LoRAMergeBase:
 
         for diff, weight in zip(trimmed_diffs, weights):
             diff_f = diff.to(dtype=torch.float32)
-            # Mask: keep only positions where diff sign matches majority
-            sign_match = (diff_f.sign() == majority_sign) & (diff_f != 0)
-            result += torch.where(sign_match, diff_f * weight, torch.zeros_like(diff_f))
-            contributor_count += sign_match.float()
+            # Positions where diff agrees with elected majority sign (and is non-zero)
+            sign_match = (diff_f * majority_sign) > 0
+            result.add_(torch.where(sign_match, diff_f * weight,
+                                    torch.tensor(0.0, device=result.device, dtype=result.dtype)))
+            contributor_count.add_(sign_match.float())
 
         # Average by number of contributors (avoid div-by-zero)
-        contributor_count = contributor_count.clamp(min=1.0)
-        return result / contributor_count
+        contributor_count.clamp_(min=1.0)
+        return result.div_(contributor_count)
 
+    @torch.no_grad()
     def _merge_diffs(self, diffs_with_weights, mode, density=0.5, majority_sign_method="frequency",
                      compute_device=None):
         """
@@ -272,15 +277,19 @@ class _LoRAMergeBase:
             total_weight = sum(abs(w) for _, w in diffs_with_weights)
             if total_weight == 0:
                 return result.to(dtype).cpu() if to_cpu else result.to(dtype)
-            for diff, weight in diffs_with_weights:
-                result += diff.to(device=dev, dtype=torch.float32) * (weight / total_weight)
+            for idx in range(len(diffs_with_weights)):
+                diff, weight = diffs_with_weights[idx]
+                diffs_with_weights[idx] = None  # Free input diff early
+                result.add_(diff.to(device=dev, dtype=torch.float32) * (weight / total_weight))
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
         elif mode == "weighted_sum":
             result = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
-            for diff, weight in diffs_with_weights:
-                result += diff.to(device=dev, dtype=torch.float32) * weight
+            for idx in range(len(diffs_with_weights)):
+                diff, weight = diffs_with_weights[idx]
+                diffs_with_weights[idx] = None  # Free input diff early
+                result.add_(diff.to(device=dev, dtype=torch.float32) * weight)
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
@@ -294,8 +303,10 @@ class _LoRAMergeBase:
             scale = 1.0 / math.sqrt(sum_sq)
 
             result = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
-            for diff, weight in diffs_with_weights:
-                result += diff.to(device=dev, dtype=torch.float32) * weight * scale
+            for idx in range(len(diffs_with_weights)):
+                diff, weight = diffs_with_weights[idx]
+                diffs_with_weights[idx] = None  # Free input diff early
+                result.add_(diff.to(device=dev, dtype=torch.float32) * weight * scale)
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
@@ -303,23 +314,25 @@ class _LoRAMergeBase:
             # TIES-Merging: Trim, Elect Sign, Disjoint Merge
             # Pre-multiply diffs by sign(weight) so negative strengths vote correctly,
             # then use abs(weight) for magnitude in disjoint merge.
-            diffs = []
+            # Memory-optimized: free input diffs after trimming to reduce peak VRAM.
+            trimmed = []
             abs_weights = []
-            for d, w in diffs_with_weights:
+            for idx in range(len(diffs_with_weights)):
+                d, w = diffs_with_weights[idx]
+                diffs_with_weights[idx] = None  # Free input diff early
                 d_f = d.to(device=dev, dtype=torch.float32)
+                del d
                 if w < 0:
                     d_f = -d_f
-                diffs.append(d_f)
+                trimmed.append(self._ties_trim(d_f, density))
                 abs_weights.append(abs(w))
-
-            # Step 1: Trim each diff
-            trimmed = [self._ties_trim(d, density) for d in diffs]
 
             # Step 2: Elect majority sign
             majority_sign = self._ties_elect_sign(trimmed, majority_sign_method)
 
             # Step 3: Disjoint merge
             result = self._ties_disjoint_merge(trimmed, abs_weights, majority_sign)
+            del trimmed, majority_sign
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
@@ -517,12 +530,15 @@ class LoRAOptimizer(_LoRAMergeBase):
         Samples up to 100k positions for large tensors.
         Returns (n_overlap, n_conflict).
         """
+        # Avoid unnecessary .float() copies — diffs from _analyze_prefix are already float32
+        flat_a = diff_a.flatten()
+        flat_b = diff_b.flatten()
         if device is not None:
-            flat_a = diff_a.flatten().float().to(device)
-            flat_b = diff_b.flatten().float().to(device)
-        else:
-            flat_a = diff_a.flatten().float()
-            flat_b = diff_b.flatten().float()
+            flat_a = flat_a.to(device=device, dtype=torch.float32)
+            flat_b = flat_b.to(device=device, dtype=torch.float32)
+        elif flat_a.dtype != torch.float32:
+            flat_a = flat_a.float()
+            flat_b = flat_b.float()
 
         if flat_a.numel() != flat_b.numel():
             return (0, 0)
@@ -627,6 +643,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         return (lora_prefix, diffs_for_key, lora_diffs_for_key, partial_stats,
                 (target_key, is_clip), skip_count)
 
+    @torch.no_grad()
     def _analyze_prefix(self, lora_prefix, active_loras, model_keys, clip_keys,
                         model, clip, device, n_magnitude_samples=1000):
         """
@@ -719,6 +736,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 mat_up.flatten(start_dim=1).float(),
                 mat_down.flatten(start_dim=1).float()
             )
+            del mat_up, mat_down  # Free LoRA matrices from GPU
             try:
                 diff = diff.reshape(target_shape)
             except RuntimeError:
@@ -752,21 +770,20 @@ class LoRAOptimizer(_LoRAMergeBase):
                 ov, conf = self._sample_conflict(diff_i, diff_j, device=device)
                 pair_conflicts[(i, j)] = (ov, conf)
 
-        # --- Magnitude sampling (sample on device, copy only small result) ---
+        # --- Magnitude sampling (sample on device, free each diff eagerly) ---
         magnitude_samples = []
         seed = hash(lora_prefix) & 0xFFFFFFFF
         sample_dev = diffs[lora_indices[0]].device
         mag_g = torch.Generator(device=sample_dev).manual_seed(seed)
         for i in lora_indices:
             flat = diffs[i].flatten().abs().float() * abs(eff_strengths[i])
+            del diffs[i]  # Free this diff's GPU memory immediately
             n = flat.numel()
             if n > n_magnitude_samples:
                 indices = torch.randint(0, n, (n_magnitude_samples,),
                                         device=sample_dev, generator=mag_g)
                 flat = flat[indices]
             magnitude_samples.append(flat.cpu())
-
-        # Diffs go out of scope here — GPU memory freed
         return (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
                 (target_key, is_clip), skip_count)
 
@@ -1489,6 +1506,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     mat_up.flatten(start_dim=1).float(),
                     mat_down.flatten(start_dim=1).float()
                 )
+                del mat_up, mat_down  # Free LoRA matrices from GPU
                 try:
                     diff = diff.reshape(target_shape)
                 except RuntimeError:
@@ -1537,6 +1555,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 density=pf_density, majority_sign_method=pf_sign,
                 compute_device=compute_device
             )
+            diffs_list.clear()  # Free input diffs from GPU
             if merged_diff is None:
                 return None
             return (target_key, is_clip_key, merged_diff, pf_mode, lora_prefix, pf_conflict, pf_n_loras)
@@ -1574,6 +1593,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                          f"{strategy_counts.get('weighted_sum', 0)} weighted_sum, "
                          f"{strategy_counts.get('weighted_average', 0)} weighted_average, "
                          f"{strategy_counts.get('ties', 0)} ties")
+
+        # Free analysis data no longer needed
+        prefix_stats.clear()
+        self.loaded_loras.clear()
+        if use_gpu:
+            torch.cuda.empty_cache()
 
         # Apply patches
         new_model = model
