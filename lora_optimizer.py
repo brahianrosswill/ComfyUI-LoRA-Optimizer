@@ -354,6 +354,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
     def __init__(self):
         self.loaded_loras = {}
+        self._merge_cache = {}  # single-entry: {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
 
     def _normalize_stack(self, lora_stack):
         """
@@ -1059,6 +1060,23 @@ class LoRAOptimizer(_LoRAMergeBase):
             )
             return (new_model, new_clip, report)
 
+        # Check instance-level patch cache (survives ComfyUI re-execution
+        # triggered by downstream seed changes or similar non-LoRA changes)
+        cache_key = self._compute_cache_key(lora_stack, output_strength,
+                                            clip_strength_multiplier, auto_strength)
+        if cache_key in self._merge_cache:
+            model_patches, clip_patches, report, clip_strength_out = self._merge_cache[cache_key]
+            new_model = model
+            new_clip = clip
+            if model is not None and len(model_patches) > 0:
+                new_model = model.clone()
+                new_model.add_patches(model_patches, output_strength)
+            if clip is not None and len(clip_patches) > 0:
+                new_clip = clip.clone()
+                new_clip.add_patches(clip_patches, clip_strength_out)
+            logging.info(f"[LoRA Optimizer] Using cached merge result ({len(model_patches)} model + {len(clip_patches)} CLIP patches)")
+            return (new_model, new_clip, report)
+
         logging.info(f"[LoRA Optimizer] Starting analysis of {len(active_loras)} LoRAs")
         t_start = time.time()
 
@@ -1417,9 +1435,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             auto_strength_info=auto_strength_info
         )
 
+        # Cache patches for re-use (single entry to limit memory)
+        self._merge_cache = {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
+
         # Save report to disk for later reference
-        cache_key = self._compute_cache_key(lora_stack, output_strength,
-                                            clip_strength_multiplier, auto_strength)
         lora_combo = [[item["name"], item["strength"]] for item in active_loras]
         selected_params = {"mode": mode, "density": density, "sign_method": sign_method}
         report_path = self._save_report_to_disk(cache_key, lora_combo, auto_strength, report, selected_params)
