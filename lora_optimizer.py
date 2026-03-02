@@ -428,12 +428,12 @@ class LoRAOptimizer(_LoRAMergeBase):
             "required": {
                 "model": ("MODEL", {"tooltip": "The model to apply LoRA to"}),
                 "lora_stack": ("LORA_STACK", {"tooltip": "LoRA stack - accepts standard (name, model_str, clip_str) tuples or LoRAStack dicts"}),
-                "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05,
                                               "tooltip": "Strength of the merged effect"}),
             },
             "optional": {
                 "clip": ("CLIP", {"tooltip": "The CLIP model (optional — omit for video/latent-only workflows)"}),
-                "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05,
                                                        "tooltip": "Strength multiplier for CLIP"}),
                 "auto_strength": (["disabled", "enabled"], {
                     "default": "disabled",
