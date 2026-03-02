@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/ComfyUI-Custom_Nodes-blue?style=flat-square" alt="ComfyUI">
   <img src="https://img.shields.io/badge/TIES_Merging-NeurIPS_2023-8b5cf6?style=flat-square" alt="TIES">
-  <img src="https://img.shields.io/badge/Flux_%7C_SDXL_%7C_SD1.5-Compatible-22c55e?style=flat-square" alt="Compatible">
+  <img src="https://img.shields.io/badge/Flux_%7C_SDXL_%7C_SD1.5_%7C_Wan_2.2-Compatible-22c55e?style=flat-square" alt="Compatible">
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT">
 </p>
 
@@ -162,6 +162,35 @@ Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI
 
 > **Limitation:** The optimizer only analyzes LoRAs in its own stack. It cannot see LoRA patches applied by upstream nodes (Load LoRA, etc.) — those stack additively on top of the optimizer's output. Fully baked merges (safetensors checkpoints) are indistinguishable from base weights and cannot be detected.
 
+---
+
+### WanVideo LoRA Optimizer
+
+The same auto-optimizer adapted for **Wan 2.2 video LoRAs** used with [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper). Takes a `WANVIDLORA` stack and `WANVIDEOMODEL`, runs the same two-pass analysis/merge, and outputs a patched `WANVIDEOMODEL` plus a report.
+
+**Why a separate node:** Wan video LoRAs have no CLIP component and use different key formats (LyCORIS, diffusers, fun, finetrainer). The node handles key standardization, block/layer filtering, and `_orig_mod` key variants automatically.
+
+**Workflow:**
+```
+WanVideoLoraSelect ─┐
+WanVideoLoraSelect ─┤─► WANVIDLORA ─► WanVideo LoRA Optimizer ─► WANVIDEOMODEL
+                     │                        ▲
+WanVideoModelLoader ─────────────────────────┘
+     (no LoRAs)
+```
+
+Load your Wan model **without LoRAs** in the model loader, then chain `WanVideoLoraSelect` nodes into the optimizer.
+
+**Inputs:** `WANVIDEOMODEL`, `WANVIDLORA`, output strength, auto strength, free VRAM between passes
+
+**Outputs:** `WANVIDEOMODEL`, `STRING` (analysis report)
+
+**Key format handling:** Automatically standardizes LyCORIS, diffusers, fun LoRA, and finetrainer key formats. When WanVideoWrapper is installed, uses its standardization functions directly (stays up to date). Falls back to bundled copies otherwise.
+
+**Block/layer filtering:** Respects the `blocks` and `layer_filter` settings from `WanVideoLoraSelect`, so you can target specific transformer blocks.
+
+> **Note:** Requires [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper) to be installed for the `WANVIDEOMODEL` and `WANVIDLORA` types to be available. The node registers regardless but won't be connectable without WanVideoWrapper.
+
 ## Installation
 
 ### ComfyUI Manager
@@ -176,8 +205,8 @@ Restart ComfyUI. Both nodes appear under the `loaders/lora` category.
 
 ## Compatibility
 
-- **Models:** SD 1.5, SDXL, Flux, and other architectures supported by ComfyUI
-- **LoRA formats:** Standard LoRA, LoCon, diffusers formats
+- **Models:** SD 1.5, SDXL, Flux, Wan 2.2, and other architectures supported by ComfyUI
+- **LoRA formats:** Standard LoRA, LoCon, diffusers, LyCORIS, fun LoRA, finetrainer formats
 - **Flux sliced weights:** Handled correctly (linear1_qkv offsets)
 - **Stack formats:** Native LoRA Stack dicts, plus standard tuples from Efficiency Nodes / Comfyroll
 

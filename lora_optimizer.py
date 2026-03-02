@@ -11,11 +11,280 @@ import os
 import json
 import hashlib
 import time
+import uuid
 import concurrent.futures
 import folder_paths
 import comfy.utils
 import comfy.sd
 import comfy.lora
+
+log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Wan LoRA key helpers — prefer WanVideoWrapper's versions when installed
+# (stays up to date with upstream), fall back to bundled copies otherwise.
+# ---------------------------------------------------------------------------
+try:
+    from custom_nodes.ComfyUI_WanVideoWrapper.nodes_model_loading import (
+        standardize_lora_key_format as _wan_standardize_keys,
+        filter_state_dict_by_blocks as _wan_filter_by_blocks,
+        compensate_rs_lora_format as _wan_compensate_rs_lora,
+    )
+    _WAN_HELPERS_SOURCE = "WanVideoWrapper"
+except ImportError:
+    _WAN_HELPERS_SOURCE = "bundled"
+
+    def _wan_standardize_keys(lora_sd):
+        """Convert LyCORIS/diffusers/fun/finetrainer key formats to standard Wan format."""
+        new_sd = {}
+        for k, v in lora_sd.items():
+            # aitoolkit/lycoris format
+            if k.startswith("lycoris_blocks_"):
+                k = k.replace("lycoris_blocks_", "blocks.")
+                k = k.replace("_cross_attn_", ".cross_attn.")
+                k = k.replace("_self_attn_", ".self_attn.")
+                k = k.replace("_ffn_net_0_proj", ".ffn.0")
+                k = k.replace("_ffn_net_2", ".ffn.2")
+                k = k.replace("to_out_0", "o")
+            # Diffusers format
+            if k.startswith('transformer.'):
+                k = k.replace('transformer.', 'diffusion_model.')
+            if k.startswith('pipe.dit.'):
+                k = k.replace('pipe.dit.', 'diffusion_model.')
+            if k.startswith('blocks.'):
+                k = k.replace('blocks.', 'diffusion_model.blocks.')
+            if k.startswith('vace_blocks.'):
+                k = k.replace('vace_blocks.', 'diffusion_model.vace_blocks.')
+            k = k.replace('.default.', '.')
+            k = k.replace('.diff_m', '.modulation.diff')
+            k = k.replace('base_model.model.', 'diffusion_model.')
+
+            # Fun LoRA format
+            if k.startswith('lora_unet__'):
+                parts = k.split('.')
+                main_part = parts[0]
+                weight_type = '.'.join(parts[1:]) if len(parts) > 1 else None
+
+                if 'blocks_' in main_part:
+                    components = main_part[len('lora_unet__'):].split('_')
+                    new_key = "diffusion_model"
+
+                    if components[0] == 'blocks':
+                        new_key += f".blocks.{components[1]}"
+                        idx = 2
+                        if idx < len(components):
+                            if components[idx] == 'self' and idx+1 < len(components) and components[idx+1] == 'attn':
+                                new_key += ".self_attn"
+                                idx += 2
+                            elif components[idx] == 'cross' and idx+1 < len(components) and components[idx+1] == 'attn':
+                                new_key += ".cross_attn"
+                                idx += 2
+                            elif components[idx] == 'ffn':
+                                new_key += ".ffn"
+                                idx += 1
+
+                        if idx < len(components):
+                            component = components[idx]
+                            idx += 1
+                            if idx < len(components) and components[idx] == 'img':
+                                component += '_img'
+                                idx += 1
+                            new_key += f".{component}"
+
+                    if weight_type:
+                        if weight_type == 'alpha':
+                            new_key += '.alpha'
+                        elif weight_type in ('lora_down.weight', 'lora_down'):
+                            new_key += '.lora_A.weight'
+                        elif weight_type in ('lora_up.weight', 'lora_up'):
+                            new_key += '.lora_B.weight'
+                        else:
+                            new_key += f'.{weight_type}'
+                            if not new_key.endswith('.weight'):
+                                new_key += '.weight'
+                    k = new_key
+                else:
+                    new_key = main_part.replace('lora_unet__', 'diffusion_model.')
+                    new_key = new_key.replace('_self_attn', '.self_attn')
+                    new_key = new_key.replace('_cross_attn', '.cross_attn')
+                    new_key = new_key.replace('_ffn', '.ffn')
+                    new_key = new_key.replace('blocks_', 'blocks.')
+                    new_key = new_key.replace('head_head', 'head.head')
+                    new_key = new_key.replace('img_emb', 'img_emb')
+                    new_key = new_key.replace('text_embedding', 'text.embedding')
+                    new_key = new_key.replace('time_embedding', 'time.embedding')
+                    new_key = new_key.replace('time_projection', 'time.projection')
+
+                    parts = new_key.split('.')
+                    final_parts = []
+                    for part in parts:
+                        if part in ['img_emb', 'self_attn', 'cross_attn']:
+                            final_parts.append(part)
+                        else:
+                            final_parts.append(part.replace('_', '.'))
+                    new_key = '.'.join(final_parts)
+
+                    if weight_type:
+                        if weight_type == 'alpha':
+                            new_key += '.alpha'
+                        elif weight_type in ('lora_down.weight', 'lora_down'):
+                            new_key += '.lora_A.weight'
+                        elif weight_type in ('lora_up.weight', 'lora_up'):
+                            new_key += '.lora_B.weight'
+                        else:
+                            new_key += f'.{weight_type}'
+                            if not new_key.endswith('.weight'):
+                                new_key += '.weight'
+                    k = new_key
+
+                special_components = {
+                    'time.projection': 'time_projection',
+                    'img.emb': 'img_emb',
+                    'text.emb': 'text_emb',
+                    'time.emb': 'time_emb',
+                }
+                for old, new in special_components.items():
+                    if old in k:
+                        k = k.replace(old, new)
+
+            # Fix diffusion.model -> diffusion_model
+            if k.startswith('diffusion.model.'):
+                k = k.replace('diffusion.model.', 'diffusion_model.')
+
+            # Finetrainer format
+            if '.attn1.' in k:
+                k = k.replace('.attn1.', '.cross_attn.')
+                k = k.replace('.to_k.', '.k.')
+                k = k.replace('.to_q.', '.q.')
+                k = k.replace('.to_v.', '.v.')
+                k = k.replace('.to_out.0.', '.o.')
+            elif '.attn2.' in k:
+                k = k.replace('.attn2.', '.cross_attn.')
+                k = k.replace('.to_k.', '.k.')
+                k = k.replace('.to_q.', '.q.')
+                k = k.replace('.to_v.', '.v.')
+                k = k.replace('.to_out.0.', '.o.')
+
+            if "img_attn.proj" in k:
+                k = k.replace("img_attn.proj", "img_attn_proj")
+            if "img_attn.qkv" in k:
+                k = k.replace("img_attn.qkv", "img_attn_qkv")
+            if "txt_attn.proj" in k:
+                k = k.replace("txt_attn.proj", "txt_attn_proj")
+            if "txt_attn.qkv" in k:
+                k = k.replace("txt_attn.qkv", "txt_attn_qkv")
+            new_sd[k] = v
+        return new_sd
+
+    def _wan_filter_by_blocks(state_dict, blocks_mapping, layer_filter=[]):
+        """Apply block/layer filtering from WANVIDLORA config."""
+        filtered_dict = {}
+
+        if isinstance(layer_filter, str):
+            layer_filters = [layer_filter] if layer_filter else []
+        else:
+            layer_filters = [f for f in layer_filter if f] if layer_filter else []
+
+        for key in state_dict:
+            if not any(filter_str in key for filter_str in layer_filters):
+                if 'blocks.' in key:
+                    block_pattern = key.split('diffusion_model.')[1].split('.', 2)[0:2]
+                    block_key = f'{block_pattern[0]}.{block_pattern[1]}.'
+                    if block_key in blocks_mapping:
+                        filtered_dict[key] = state_dict[key]
+                else:
+                    filtered_dict[key] = state_dict[key]
+
+        return filtered_dict
+
+    def _wan_compensate_rs_lora(lora_sd):
+        """Fix alpha scaling for rank-stabilized LoRAs."""
+        rank = lora_sd["base_model.model.blocks.0.cross_attn.k.lora_A.weight"].shape[0]
+        alpha = torch.tensor(rank * rank // rank ** 0.5)
+        log.info(f"Detected rank stabilized peft lora format with rank {rank}, setting alpha to {alpha} to compensate.")
+        new_sd = {}
+        for k, v in lora_sd.items():
+            if k.endswith(".lora_A.weight"):
+                new_sd[k] = v
+                new_k = k.replace(".lora_A.weight", ".alpha")
+                new_sd[new_k] = alpha
+            else:
+                new_sd[k] = v
+        return new_sd
+
+
+def _wan_model_lora_keys_unet(model, key_map={}):
+    """Build LoRA key mapping for Wan video models (handles _orig_mod keys)."""
+    sd = model.state_dict()
+    sdk = sd.keys()
+
+    for k in sdk:
+        k = k.replace("_orig_mod.", "")
+        if k.startswith("diffusion_model."):
+            if k.endswith(".weight"):
+                key_lora = k[len("diffusion_model."):-len(".weight")].replace(".", "_")
+                key_map["lora_unet_{}".format(key_lora)] = k
+                key_map["{}".format(k[:-len(".weight")])] = k
+            else:
+                key_map["{}".format(k)] = k
+
+    diffusers_keys = comfy.utils.unet_to_diffusers(model.model_config.unet_config)
+    for k in diffusers_keys:
+        if k.endswith(".weight"):
+            unet_key = "diffusion_model.{}".format(diffusers_keys[k])
+            key_lora = k[:-len(".weight")].replace(".", "_")
+            key_map["lora_unet_{}".format(key_lora)] = unet_key
+            key_map["lycoris_{}".format(key_lora)] = unet_key
+
+            diffusers_lora_prefix = ["", "unet."]
+            for p in diffusers_lora_prefix:
+                diffusers_lora_key = "{}{}".format(p, k[:-len(".weight")].replace(".to_", ".processor.to_"))
+                if diffusers_lora_key.endswith(".to_out.0"):
+                    diffusers_lora_key = diffusers_lora_key[:-2]
+                key_map[diffusers_lora_key] = unet_key
+
+    return key_map
+
+
+def _wan_add_patches(patcher, patches, strength_patch=1.0, strength_model=1.0):
+    """Apply patches to Wan model (handles _orig_mod key variants)."""
+    with patcher.use_ejected():
+        p = set()
+        model_sd = patcher.model.state_dict()
+        for k in patches:
+            offset = None
+            function = None
+            if isinstance(k, str):
+                key = k
+            else:
+                offset = k[1]
+                key = k[0]
+                if len(k) > 2:
+                    function = k[2]
+
+            key_in_sd = key in model_sd
+            key_orig_mod = None
+            if not key_in_sd:
+                parts = key.split('.')
+                try:
+                    idx = parts.index('blocks')
+                    if idx + 1 < len(parts):
+                        if parts[idx+1].isdigit():
+                            new_parts = parts[:idx+2] + ['_orig_mod'] + parts[idx+2:]
+                            key_orig_mod = '.'.join(new_parts)
+                except ValueError:
+                    pass
+            key_orig_mod_in_sd = key_orig_mod is not None and key_orig_mod in model_sd
+            if key_in_sd or key_orig_mod_in_sd:
+                actual_key = key if key_in_sd else key_orig_mod
+                p.add(k)
+                current_patches = patcher.patches.get(actual_key, [])
+                current_patches.append((strength_patch, patches[k], strength_model, offset, function))
+                patcher.patches[actual_key] = current_patches
+
+        patcher.patches_uuid = uuid.uuid4()
+        return list(p)
 
 
 class LoRAStack:
@@ -1451,13 +1720,723 @@ class LoRAOptimizer(_LoRAMergeBase):
         return (new_model, new_clip, report)
 
 
+class WanVideoLoRAOptimizer(_LoRAMergeBase):
+    """
+    Auto-optimizer for Wan 2.2 video LoRAs. Accepts WANVIDLORA stacks and
+    WANVIDEOMODEL input from WanVideoWrapper, runs the same two-pass
+    analysis/merge as LoRAOptimizer, and outputs a patched WANVIDEOMODEL
+    plus an analysis report.
+
+    Wan LoRAs have no CLIP component, so this node only processes model
+    weights. Key standardization handles LyCORIS, diffusers, fun, and
+    finetrainer formats. Block and layer filtering from WanVideoLoraSelect
+    is respected.
+
+    Two-pass streaming architecture (same as LoRAOptimizer):
+      Pass 1 — Analysis: compute diffs, sample statistics, discard diffs
+      Pass 2 — Merge: recompute diffs, merge per-prefix, discard
+    """
+
+    def __init__(self):
+        self.loaded_loras = {}
+
+    def _normalize_wan_stack(self, wan_lora_stack):
+        """
+        Normalize a WANVIDLORA stack into the internal format.
+
+        WANVIDLORA items have: path, strength, name, blocks, layer_filter,
+        low_mem_load, merge_loras.
+
+        Loads LoRA from disk, applies RS-LoRA compensation, key
+        standardization, and block/layer filtering.
+
+        Returns list of dicts with keys: name, lora, strength, clip_strength.
+        """
+        if not wan_lora_stack:
+            return []
+
+        normalized = []
+        for item in wan_lora_stack:
+            if not isinstance(item, dict) or "path" not in item:
+                logging.warning("[WanVideo LoRA Optimizer] Skipping malformed WANVIDLORA entry")
+                continue
+
+            lora_path = item["path"]
+            lora_name = item.get("name", os.path.basename(lora_path))
+            strength = item.get("strength", 1.0)
+
+            # Handle scheduled strengths (list of values for keyframe scheduling)
+            if isinstance(strength, list):
+                logging.warning(f"[WanVideo LoRA Optimizer] {lora_name}: scheduled strength detected, "
+                                f"using first value ({strength[0]}) for merge analysis")
+                strength = strength[0]
+
+            if strength == 0:
+                logging.info(f"[WanVideo LoRA Optimizer] {lora_name}: strength 0, skipping")
+                continue
+
+            # Load LoRA with caching
+            if lora_path in self.loaded_loras:
+                lora_sd = self.loaded_loras[lora_path]
+            else:
+                try:
+                    lora_sd = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                except Exception as e:
+                    logging.warning(f"[WanVideo LoRA Optimizer] Failed to load '{lora_name}': {e}")
+                    continue
+
+            # Detect and apply RS-LoRA compensation
+            rs_key = "base_model.model.blocks.0.cross_attn.k.lora_A.weight"
+            if rs_key in lora_sd:
+                lora_sd = _wan_compensate_rs_lora(lora_sd)
+
+            # Standardize key formats
+            lora_sd = _wan_standardize_keys(lora_sd)
+
+            # Apply block and layer filtering
+            blocks = item.get("blocks", {})
+            layer_filter = item.get("layer_filter", [])
+            if blocks:
+                lora_sd = _wan_filter_by_blocks(lora_sd, blocks, layer_filter)
+
+            self.loaded_loras[lora_path] = lora_sd
+
+            normalized.append({
+                "name": lora_name,
+                "lora": lora_sd,
+                "strength": strength,
+                "clip_strength": None,
+            })
+
+        return normalized
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("WANVIDEOMODEL", {"tooltip": "The Wan video model to apply LoRAs to"}),
+                "wan_lora_stack": ("WANVIDLORA", {"tooltip": "Wan LoRA stack from WanVideoLoraSelect nodes"}),
+                "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                                              "tooltip": "Strength of the merged effect"}),
+            },
+            "optional": {
+                "auto_strength": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Auto-reduce LoRA strengths to prevent overexposure from stacking"
+                }),
+                "free_vram_between_passes": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Release GPU cache between analysis and merge passes. Lowers peak VRAM at negligible speed cost."
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("WANVIDEOMODEL", "STRING")
+    RETURN_NAMES = ("model", "analysis_report")
+    FUNCTION = "optimize_merge"
+    CATEGORY = "WanVideoWrapper"
+    DESCRIPTION = "Auto-analyzes Wan video LoRA stack and selects optimal merge strategy. Outputs merged model + analysis report."
+
+    @staticmethod
+    def _compute_cache_key(wan_lora_stack, output_strength, auto_strength):
+        h = hashlib.sha256()
+        if wan_lora_stack:
+            entries = []
+            for item in wan_lora_stack:
+                if isinstance(item, dict):
+                    s = item.get("strength", 0)
+                    if isinstance(s, list):
+                        s = s[0] if s else 0
+                    entries.append((str(item.get("name", item.get("path", ""))), float(s)))
+            entries.sort()
+            h.update(json.dumps(entries).encode())
+        h.update(f"|os={output_strength}|as={auto_strength}".encode())
+        return h.hexdigest()[:16]
+
+    @classmethod
+    def IS_CHANGED(cls, model, wan_lora_stack, output_strength,
+                   auto_strength="disabled", free_vram_between_passes="disabled"):
+        return cls._compute_cache_key(wan_lora_stack, output_strength, auto_strength)
+
+    def _save_report_to_disk(self, cache_key, lora_combo, auto_strength, report, selected_params):
+        try:
+            user_dir = folder_paths.get_user_directory()
+            report_dir = os.path.join(user_dir, "lora_optimizer_reports")
+            os.makedirs(report_dir, exist_ok=True)
+            report_path = os.path.join(report_dir, f"wan_{cache_key}.json")
+            data = {
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "lora_combo": lora_combo,
+                "auto_strength": auto_strength,
+                "report": report,
+                "selected_params": selected_params,
+            }
+            with open(report_path, "w") as f:
+                json.dump(data, f, indent=2)
+            return report_path
+        except Exception as e:
+            logging.warning(f"[WanVideo LoRA Optimizer] Failed to save report: {e}")
+            return None
+
+    def _build_wan_report(self, lora_stats, pairwise_conflicts, collection_stats,
+                          mode, density, sign_method, reasoning, merge_summary,
+                          auto_strength_info=None):
+        """Format analysis as a multi-line report string (no CLIP sections)."""
+        lines = []
+        lines.append("=" * 50)
+        lines.append("WANVIDEO LORA OPTIMIZER - ANALYSIS REPORT")
+        lines.append("=" * 50)
+
+        lines.append("")
+        lines.append("--- Per-LoRA Analysis ---")
+        for stat in lora_stats:
+            lines.append(f"  {stat['name']}:")
+            lines.append(f"    Strength: {stat.get('original_strength', stat['strength'])}")
+            lines.append(f"    Keys: {stat['key_count']}")
+            if stat['key_count'] > 0:
+                lines.append(f"    Avg rank: {stat['avg_rank']:.0f}")
+                lines.append(f"    L2 norm (mean): {stat['l2_mean']:.4f}")
+            else:
+                lines.append(f"    Avg rank: N/A (no compatible keys)")
+                lines.append(f"    L2 norm (mean): N/A")
+
+        if auto_strength_info is not None:
+            lines.append("")
+            lines.append("--- Auto-Strength Adjustment ---")
+            for i, name in enumerate(auto_strength_info["names"]):
+                orig = auto_strength_info["original_strengths"][i]
+                new = auto_strength_info["new_strengths"][i]
+                lines.append(f"  {name}: {orig} -> {new:.4f}")
+            for r in auto_strength_info["reasoning"]:
+                lines.append(f"  {r}")
+
+        if pairwise_conflicts:
+            lines.append("")
+            lines.append("--- Pairwise Analysis ---")
+            for pc in pairwise_conflicts:
+                lines.append(f"  {pc['pair']}:")
+                lines.append(f"    Overlapping positions: {pc['overlap']}")
+                lines.append(f"    Sign conflicts: {pc['conflicts']} ({pc['ratio']:.1%})")
+
+        lines.append("")
+        lines.append("--- Collection Statistics ---")
+        lines.append(f"  Total LoRAs: {collection_stats['n_loras']}")
+        lines.append(f"  Total unique keys: {collection_stats['total_keys']}")
+        lines.append(f"  Avg sign conflict ratio: {collection_stats['avg_conflict']:.1%}")
+        lines.append(f"  Magnitude ratio (max/min L2): {collection_stats['magnitude_ratio']:.2f}x")
+
+        lines.append("")
+        lines.append("--- Auto-Selected Parameters ---")
+        lines.append(f"  Merge mode: {mode}")
+        if mode == "ties":
+            lines.append(f"  Density: {density:.2f}")
+            lines.append(f"  Sign method: {sign_method}")
+
+        lines.append("")
+        lines.append("--- Reasoning ---")
+        for r in reasoning:
+            lines.append(f"  {r}")
+
+        lines.append("")
+        lines.append("--- Merge Summary ---")
+        lines.append(f"  Keys processed: {merge_summary['keys_processed']}")
+        lines.append(f"  Model patches: {merge_summary['model_patches']}")
+        if merge_summary.get('skipped_keys', 0) > 0:
+            lines.append(f"  Skipped keys: {merge_summary['skipped_keys']} (shape mismatch)")
+        lines.append(f"  Output strength: {merge_summary['output_strength']}")
+        lines.append(f"  Key helpers source: {_WAN_HELPERS_SOURCE}")
+
+        lines.append("")
+        lines.append("=" * 50)
+        return "\n".join(lines)
+
+    def _analyze_prefix_wan(self, lora_prefix, active_loras, model_keys,
+                            model, device, n_magnitude_samples=1000):
+        """
+        Pass 1 per-prefix analysis for Wan models (no CLIP).
+        Same logic as LoRAOptimizer._analyze_prefix but without CLIP handling.
+        """
+        target_key = model_keys.get(lora_prefix)
+        if target_key is None:
+            return None
+
+        offset = None
+        if isinstance(target_key, tuple):
+            actual_key = target_key[0]
+            if len(target_key) > 1:
+                offset = target_key[1]
+        else:
+            actual_key = target_key
+
+        try:
+            target_weight = comfy.utils.get_attr(model.model, actual_key)
+            target_shape = list(target_weight.shape)
+            if offset is not None:
+                target_shape[offset[0]] = offset[2]
+            target_shape = torch.Size(target_shape)
+        except (AttributeError, RuntimeError, IndexError):
+            return None
+
+        use_gpu = device is not None and device.type != "cpu"
+        diffs = {}
+        eff_strengths = {}
+        partial_stats = []
+        skip_count = 0
+
+        for i, item in enumerate(active_loras):
+            lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
+            if lora_info is None:
+                continue
+
+            mat_up, mat_down, alpha, mid = lora_info
+            rank = mat_down.shape[0]
+
+            if use_gpu:
+                mat_up = mat_up.to(device)
+                mat_down = mat_down.to(device)
+                if mid is not None:
+                    mid = mid.to(device)
+            scale = alpha / rank
+
+            if mid is not None:
+                final_shape = [mat_down.shape[1], mat_down.shape[0], mid.shape[2], mid.shape[3]]
+                mat_down = (
+                    torch.mm(
+                        mat_down.transpose(0, 1).flatten(start_dim=1).float(),
+                        mid.transpose(0, 1).flatten(start_dim=1).float(),
+                    )
+                    .reshape(final_shape)
+                    .transpose(0, 1)
+                )
+
+            diff = torch.mm(
+                mat_up.flatten(start_dim=1).float(),
+                mat_down.flatten(start_dim=1).float()
+            )
+            try:
+                diff = diff.reshape(target_shape)
+            except RuntimeError:
+                skip_count += 1
+                continue
+
+            diff = diff * scale
+            eff_strength = item["strength"]
+            diffs[i] = diff
+            eff_strengths[i] = eff_strength
+            l2 = diff.float().norm().item() * abs(item["strength"])
+            partial_stats.append((i, rank, l2))
+
+        if len(diffs) == 0:
+            if skip_count > 0:
+                return (lora_prefix, [], {}, [], target_key, skip_count)
+            return None
+
+        # Pairwise conflict analysis
+        pair_conflicts = {}
+        lora_indices = sorted(diffs.keys())
+        for ai in range(len(lora_indices)):
+            for bi in range(ai + 1, len(lora_indices)):
+                i, j = lora_indices[ai], lora_indices[bi]
+                diff_i = diffs[i] if eff_strengths[i] >= 0 else -diffs[i]
+                diff_j = diffs[j] if eff_strengths[j] >= 0 else -diffs[j]
+                ov, conf = self._sample_conflict(diff_i, diff_j, device=device)
+                pair_conflicts[(i, j)] = (ov, conf)
+
+        # Magnitude sampling
+        magnitude_samples = []
+        seed = hash(lora_prefix) & 0xFFFFFFFF
+        sample_dev = diffs[lora_indices[0]].device
+        mag_g = torch.Generator(device=sample_dev).manual_seed(seed)
+        for i in lora_indices:
+            flat = diffs[i].flatten().abs().float() * abs(eff_strengths[i])
+            n = flat.numel()
+            if n > n_magnitude_samples:
+                indices = torch.randint(0, n, (n_magnitude_samples,),
+                                        device=sample_dev, generator=mag_g)
+                flat = flat[indices]
+            magnitude_samples.append(flat.cpu())
+
+        return (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
+                target_key, skip_count)
+
+    def optimize_merge(self, model, wan_lora_stack, output_strength,
+                       auto_strength="disabled", free_vram_between_passes="disabled"):
+        """
+        Main entry point. Two-pass streaming architecture (no CLIP):
+        Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
+        Decision: Finalize stats, auto-select params from lightweight accumulators
+        Pass 2: Recompute diffs per-prefix, merge immediately, discard
+        """
+        if not wan_lora_stack or len(wan_lora_stack) == 0:
+            return (model, "No LoRAs in stack.")
+
+        normalized_stack = self._normalize_wan_stack(wan_lora_stack)
+        active_loras = [item for item in normalized_stack if item["strength"] != 0]
+
+        if len(active_loras) == 0:
+            return (model, "No LoRAs in stack (all zero strength or malformed).")
+
+        # Single LoRA: apply directly using WanVideoWrapper-style patching
+        if len(active_loras) == 1:
+            item = active_loras[0]
+            lora_sd = item["lora"]
+            strength = item["strength"]
+
+            key_map = _wan_model_lora_keys_unet(model.model, {})
+            loaded = comfy.lora.load_lora(lora_sd, key_map)
+
+            new_model = model.clone()
+            _wan_add_patches(new_model, loaded, output_strength * strength)
+
+            report = (
+                "=" * 50 + "\n"
+                "WANVIDEO LORA OPTIMIZER - ANALYSIS REPORT\n"
+                "=" * 50 + "\n\n"
+                "Single LoRA detected — bypassing analysis.\n"
+                f"  Name: {item['name']}\n"
+                f"  Strength: {strength}\n"
+                f"  Applied directly with output_strength={output_strength}\n"
+                f"  Key helpers source: {_WAN_HELPERS_SOURCE}\n"
+                "\n" + "=" * 50
+            )
+            return (new_model, report)
+
+        logging.info(f"[WanVideo LoRA Optimizer] Starting analysis of {len(active_loras)} LoRAs")
+        t_start = time.time()
+
+        # Get key map (Wan-specific, handles _orig_mod)
+        model_keys = _wan_model_lora_keys_unet(model.model, {})
+
+        # Collect all LoRA key prefixes
+        all_lora_prefixes = set()
+        for item in active_loras:
+            for key in item["lora"].keys():
+                for suffix in [".lora_up.weight", ".lora_down.weight", "_lora.up.weight",
+                              "_lora.down.weight", ".lora_B.weight", ".lora_A.weight",
+                              ".lora.up.weight", ".lora.down.weight", ".alpha"]:
+                    if key.endswith(suffix):
+                        prefix = key[:-len(suffix)]
+                        all_lora_prefixes.add(prefix)
+                        break
+
+        compute_device = self._get_compute_device()
+        use_gpu = compute_device.type != "cpu"
+
+        # =================================================================
+        # Pass 1 — Analysis
+        # =================================================================
+        logging.info("[WanVideo LoRA Optimizer] Pass 1: Analyzing weight diffs (streaming)...")
+        logging.info(f"[WanVideo LoRA Optimizer]   {len(all_lora_prefixes)} key prefixes across {len(active_loras)} LoRAs")
+        logging.info(f"[WanVideo LoRA Optimizer]   Compute device: {compute_device}"
+                     f" ({'sequential' if use_gpu else 'threaded'})")
+        t_pass1 = time.time()
+
+        all_key_targets = {}
+        skipped_keys = 0
+        per_lora_stats = [{
+            "name": item["name"],
+            "strength": item["strength"],
+            "ranks": [],
+            "key_count": 0,
+            "l2_norms": [],
+        } for item in active_loras]
+
+        pairs = [(i, j) for i in range(len(active_loras))
+                         for j in range(i + 1, len(active_loras))]
+        pair_accum = {(i, j): [0, 0] for i, j in pairs}
+        all_magnitude_samples = []
+        prefix_count = 0
+
+        def _collect_analysis_result(result):
+            nonlocal skipped_keys, prefix_count
+            if result is None:
+                return
+            prefix, partial_stats, pair_conflicts, mag_samples, target_key, skips = result
+            skipped_keys += skips
+            if len(partial_stats) > 0:
+                all_key_targets[prefix] = target_key
+                prefix_count += 1
+            for (idx, rank, l2) in partial_stats:
+                per_lora_stats[idx]["ranks"].append(rank)
+                per_lora_stats[idx]["key_count"] += 1
+                per_lora_stats[idx]["l2_norms"].append(l2)
+            for (i, j), (ov, conf) in pair_conflicts.items():
+                pair_accum[(i, j)][0] += ov
+                pair_accum[(i, j)][1] += conf
+            all_magnitude_samples.extend(mag_samples)
+
+        if use_gpu:
+            for lora_prefix in all_lora_prefixes:
+                result = self._analyze_prefix_wan(lora_prefix, active_loras,
+                                                  model_keys, model, compute_device)
+                _collect_analysis_result(result)
+        else:
+            max_workers = min(4, max(1, len(all_lora_prefixes)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(self._analyze_prefix_wan, lora_prefix, active_loras,
+                                    model_keys, model, compute_device): lora_prefix
+                    for lora_prefix in all_lora_prefixes
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    _collect_analysis_result(future.result())
+
+        if prefix_count == 0:
+            return (model, "No compatible LoRA keys found. "
+                    "LoRAs may be incompatible with this model architecture.")
+
+        for i, stat in enumerate(per_lora_stats):
+            avg_r = sum(stat["ranks"]) / len(stat["ranks"]) if stat["ranks"] else 0
+            logging.info(f"[WanVideo LoRA Optimizer]   {stat['name']} ({i+1}/{len(active_loras)}): "
+                         f"{stat['key_count']} keys, avg rank {avg_r:.0f}")
+        logging.info(f"[WanVideo LoRA Optimizer]   Total: {prefix_count} prefixes ({time.time() - t_pass1:.1f}s)")
+
+        # =================================================================
+        # Decision — finalize stats, auto-select params
+        # =================================================================
+        lora_stats = []
+        l2_means = []
+        for stat in per_lora_stats:
+            avg_rank = sum(stat["ranks"]) / len(stat["ranks"]) if stat["ranks"] else 0
+            l2_mean = sum(stat["l2_norms"]) / len(stat["l2_norms"]) if stat["l2_norms"] else 0
+            l2_means.append(l2_mean)
+            lora_stats.append({
+                "name": stat["name"],
+                "strength": stat["strength"],
+                "key_count": stat["key_count"],
+                "avg_rank": avg_rank,
+                "l2_mean": l2_mean,
+            })
+
+        total_overlap = 0
+        total_conflict = 0
+        pairwise_conflicts = []
+        for i, j in pairs:
+            pair_overlap, pair_conflict = pair_accum[(i, j)]
+            total_overlap += pair_overlap
+            total_conflict += pair_conflict
+            ratio = pair_conflict / pair_overlap if pair_overlap > 0 else 0
+            name_i = active_loras[i]['name']
+            name_j = active_loras[j]['name']
+            if name_i == name_j:
+                pair_label = f"{name_i} [#{i+1}, str={active_loras[i]['strength']}] vs {name_j} [#{j+1}, str={active_loras[j]['strength']}]"
+            else:
+                pair_label = f"{name_i} vs {name_j}"
+            pairwise_conflicts.append({
+                "pair": pair_label,
+                "overlap": pair_overlap,
+                "conflicts": pair_conflict,
+                "ratio": ratio,
+            })
+            logging.info(f"[WanVideo LoRA Optimizer]   {pair_label} -> {ratio:.1%} conflict")
+
+        avg_conflict_ratio = total_conflict / total_overlap if total_overlap > 0 else 0
+        logging.info(f"[WanVideo LoRA Optimizer]   Average conflict ratio: {avg_conflict_ratio:.1%}")
+
+        valid_l2 = [m for m in l2_means if m > 0]
+        if len(valid_l2) >= 2:
+            magnitude_ratio = max(valid_l2) / min(valid_l2)
+        else:
+            magnitude_ratio = 1.0
+
+        collection_stats = {
+            "n_loras": len(active_loras),
+            "total_keys": prefix_count,
+            "avg_conflict": avg_conflict_ratio,
+            "magnitude_ratio": magnitude_ratio,
+        }
+
+        mode, density, sign_method, reasoning = self._auto_select_params(
+            avg_conflict_ratio, magnitude_ratio, magnitude_samples=all_magnitude_samples
+        )
+        del all_magnitude_samples
+
+        logging.info(f"[WanVideo LoRA Optimizer] Decision: {mode} (conflict {avg_conflict_ratio:.1%} "
+                     f"{'>' if avg_conflict_ratio > 0.25 else '<='} 25% threshold)")
+        if mode == "ties":
+            logging.info(f"[WanVideo LoRA Optimizer]   density={density:.2f}, sign_method={sign_method}")
+
+        # Auto-strength adjustment
+        auto_strength_info = None
+        scale_ratios = {}
+        if auto_strength == "enabled":
+            new_strengths, strength_reasoning = self._compute_auto_strengths(active_loras, lora_stats)
+
+            for i in range(len(active_loras)):
+                orig = active_loras[i]["strength"]
+                if abs(orig) > 1e-9:
+                    scale_ratios[i] = new_strengths[i] / orig
+                else:
+                    scale_ratios[i] = 1.0
+
+            for i, stat in enumerate(lora_stats):
+                stat["original_strength"] = stat["strength"]
+                stat["strength"] = new_strengths[i]
+
+            auto_strength_info = {
+                "reasoning": strength_reasoning,
+                "original_strengths": [item["strength"] for item in active_loras],
+                "new_strengths": new_strengths,
+                "names": [item["name"] for item in active_loras],
+            }
+
+            logging.info(f"[WanVideo LoRA Optimizer] Auto-strength: {strength_reasoning[0]}")
+            for i in range(len(active_loras)):
+                logging.info(f"[WanVideo LoRA Optimizer]   {active_loras[i]['name']}: "
+                             f"{active_loras[i]['strength']} -> {new_strengths[i]:.4f}")
+
+        # Free GPU cache between passes if requested
+        if free_vram_between_passes == "enabled" and use_gpu:
+            torch.cuda.empty_cache()
+
+        # =================================================================
+        # Pass 2 — Merge
+        # =================================================================
+        logging.info(f"[WanVideo LoRA Optimizer] Pass 2: Merging {len(all_key_targets)} keys..."
+                     f" ({'sequential' if use_gpu else 'threaded'})")
+        t_pass2 = time.time()
+        model_patches = {}
+        processed_keys = 0
+
+        def _merge_one_prefix(lora_prefix, target_key):
+            """Recompute diffs for one prefix, merge, return patch or None."""
+            offset = None
+            if isinstance(target_key, tuple):
+                actual_key = target_key[0]
+                if len(target_key) > 1:
+                    offset = target_key[1]
+            else:
+                actual_key = target_key
+
+            try:
+                target_weight = comfy.utils.get_attr(model.model, actual_key)
+                target_shape = list(target_weight.shape)
+                if offset is not None:
+                    target_shape[offset[0]] = offset[2]
+                target_shape = torch.Size(target_shape)
+            except (AttributeError, RuntimeError, IndexError):
+                return None
+
+            diffs_list = []
+            for i, item in enumerate(active_loras):
+                lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
+                if lora_info is None:
+                    continue
+
+                mat_up, mat_down, alpha, mid = lora_info
+                rank = mat_down.shape[0]
+
+                if use_gpu:
+                    mat_up = mat_up.to(compute_device)
+                    mat_down = mat_down.to(compute_device)
+                    if mid is not None:
+                        mid = mid.to(compute_device)
+
+                if mid is not None:
+                    final_shape = [mat_down.shape[1], mat_down.shape[0],
+                                   mid.shape[2], mid.shape[3]]
+                    mat_down = (
+                        torch.mm(
+                            mat_down.transpose(0, 1).flatten(start_dim=1).float(),
+                            mid.transpose(0, 1).flatten(start_dim=1).float(),
+                        )
+                        .reshape(final_shape)
+                        .transpose(0, 1)
+                    )
+
+                diff = torch.mm(
+                    mat_up.flatten(start_dim=1).float(),
+                    mat_down.flatten(start_dim=1).float()
+                )
+                try:
+                    diff = diff.reshape(target_shape)
+                except RuntimeError:
+                    continue
+
+                diff = diff * (alpha / rank)
+
+                eff_strength = item["strength"]
+                if scale_ratios:
+                    eff_strength *= scale_ratios.get(i, 1.0)
+
+                diffs_list.append((diff, eff_strength))
+
+            if len(diffs_list) == 0:
+                return None
+
+            merged_diff = self._merge_diffs(
+                diffs_list, mode,
+                density=density, majority_sign_method=sign_method,
+                compute_device=compute_device
+            )
+            if merged_diff is None:
+                return None
+            return (target_key, merged_diff)
+
+        def _collect_merge_result(result):
+            nonlocal processed_keys
+            if result is None:
+                return
+            target_key, merged_diff = result
+            model_patches[target_key] = ("diff", (merged_diff,))
+            processed_keys += 1
+
+        if use_gpu:
+            for lora_prefix, target_key in all_key_targets.items():
+                _collect_merge_result(_merge_one_prefix(lora_prefix, target_key))
+        else:
+            max_workers = min(4, max(1, len(all_key_targets)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_merge_one_prefix, lora_prefix, target_key): lora_prefix
+                    for lora_prefix, target_key in all_key_targets.items()
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    _collect_merge_result(future.result())
+
+        logging.info(f"[WanVideo LoRA Optimizer]   Model patches: {len(model_patches)} ({time.time() - t_pass2:.1f}s)")
+
+        # Apply patches using Wan-specific add_patches (handles _orig_mod)
+        new_model = model
+        if len(model_patches) > 0:
+            new_model = model.clone()
+            _wan_add_patches(new_model, model_patches, output_strength)
+
+        merge_summary = {
+            "keys_processed": processed_keys,
+            "model_patches": len(model_patches),
+            "skipped_keys": skipped_keys,
+            "output_strength": output_strength,
+        }
+
+        report = self._build_wan_report(
+            lora_stats, pairwise_conflicts, collection_stats,
+            mode, density, sign_method, reasoning, merge_summary,
+            auto_strength_info=auto_strength_info
+        )
+
+        # Save report to disk
+        cache_key = self._compute_cache_key(wan_lora_stack, output_strength, auto_strength)
+        lora_combo = [[item["name"], item["strength"]] for item in active_loras]
+        selected_params = {"mode": mode, "density": density, "sign_method": sign_method}
+        report_path = self._save_report_to_disk(cache_key, lora_combo, auto_strength, report, selected_params)
+        if report_path:
+            logging.info(f"[WanVideo LoRA Optimizer] Report saved to: {report_path}")
+
+        logging.info(f"[WanVideo LoRA Optimizer] Done! {processed_keys} keys processed ({time.time() - t_start:.1f}s total)")
+
+        return (new_model, report)
+
+
 # Node registration
 NODE_CLASS_MAPPINGS = {
     "LoRAStack": LoRAStack,
     "LoRAOptimizer": LoRAOptimizer,
+    "WanVideoLoRAOptimizer": WanVideoLoRAOptimizer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAStack": "LoRA Stack",
     "LoRAOptimizer": "LoRA Optimizer",
+    "WanVideoLoRAOptimizer": "WanVideo LoRA Optimizer",
 }
