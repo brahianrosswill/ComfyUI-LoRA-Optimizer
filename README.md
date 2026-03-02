@@ -226,6 +226,7 @@ Restart ComfyUI. Both nodes appear under the `loaders/lora` category.
 
 - Originally based on [ComfyUI-ZImage-LoRA-Merger](https://github.com/DanrisiUA/ComfyUI-ZImage-LoRA-Merger) by DanrisiUA
 - Per-prefix adaptive approach inspired by [comfyUI-Realtime-Lora](https://github.com/shootthesound/comfyUI-Realtime-Lora) by shootthesound (per-block LoRA analysis)
+- Thanks to Scruffy and Ramonguthrie for suggesting the per-block analysis approach
 - TIES-Merging: [Yadav et al., NeurIPS 2023](https://arxiv.org/abs/2306.01708)
 
 ## License
