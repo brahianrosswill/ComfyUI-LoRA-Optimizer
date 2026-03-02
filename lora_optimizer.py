@@ -1739,6 +1739,7 @@ class WanVideoLoRAOptimizer(_LoRAMergeBase):
 
     def __init__(self):
         self.loaded_loras = {}
+        self._merge_cache = {}  # single-entry: {cache_key: (model_patches, report)}
 
     def _normalize_wan_stack(self, wan_lora_stack):
         """
@@ -2101,6 +2102,18 @@ class WanVideoLoRAOptimizer(_LoRAMergeBase):
             )
             return (new_model, report)
 
+        # Check instance-level patch cache (survives ComfyUI re-execution
+        # triggered by downstream seed changes or similar non-LoRA changes)
+        cache_key = self._compute_cache_key(wan_lora_stack, output_strength, auto_strength)
+        if cache_key in self._merge_cache:
+            model_patches, report = self._merge_cache[cache_key]
+            new_model = model
+            if len(model_patches) > 0:
+                new_model = model.clone()
+                _wan_add_patches(new_model, model_patches, output_strength)
+            logging.info(f"[WanVideo LoRA Optimizer] Using cached merge result ({len(model_patches)} model patches)")
+            return (new_model, report)
+
         logging.info(f"[WanVideo LoRA Optimizer] Starting analysis of {len(active_loras)} LoRAs")
         t_start = time.time()
 
@@ -2415,8 +2428,10 @@ class WanVideoLoRAOptimizer(_LoRAMergeBase):
             auto_strength_info=auto_strength_info
         )
 
+        # Cache patches for re-use (single entry to limit memory)
+        self._merge_cache = {cache_key: (model_patches, report)}
+
         # Save report to disk
-        cache_key = self._compute_cache_key(wan_lora_stack, output_strength, auto_strength)
         lora_combo = [[item["name"], item["strength"]] for item in active_loras]
         selected_params = {"mode": mode, "density": density, "sign_method": sign_method}
         report_path = self._save_report_to_disk(cache_key, lora_combo, auto_strength, report, selected_params)
