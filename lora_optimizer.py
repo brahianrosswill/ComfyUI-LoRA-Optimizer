@@ -1135,6 +1135,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         pair_accum = {(i, j): [0, 0] for i, j in pairs}  # [overlap, conflict]
         all_magnitude_samples = []    # list of small CPU tensors
         prefix_count = 0              # number of prefixes with valid diffs
+        prefix_stats = {}             # prefix -> {conflict_ratio, n_loras, magnitude_samples, magnitude_ratio}
 
         def _collect_analysis_result(result):
             nonlocal skipped_keys, prefix_count
@@ -1153,6 +1154,30 @@ class LoRAOptimizer(_LoRAMergeBase):
                 pair_accum[(i, j)][0] += ov
                 pair_accum[(i, j)][1] += conf
             all_magnitude_samples.extend(mag_samples)
+
+            # Store per-prefix stats for per_prefix optimization mode
+            if len(partial_stats) > 0:
+                # Number of LoRAs contributing to this prefix
+                n_contributing = len(partial_stats)
+
+                # Per-prefix conflict ratio
+                pf_overlap = sum(ov for ov, _ in pair_conflicts.values())
+                pf_conflict = sum(conf for _, conf in pair_conflicts.values())
+                pf_conflict_ratio = pf_conflict / pf_overlap if pf_overlap > 0 else 0.0
+
+                # Per-prefix magnitude ratio (max/min L2 among contributing LoRAs)
+                pf_l2s = [l2 for _, _, l2 in partial_stats if l2 > 0]
+                if len(pf_l2s) >= 2:
+                    pf_mag_ratio = max(pf_l2s) / min(pf_l2s)
+                else:
+                    pf_mag_ratio = 1.0
+
+                prefix_stats[prefix] = {
+                    "n_loras": n_contributing,
+                    "conflict_ratio": pf_conflict_ratio,
+                    "magnitude_ratio": pf_mag_ratio,
+                    "magnitude_samples": list(mag_samples),  # copy, not reference
+                }
 
         if use_gpu:
             for lora_prefix in all_lora_prefixes:
