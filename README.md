@@ -123,6 +123,12 @@ Supports **TIES-Merging** (Trim, Elect Sign, Disjoint Merge) from NeurIPS 2023 f
 
 The auto-optimizer. Takes a `LORA_STACK`, analyzes the LoRAs, and automatically selects the best merge mode and parameters. Outputs the merged result plus a detailed analysis report explaining what it chose and why.
 
+Uses a **two-pass streaming architecture** for low memory usage:
+- **Pass 1 (Analysis):** Computes weight diffs per prefix, samples conflict and magnitude statistics, then discards the diffs. Only lightweight scalars are kept.
+- **Pass 2 (Merge):** Recomputes diffs per prefix and merges with the auto-selected strategy. Each prefix is freed after merging.
+
+Peak memory is ~one prefix at a time (~260MB) regardless of LoRA count or model size. GPU-accelerated on both passes.
+
 <p align="center">
   <img src="assets/optimizer-pipeline.svg" alt="Optimizer Pipeline" width="100%">
 </p>
@@ -143,7 +149,7 @@ The auto-optimizer. Takes a `LORA_STACK`, analyzes the LoRAs, and automatically 
 | Magnitude ratio <= 2x | `frequency` sign method (equal votes) |
 | TIES mode selected | Auto-density estimated from magnitude distribution |
 
-**Inputs:** `MODEL`, `CLIP`, `LORA_STACK`, output strength, clip strength multiplier, auto strength.
+**Inputs:** `MODEL`, `CLIP`, `LORA_STACK`, output strength, clip strength multiplier, auto strength, free VRAM between passes.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (analysis report)
 
@@ -221,7 +227,7 @@ Z-IMAGE LORA OPTIMIZER - ANALYSIS REPORT
 
 Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI.
 
-> **Memory note:** The optimizer expands all LoRA diffs into full-rank tensors for analysis. For SDXL with 4 LoRAs this can exceed 10GB. For large stacks or SDXL models, consider using True Merge with manually chosen parameters.
+> **Limitation:** The optimizer only analyzes LoRAs in its own stack. It cannot see LoRA patches applied by upstream nodes (Load LoRA, etc.) — those stack additively on top of the optimizer's output. Fully baked merges (safetensors checkpoints) are indistinguishable from base weights and cannot be detected.
 
 ## Comparison
 
@@ -231,7 +237,7 @@ Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI
 | **Stack Apply** | N/A (sequential apply) | No | No | Low | Fast |
 | **Merge to Single** | Same rank only | No | No | Medium | Medium |
 | **True Merge** | Yes | Yes (TIES) | No | High | Slow |
-| **Optimizer** | Yes | Yes (auto) | Yes | High | Slow |
+| **Optimizer** | Yes | Yes (auto) | Yes | Low (streaming) | Medium |
 
 ## Quick Start
 
