@@ -1332,8 +1332,9 @@ class LoRAOptimizer(_LoRAMergeBase):
         # =====================================================================
         # Pass 2 — Merge (recompute diffs per-prefix, merge, discard)
         # =====================================================================
-        logging.info(f"[LoRA Optimizer] Pass 2: Merging {len(all_key_targets)} keys..."
-                     f" ({'sequential' if use_gpu else 'threaded'})")
+        logging.info(f"[LoRA Optimizer] Pass 2: Merging {len(all_key_targets)} keys "
+                     f"({optimization_mode} strategy, "
+                     f"{'sequential' if use_gpu else 'threaded'})...")
         t_pass2 = time.time()
         model_patches = {}
         clip_patches = {}
@@ -1469,6 +1470,11 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         logging.info(f"[LoRA Optimizer]   Model patches: {len(model_patches)}, "
                      f"CLIP patches: {len(clip_patches)} ({time.time() - t_pass2:.1f}s)")
+        if optimization_mode == "per_prefix":
+            logging.info(f"[LoRA Optimizer]   Per-prefix strategies: "
+                         f"{strategy_counts.get('weighted_sum', 0)} weighted_sum, "
+                         f"{strategy_counts.get('weighted_average', 0)} weighted_average, "
+                         f"{strategy_counts.get('ties', 0)} ties")
 
         # Apply patches
         new_model = model
