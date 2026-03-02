@@ -1029,6 +1029,10 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                     "default": "disabled",
                     "tooltip": "Auto-reduce LoRA strengths to prevent overexposure from stacking"
                 }),
+                "free_vram_between_passes": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Release GPU cache between analysis and merge passes. Lowers peak VRAM at negligible speed cost."
+                }),
             }
         }
 
@@ -1600,7 +1604,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
         lines.append("=" * 50)
         return "\n".join(lines)
 
-    def optimize_merge(self, model, clip, lora_stack, output_strength, clip_strength_multiplier=1.0, auto_strength="disabled"):
+    def optimize_merge(self, model, clip, lora_stack, output_strength, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled"):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
@@ -1842,6 +1846,10 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
             for i in range(len(active_loras)):
                 logging.info(f"[Z-Image Optimizer]   {active_loras[i]['name']}: "
                              f"{active_loras[i]['strength']} -> {new_strengths[i]:.4f}")
+
+        # Free GPU cache between passes if requested
+        if free_vram_between_passes == "enabled" and use_gpu:
+            torch.cuda.empty_cache()
 
         # =====================================================================
         # Pass 2 — Merge (recompute diffs per-prefix, merge, discard)
