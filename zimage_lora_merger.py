@@ -935,12 +935,21 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
     Outputs the merged model/clip plus an analysis report explaining
     what was chosen and why.
 
-    Warning: Expands all LoRA diffs into full-rank tensors and holds them
-    in memory for cross-key analysis. Memory usage scales with
-    (n_loras * n_keys * weight_size). For SDXL (~800 keys) with 4 LoRAs
-    this can exceed 10GB. Pairwise conflict analysis is O(n^2) in the
-    number of LoRAs. For large stacks (4+) or SDXL models, consider using
-    ZImageLoRATrueMerge with manually chosen parameters instead.
+    Two-pass streaming architecture:
+      Pass 1 — Analysis: computes diffs per weight prefix, samples conflict
+        and magnitude statistics, then discards diffs immediately. Only
+        lightweight scalars and small sample tensors are kept in memory.
+      Pass 2 — Merge: recomputes diffs per prefix and merges with the
+        auto-selected strategy. Each prefix's diffs are freed after merging.
+    Peak memory is ~one prefix's diffs at a time (~260MB) regardless of
+    the total number of LoRAs or weight prefixes.
+
+    Limitation: the optimizer only analyzes LoRAs in its own stack. It has
+    no visibility into LoRA patches already applied to the model by upstream
+    nodes (via Load LoRA, etc.). Those patches stack additively on top of
+    the optimizer's output, which could cause overexposure. Fully baked
+    merges (safetensors checkpoints) are indistinguishable from base weights
+    and cannot be detected at all.
     """
 
     def __init__(self):
