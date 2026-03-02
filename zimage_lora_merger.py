@@ -718,7 +718,10 @@ class ZImageLoRATrueMerge:
 
         if len(diffs_with_weights) == 1:
             diff, weight = diffs_with_weights[0]
-            return diff * weight
+            result = diff * weight
+            if compute_device is not None and compute_device.type != "cpu" and result.is_cuda:
+                return result.cpu()
+            return result
 
         # All diffs should have the same shape (verified during computation)
         ref_diff = diffs_with_weights[0][0]
@@ -1331,11 +1334,15 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
 
         # --- Magnitude sampling (sample on device, copy only small result) ---
         magnitude_samples = []
+        seed = hash(lora_prefix) & 0xFFFFFFFF
+        sample_dev = diffs[lora_indices[0]].device
+        mag_g = torch.Generator(device=sample_dev).manual_seed(seed)
         for i in lora_indices:
             flat = diffs[i].flatten().abs().float() * abs(eff_strengths[i])
             n = flat.numel()
             if n > n_magnitude_samples:
-                indices = torch.randint(0, n, (n_magnitude_samples,), device=flat.device)
+                indices = torch.randint(0, n, (n_magnitude_samples,),
+                                        device=sample_dev, generator=mag_g)
                 flat = flat[indices]
             magnitude_samples.append(flat.cpu())
 
@@ -1868,6 +1875,7 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
             except (AttributeError, RuntimeError, IndexError):
                 return None
 
+            # Compute diffs on GPU (inline to avoid GPU→CPU→GPU bounce)
             diffs_list = []
             for i, item in enumerate(active_loras):
                 lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
@@ -1875,18 +1883,45 @@ class ZImageLoRAOptimizer(ZImageLoRATrueMerge):
                     continue
 
                 mat_up, mat_down, alpha, mid = lora_info
-                diff = self._compute_lora_diff(mat_up, mat_down, alpha, mid,
-                                               target_shape, device=compute_device)
-                if diff is None:
+                rank = mat_down.shape[0]
+
+                if use_gpu:
+                    mat_up = mat_up.to(compute_device)
+                    mat_down = mat_down.to(compute_device)
+                    if mid is not None:
+                        mid = mid.to(compute_device)
+
+                if mid is not None:
+                    final_shape = [mat_down.shape[1], mat_down.shape[0],
+                                   mid.shape[2], mid.shape[3]]
+                    mat_down = (
+                        torch.mm(
+                            mat_down.transpose(0, 1).flatten(start_dim=1).float(),
+                            mid.transpose(0, 1).flatten(start_dim=1).float(),
+                        )
+                        .reshape(final_shape)
+                        .transpose(0, 1)
+                    )
+
+                diff = torch.mm(
+                    mat_up.flatten(start_dim=1).float(),
+                    mat_down.flatten(start_dim=1).float()
+                )
+                try:
+                    diff = diff.reshape(target_shape)
+                except RuntimeError:
                     continue
 
+                diff = diff * (alpha / rank)
+
                 if is_clip_key and item["clip_strength"] is not None:
+                    # Explicit clip_strength: don't apply model-derived
+                    # scale_ratios (auto-strength was computed from model L2s)
                     eff_strength = item["clip_strength"]
                 else:
                     eff_strength = item["strength"]
-
-                if scale_ratios:
-                    eff_strength *= scale_ratios.get(i, 1.0)
+                    if scale_ratios:
+                        eff_strength *= scale_ratios.get(i, 1.0)
 
                 diffs_list.append((diff, eff_strength))
 
