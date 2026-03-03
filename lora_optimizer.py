@@ -937,7 +937,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         self.loaded_loras = {}
         self._merge_cache = {}  # single-entry: {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
 
-    def _normalize_stack(self, lora_stack):
+    def _normalize_stack(self, lora_stack, normalize_keys="disabled"):
         """
         Normalize a LoRA stack into a consistent list of dicts.
 
@@ -955,10 +955,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             return []
 
         first = lora_stack[0]
+        normalized = []
 
         if isinstance(first, (tuple, list)):
             # Standard format: (lora_name, model_strength, clip_strength)
-            normalized = []
             for entry in lora_stack:
                 if not isinstance(entry, (tuple, list)) or len(entry) < 3:
                     logging.warning("[LoRA Optimizer] Skipping malformed tuple entry (expected 3 elements)")
@@ -983,11 +983,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "strength": model_str,
                     "clip_strength": clip_str,
                 })
-            return normalized
 
         elif isinstance(first, dict):
             # LoRAStack format: already loaded dicts
-            normalized = []
             for item in lora_stack:
                 if not isinstance(item, dict) or "lora" not in item or "strength" not in item or "name" not in item:
                     logging.warning("[LoRA Optimizer] Skipping malformed dict entry (expected keys: name, lora, strength)")
@@ -998,10 +996,28 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "strength": item["strength"],
                     "clip_strength": None,  # use global multiplier
                 })
-            return normalized
 
-        logging.warning("[LoRA Optimizer] Unrecognized stack format")
-        return []
+        else:
+            logging.warning("[LoRA Optimizer] Unrecognized stack format")
+            return []
+
+        # Architecture-aware key normalization
+        if normalize_keys == "enabled" and len(normalized) > 0:
+            first_sd = normalized[0]["lora"]
+            arch = self._detect_architecture(first_sd)
+            if arch != "unknown":
+                logging.info(f"[LoRA Optimizer] Architecture detected: {arch}")
+                logging.info(f"[LoRA Optimizer] Normalizing keys for {len(normalized)} LoRAs...")
+                for item in normalized:
+                    item["lora"] = self._normalize_keys(item["lora"], arch)
+                self._detected_arch = arch
+            else:
+                logging.info("[LoRA Optimizer] Architecture: unknown (no key normalization applied)")
+                self._detected_arch = None
+        else:
+            self._detected_arch = None
+
+        return normalized
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -1040,6 +1056,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "default": "gpu",
                     "tooltip": "Device for SVD compression. GPU is ~10-50x faster. Use CPU if GPU memory is tight."
                 }),
+                "normalize_keys": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Auto-detect LoRA architecture and normalize keys before merging. Enable when mixing LoRAs from different trainers (e.g., Kohya + AI-Toolkit) or for Z-Image QKV fusion."
+                }),
             }
         }
 
@@ -1050,7 +1070,7 @@ class LoRAOptimizer(_LoRAMergeBase):
     DESCRIPTION = "Auto-analyzes LoRA stack and selects optimal merge strategy per weight group. Outputs merged model + analysis report."
 
     @staticmethod
-    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="non_ties", svd_device="gpu"):
+    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled"):
         """
         Build a deterministic SHA-256 hash (16 hex chars) from the stack
         configuration. Used by IS_CHANGED to let ComfyUI skip re-execution
@@ -1068,7 +1088,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     entries.append((str(item.get("name", "")), float(item.get("strength", 0))))
             entries.sort()
             h.update(json.dumps(entries).encode())
-        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}".encode())
+        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}".encode())
         return h.hexdigest()[:16]
 
     @classmethod
@@ -1076,11 +1096,11 @@ class LoRAOptimizer(_LoRAMergeBase):
                    clip_strength_multiplier=1.0, auto_strength="disabled",
                    free_vram_between_passes="disabled", optimization_mode="per_prefix",
                    cache_patches="enabled", compress_patches="non_ties",
-                   svd_device="gpu"):
+                   svd_device="gpu", normalize_keys="disabled"):
         return cls._compute_cache_key(lora_stack, output_strength,
                                       clip_strength_multiplier, auto_strength,
                                       optimization_mode, compress_patches,
-                                      svd_device)
+                                      svd_device, normalize_keys)
 
     def _save_report_to_disk(self, cache_key, lora_combo, auto_strength, report, selected_params):
         """
@@ -1746,7 +1766,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         lines.append("=" * 50)
         return "\n".join(lines)
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="non_ties", svd_device="gpu"):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled"):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
@@ -1758,7 +1778,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         if not lora_stack or len(lora_stack) == 0:
             return (model, clip, "No LoRAs in stack.")
 
-        normalized_stack = self._normalize_stack(lora_stack)
+        normalized_stack = self._normalize_stack(lora_stack, normalize_keys=normalize_keys)
         active_loras = [item for item in normalized_stack if item["strength"] != 0]
 
         if len(active_loras) == 0:
@@ -1797,7 +1817,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         cache_key = self._compute_cache_key(lora_stack, output_strength,
                                             clip_strength_multiplier, auto_strength,
                                             optimization_mode, compress_patches,
-                                            svd_device)
+                                            svd_device, normalize_keys)
         if cache_patches == "enabled" and cache_key in self._merge_cache:
             model_patches, clip_patches, report, clip_strength_out = self._merge_cache[cache_key]
             new_model = model
