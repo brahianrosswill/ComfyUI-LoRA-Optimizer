@@ -492,8 +492,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "default": "enabled",
                     "tooltip": "Cache merged patches in RAM for faster re-execution. Disable to free RAM after merge (recommended for video models)."
                 }),
-                "compress_patches": (["disabled", "non_ties", "all"], {
-                    "default": "disabled",
+                "compress_patches": (["non_ties", "all", "disabled"], {
+                    "default": "non_ties",
                     "tooltip": "Re-compress full-rank merged patches to low-rank via SVD. 'non_ties' compresses only weighted_sum/weighted_average prefixes (lossless, TIES stays full-rank). 'all' compresses everything (lossy on TIES prefixes). Recommended for video models."
                 }),
             }
@@ -506,7 +506,7 @@ class LoRAOptimizer(_LoRAMergeBase):
     DESCRIPTION = "Auto-analyzes LoRA stack and selects optimal merge strategy per weight group. Outputs merged model + analysis report."
 
     @staticmethod
-    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="disabled"):
+    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="non_ties"):
         """
         Build a deterministic SHA-256 hash (16 hex chars) from the stack
         configuration. Used by IS_CHANGED to let ComfyUI skip re-execution
@@ -531,7 +531,7 @@ class LoRAOptimizer(_LoRAMergeBase):
     def IS_CHANGED(cls, model, lora_stack, output_strength, clip=None,
                    clip_strength_multiplier=1.0, auto_strength="disabled",
                    free_vram_between_passes="disabled", optimization_mode="per_prefix",
-                   cache_patches="enabled", compress_patches="disabled"):
+                   cache_patches="enabled", compress_patches="non_ties"):
         return cls._compute_cache_key(lora_stack, output_strength,
                                       clip_strength_multiplier, auto_strength,
                                       optimization_mode, compress_patches)
@@ -1190,7 +1190,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         lines.append("=" * 50)
         return "\n".join(lines)
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="disabled"):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="non_ties"):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
