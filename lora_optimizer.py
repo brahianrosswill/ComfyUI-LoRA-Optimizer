@@ -145,6 +145,121 @@ class _LoRAMergeBase:
 
         return 'unknown'
 
+    @staticmethod
+    def _normalize_keys_zimage(lora_sd):
+        """
+        Normalize Z-Image Turbo (Lumina2) LoRA keys to a canonical format.
+
+        Handles:
+        1. Split fused QKV (attention.qkv) into separate to_q/to_k/to_v
+           for per-component conflict analysis during merge.
+        2. Remap attention.out -> attention.to_out.0 (diffusers convention).
+        3. Standardize Musubi Tuner format (lora_unet_layers_N_...).
+        4. Ensure diffusion_model.layers.N prefix.
+
+        Returns new dict with normalized keys. Original dict is not modified.
+        """
+        normalized = {}
+        processed = set()
+
+        # First pass: standardize prefixes (Musubi Tuner -> canonical)
+        prefix_fixed = {}
+        for k, v in lora_sd.items():
+            new_k = k
+            # Musubi Tuner: lora_unet_layers_N_attention_... -> diffusion_model.layers.N.attention...
+            if new_k.startswith('lora_unet_'):
+                new_k = new_k.replace('lora_unet_', 'diffusion_model.')
+                # Convert underscore-separated to dot-separated for known patterns
+                new_k = re.sub(r'layers_(\d+)_', r'layers.\1.', new_k)
+                new_k = re.sub(r'attention_', 'attention.', new_k)
+                new_k = re.sub(r'feed_forward_', 'feed_forward.', new_k)
+            # Ensure diffusion_model. prefix
+            if new_k.startswith('layers.'):
+                new_k = 'diffusion_model.' + new_k
+            prefix_fixed[new_k] = v
+
+        # Second pass: split fused QKV and remap output projection
+        # Find all layer indices
+        layer_pattern = re.compile(r'((?:diffusion_model\.)?layers\.(\d+)\.attention)\.')
+        layers_seen = set()
+        for k in prefix_fixed:
+            m = layer_pattern.search(k)
+            if m:
+                layers_seen.add((m.group(1), int(m.group(2))))
+
+        for base, layer_idx in layers_seen:
+            # --- Split fused QKV ---
+            for lora_fmt in [('.lora_A.weight', '.lora_B.weight'),
+                             ('.lora_up.weight', '.lora_down.weight'),
+                             ('.lora_B.weight', '.lora_A.weight'),
+                             ('.lora.up.weight', '.lora.down.weight')]:
+                # Try each LoRA format for the fused QKV key
+                down_suffix, up_suffix = lora_fmt[0], lora_fmt[1]
+                qkv_down_key = f"{base}.qkv{down_suffix}"
+                qkv_up_key = f"{base}.qkv{up_suffix}"
+
+                if qkv_down_key in prefix_fixed and qkv_up_key in prefix_fixed:
+                    qkv_down = prefix_fixed[qkv_down_key]
+                    qkv_up = prefix_fixed[qkv_up_key]
+
+                    # Split down matrix (rank*3 -> 3 x rank)
+                    rank_down = qkv_down.shape[0]
+                    if rank_down % 3 == 0:
+                        q_down, k_down, v_down = torch.chunk(qkv_down, 3, dim=0)
+                    else:
+                        break
+
+                    # Split up matrix (out_features*3 -> 3 x out_features)
+                    out_dim = qkv_up.shape[0]
+                    if out_dim % 3 == 0:
+                        q_up, k_up, v_up = torch.chunk(qkv_up, 3, dim=0)
+                    else:
+                        break
+
+                    for comp, comp_down, comp_up in [('to_q', q_down, q_up),
+                                                      ('to_k', k_down, k_up),
+                                                      ('to_v', v_down, v_up)]:
+                        normalized[f"{base}.{comp}{down_suffix}"] = comp_down
+                        normalized[f"{base}.{comp}{up_suffix}"] = comp_up
+
+                    # Copy alpha (same for all three components)
+                    alpha_key = f"{base}.qkv.alpha"
+                    if alpha_key in prefix_fixed:
+                        for comp in ('to_q', 'to_k', 'to_v'):
+                            normalized[f"{base}.{comp}.alpha"] = prefix_fixed[alpha_key]
+                        processed.add(alpha_key)
+
+                    processed.add(qkv_down_key)
+                    processed.add(qkv_up_key)
+                    break  # Found QKV format, don't try others
+
+            # --- Remap output projection: attention.out -> attention.to_out.0 ---
+            for lora_fmt in [('.lora_A.weight', '.lora_B.weight'),
+                             ('.lora_up.weight', '.lora_down.weight'),
+                             ('.lora_B.weight', '.lora_A.weight'),
+                             ('.lora.up.weight', '.lora.down.weight')]:
+                sfx_a, sfx_b = lora_fmt
+                out_a = f"{base}.out{sfx_a}"
+                out_b = f"{base}.out{sfx_b}"
+                if out_a in prefix_fixed and out_b in prefix_fixed:
+                    normalized[f"{base}.to_out.0{sfx_a}"] = prefix_fixed[out_a]
+                    normalized[f"{base}.to_out.0{sfx_b}"] = prefix_fixed[out_b]
+                    processed.add(out_a)
+                    processed.add(out_b)
+
+                    out_alpha = f"{base}.out.alpha"
+                    if out_alpha in prefix_fixed:
+                        normalized[f"{base}.to_out.0.alpha"] = prefix_fixed[out_alpha]
+                        processed.add(out_alpha)
+                    break
+
+        # Pass through all unprocessed keys
+        for k, v in prefix_fixed.items():
+            if k not in processed:
+                normalized[k] = v
+
+        return normalized
+
     def _load_lora(self, lora_name):
         """Loads LoRA file with caching"""
         if lora_name == "None" or lora_name is None:
