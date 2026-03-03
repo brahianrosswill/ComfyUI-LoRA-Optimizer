@@ -460,6 +460,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "default": "per_prefix",
                     "tooltip": "per_prefix: each weight group picks its own merge strategy based on local conflict. global: single strategy for all (original behavior)."
                 }),
+                "cache_patches": (["enabled", "disabled"], {
+                    "default": "enabled",
+                    "tooltip": "Cache merged patches in RAM for faster re-execution. Disable to free RAM after merge (recommended for video models)."
+                }),
             }
         }
 
@@ -494,7 +498,8 @@ class LoRAOptimizer(_LoRAMergeBase):
     @classmethod
     def IS_CHANGED(cls, model, lora_stack, output_strength, clip=None,
                    clip_strength_multiplier=1.0, auto_strength="disabled",
-                   free_vram_between_passes="disabled", optimization_mode="per_prefix"):
+                   free_vram_between_passes="disabled", optimization_mode="per_prefix",
+                   cache_patches="enabled"):
         return cls._compute_cache_key(lora_stack, output_strength,
                                       clip_strength_multiplier, auto_strength,
                                       optimization_mode)
@@ -1149,7 +1154,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         lines.append("=" * 50)
         return "\n".join(lines)
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix"):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled"):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
@@ -1200,7 +1205,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         cache_key = self._compute_cache_key(lora_stack, output_strength,
                                             clip_strength_multiplier, auto_strength,
                                             optimization_mode)
-        if cache_key in self._merge_cache:
+        if cache_patches == "enabled" and cache_key in self._merge_cache:
             model_patches, clip_patches, report, clip_strength_out = self._merge_cache[cache_key]
             new_model = model
             new_clip = clip
@@ -1640,7 +1645,11 @@ class LoRAOptimizer(_LoRAMergeBase):
         )
 
         # Cache patches for re-use (single entry to limit memory)
-        self._merge_cache = {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
+        if cache_patches == "enabled":
+            self._merge_cache = {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
+        else:
+            self._merge_cache = {}
+            logging.info("[LoRA Optimizer] Patch cache disabled — RAM freed after merge")
 
         # Save report to disk for later reference
         lora_combo = [[item["name"], item["strength"]] for item in active_loras]
