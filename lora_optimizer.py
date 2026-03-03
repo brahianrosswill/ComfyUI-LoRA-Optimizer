@@ -338,6 +338,60 @@ class _LoRAMergeBase:
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
+        elif mode == "slerp":
+            # Spherical Linear Interpolation — magnitude-preserving blend for 2 diffs.
+            # result = sin((1-t)*θ)/sin(θ) * v1 + sin(t*θ)/sin(θ) * v2
+            # where θ is the angle between v1 and v2, t is derived from weights.
+            if len(diffs_with_weights) != 2:
+                # Fallback to weighted_average for != 2 diffs
+                mode = "weighted_average"
+                result = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
+                total_weight = sum(abs(w) for _, w in diffs_with_weights)
+                if total_weight == 0:
+                    return result.to(dtype).cpu() if to_cpu else result.to(dtype)
+                for idx in range(len(diffs_with_weights)):
+                    diff, weight = diffs_with_weights[idx]
+                    diffs_with_weights[idx] = None
+                    result.add_(diff.to(device=dev, dtype=torch.float32) * (weight / total_weight))
+                result = result.to(dtype)
+                return result.cpu() if to_cpu else result
+
+            d1, w1 = diffs_with_weights[0]
+            d2, w2 = diffs_with_weights[1]
+            diffs_with_weights[0] = None
+            diffs_with_weights[1] = None
+            v1 = d1.to(device=dev, dtype=torch.float32).flatten()
+            del d1
+            v2 = d2.to(device=dev, dtype=torch.float32).flatten()
+            del d2
+
+            # t = interpolation factor from weights (0 = all v1, 1 = all v2)
+            total_w = abs(w1) + abs(w2)
+            t = abs(w2) / total_w if total_w > 0 else 0.5
+
+            # Compute angle between vectors
+            dot = torch.dot(v1, v2)
+            norm1 = v1.norm()
+            norm2 = v2.norm()
+            denom = norm1 * norm2
+            if denom > 0:
+                cos_theta = (dot / denom).clamp(-1.0, 1.0)
+            else:
+                cos_theta = torch.tensor(1.0, device=dev)
+            theta = torch.acos(cos_theta)
+
+            # If vectors are nearly parallel, fall back to linear interpolation
+            if theta.item() < 1e-6:
+                result = ((1.0 - t) * v1 + t * v2).reshape(ref_diff.shape)
+            else:
+                sin_theta = torch.sin(theta)
+                a = torch.sin((1.0 - t) * theta) / sin_theta
+                b = torch.sin(t * theta) / sin_theta
+                result = (a * v1 + b * v2).reshape(ref_diff.shape)
+            del v1, v2
+            result = result.to(dtype)
+            return result.cpu() if to_cpu else result
+
         elif mode == "ties":
             # TIES-Merging: Trim, Elect Sign, Disjoint Merge
             # Pre-multiply diffs by sign(weight) so negative strengths vote correctly,
@@ -1114,6 +1168,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                 if strategy_counts.get("weighted_sum", 0) > 0:
                     n = strategy_counts["weighted_sum"]
                     lines.append(f"  weighted_sum (single LoRA):      {n:>4} prefixes ({n/total_pf:.0%})")
+                if strategy_counts.get("slerp", 0) > 0:
+                    n = strategy_counts["slerp"]
+                    lines.append(f"  slerp (2 LoRAs, low conflict):   {n:>4} prefixes ({n/total_pf:.0%})")
                 if strategy_counts.get("weighted_average", 0) > 0:
                     n = strategy_counts["weighted_average"]
                     lines.append(f"  weighted_average (low conflict):  {n:>4} prefixes ({n/total_pf:.0%})")
@@ -1152,8 +1209,8 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             lines.append("")
             lines.append("--- Block Strategy Map ---")
-            symbols = {"weighted_sum": "====", "weighted_average": "----", "ties": "####"}
-            labels = {"weighted_sum": "sum", "weighted_average": "avg", "ties": "TIES"}
+            symbols = {"weighted_sum": "====", "slerp": "~~~~", "weighted_average": "----", "ties": "####"}
+            labels = {"weighted_sum": "sum", "slerp": "slrp", "weighted_average": "avg", "ties": "TIES"}
             # Find max block name length for alignment
             max_name = max(len(b[0]) for b in block_summary) if block_summary else 10
             for block_name, dominant, avg_conflict, n_loras_max, n_prefixes in block_summary:
@@ -1166,8 +1223,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 else:
                     detail = f"{avg_conflict:.0%} conflict"
                 count_str = f"({n_prefixes}x)" if n_prefixes > 1 else ""
-                lines.append(f"  {block_name:<{max_name}}  {sym}  {lbl:<4} {detail} {count_str}")
-            lines.append(f"  Legend: ==== sum (single LoRA)  ---- avg (compatible)  #### TIES (conflict)")
+                lines.append(f"  {block_name:<{max_name}}  {sym}  {lbl:<5} {detail} {count_str}")
+            lines.append(f"  Legend: ==== sum  ~~~~ slerp  ---- avg  #### TIES")
 
         # Reasoning
         lines.append("")
@@ -1498,7 +1555,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         clip_patches = {}
         processed_keys = 0
         compressed_count = 0
-        strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "ties": 0}
+        strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "slerp": 0, "ties": 0}
         prefix_decisions = []  # list of (prefix, mode, conflict_ratio, n_loras) for block map
 
         def _merge_one_prefix(lora_prefix, target_key, is_clip_key):
@@ -1546,6 +1603,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                         pf["conflict_ratio"], pf["magnitude_ratio"],
                         magnitude_samples=pf.get("magnitude_samples")
                     )
+                    # Upgrade weighted_average → slerp for exactly 2 LoRAs
+                    # SLERP preserves magnitude better (no cancellation from opposing vectors)
+                    if pf_mode == "weighted_average" and pf["n_loras"] == 2:
+                        pf_mode = "slerp"
 
             # LOW-RANK PATH: single-LoRA weighted_sum — keep low-rank matrices
             # instead of expanding to full-rank diff. Saves ~128x memory per key.
@@ -1688,8 +1749,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                          f"~{lowrank_count}/{processed_keys} keys use minimal RAM")
         if optimization_mode == "per_prefix":
             logging.info(f"[LoRA Optimizer]   Per-prefix strategies: "
-                         f"{strategy_counts.get('weighted_sum', 0)} weighted_sum, "
-                         f"{strategy_counts.get('weighted_average', 0)} weighted_average, "
+                         f"{strategy_counts.get('weighted_sum', 0)} sum, "
+                         f"{strategy_counts.get('slerp', 0)} slerp, "
+                         f"{strategy_counts.get('weighted_average', 0)} avg, "
                          f"{strategy_counts.get('ties', 0)} ties")
         if compressed_count > 0:
             passthrough_count = lowrank_count - compressed_count
