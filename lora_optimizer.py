@@ -678,18 +678,31 @@ class _LoRAMergeBase:
                     fused_diff = torch.cat([q_diff, k_diff, v_diff], dim=0)
                     fused[fused_key] = ("diff", (fused_diff,))
                 elif isinstance(q_patch, LoRAAdapter):
-                    # Low-rank patch: up/B is split [out, rank] per component,
-                    # down/A is shared [rank, in] (same for all three).
                     q_data = q_patch.lora_data
                     k_data = k_patch.lora_data
                     v_data = v_patch.lora_data
                     # lora_data = (mat_up, mat_down, alpha, mid, dora_scale, bias)
-                    fused_up = torch.cat([q_data[0], k_data[0], v_data[0]], dim=0)
-                    fused_down = q_data[1]  # shared — use one copy
-                    fused_alpha = q_data[2]  # alpha is the same for all components
-                    fused_mid = None  # Mid not expected for attention
-                    fused_patch = LoRAAdapter(set(), (fused_up, fused_down, fused_alpha, fused_mid, None, None))
-                    fused[fused_key] = fused_patch
+
+                    # Check if down matrices are shared (true for original LoRA,
+                    # false for independently SVD-compressed patches)
+                    if q_data[1] is k_data[1] and k_data[1] is v_data[1]:
+                        # Shared down: concatenate ups, keep one down copy
+                        fused_up = torch.cat([q_data[0], k_data[0], v_data[0]], dim=0)
+                        fused_down = q_data[1]
+                        fused_alpha = q_data[2]
+                        fused_patch = LoRAAdapter(set(), (fused_up, fused_down, fused_alpha, None, None, None))
+                        fused[fused_key] = fused_patch
+                    else:
+                        # Independent decompositions (e.g., SVD-compressed) —
+                        # expand to full-rank diffs, then fuse as a single diff patch
+                        parts = []
+                        for comp_data in [q_data, k_data, v_data]:
+                            alpha = comp_data[2] if comp_data[2] is not None else float(comp_data[1].shape[0])
+                            rank = comp_data[1].shape[0]
+                            diff = torch.mm(comp_data[0].float(), comp_data[1].float()) * (alpha / rank)
+                            parts.append(diff)
+                        fused_diff = torch.cat(parts, dim=0)
+                        fused[fused_key] = ("diff", (fused_diff,))
                 else:
                     # Unknown patch format — pass through unfused
                     for comp_key, comp_patch in [(q_key, q_patch), (k_key, k_patch), (v_key, v_patch)]:
