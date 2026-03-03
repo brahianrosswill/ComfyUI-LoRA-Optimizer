@@ -209,6 +209,7 @@ class _LoRAMergeBase:
                 'transformer_blocks' in k and ('attn1' in k or 'attn2' in k)
                 and 'input_blocks' not in k and 'output_blocks' not in k
                 and 'down_blocks' not in k and 'up_blocks' not in k
+                and 'middle_block' not in k and 'mid_block' not in k
                 for k in keys):
             return 'ltx'
 
@@ -1439,7 +1440,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                 }),
                 "sparsification_density": ("FLOAT", {
                     "default": 0.7, "min": 0.01, "max": 1.0, "step": 0.05,
-                    "tooltip": "What percentage of weights to keep (0.7 = keep 70%, drop 30%). Lower values drop more weights — reduces interference but may lose detail. Only matters when sparsification is enabled."
+                    "tooltip": "What percentage of weights to keep (0.7 = keep 70%, drop 30%). Lower values drop more weights — reduces interference but may lose detail. "
+                               "At 1.0, no weights are dropped (equivalent to disabled). "
+                               "Note: in TIES mode, sparsification replaces the trim step — setting density to 1.0 disables both sparsification AND trimming."
                 }),
             }
         }
@@ -1512,9 +1515,9 @@ class LoRAOptimizer(_LoRAMergeBase):
 
     def _sample_conflict(self, diff_a, diff_b, device=None):
         """
-        Compute sign conflict ratio between two diff tensors.
-        Samples up to 100k positions for large tensors.
-        Returns (n_overlap, n_conflict).
+        Compute sign conflict ratio and cosine similarity components between
+        two diff tensors. Samples up to 100k positions for large tensors.
+        Returns (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq).
         """
         # Avoid unnecessary .float() copies — diffs from _analyze_prefix are already float32
         flat_a = diff_a.flatten()
@@ -1527,7 +1530,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             flat_b = flat_b.float()
 
         if flat_a.numel() != flat_b.numel():
-            return (0, 0)
+            return (0, 0, 0.0, 0.0, 0.0)
 
         n = flat_a.numel()
         if n > 100000:
@@ -1541,10 +1544,18 @@ class LoRAOptimizer(_LoRAMergeBase):
         mask = (flat_a != 0) & (flat_b != 0)
         n_overlap = mask.sum().item()
         if n_overlap == 0:
-            return (0, 0)
+            return (0, 0, 0.0, 0.0, 0.0)
 
-        n_conflict = (flat_a[mask].sign() != flat_b[mask].sign()).sum().item()
-        return (n_overlap, n_conflict)
+        a_overlap = flat_a[mask]
+        b_overlap = flat_b[mask]
+        n_conflict = (a_overlap.sign() != b_overlap.sign()).sum().item()
+
+        # Cosine similarity components (on overlap region)
+        dot = (a_overlap * b_overlap).sum().item()
+        norm_a_sq = (a_overlap * a_overlap).sum().item()
+        norm_b_sq = (b_overlap * b_overlap).sum().item()
+
+        return (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq)
 
     def _process_prefix(self, lora_prefix, active_loras, model_keys, clip_keys,
                         model, clip, device):
@@ -1645,7 +1656,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                  target_info, skip_count) or None if prefix should be skipped.
 
         partial_stats: list of (lora_index, rank, l2_norm)
-        pair_conflicts: dict mapping (i, j) -> (overlap, conflict)
+        pair_conflicts: dict mapping (i, j) -> (overlap, conflict, dot, norm_a_sq, norm_b_sq)
         magnitude_samples: list of small 1D CPU float tensors
         """
         # --- Resolve target key and shape (same as _process_prefix) ---
@@ -1753,8 +1764,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 i, j = lora_indices[ai], lora_indices[bi]
                 diff_i = diffs[i] if eff_strengths[i] >= 0 else -diffs[i]
                 diff_j = diffs[j] if eff_strengths[j] >= 0 else -diffs[j]
-                ov, conf = self._sample_conflict(diff_i, diff_j, device=device)
-                pair_conflicts[(i, j)] = (ov, conf)
+                ov, conf, dot, na_sq, nb_sq = self._sample_conflict(diff_i, diff_j, device=device)
+                pair_conflicts[(i, j)] = (ov, conf, dot, na_sq, nb_sq)
 
         # --- Magnitude sampling (sample on device, free each diff eagerly) ---
         magnitude_samples = []
@@ -1832,11 +1843,14 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         return max(0.1, min(0.9, above_noise))
 
-    def _compute_auto_strengths(self, active_loras, lora_stats):
+    def _compute_auto_strengths(self, active_loras, lora_stats, pairwise_similarities=None):
         """
-        Compute reduced per-LoRA strengths using L2-aware energy normalization.
-        Scales strengths so the total combined energy matches the strongest
-        single LoRA's contribution, preventing overexposure from stacking.
+        Compute reduced per-LoRA strengths using interference-aware energy
+        normalization. Uses pairwise cosine similarity to account for
+        directional alignment between LoRAs:
+        - Aligned LoRAs (cos≈1) → more aggressive scaling (they reinforce)
+        - Orthogonal LoRAs (cos≈0) → same as classic L2 norm
+        - Opposing LoRAs (cos≈-1) → less scaling (they cancel out)
 
         Returns (new_strengths, reasoning_lines) where new_strengths is a list
         of floats (one per active LoRA) and reasoning_lines is a list of strings.
@@ -1867,8 +1881,21 @@ class LoRAOptimizer(_LoRAMergeBase):
             reasoning.append("Single contributing LoRA or none — no strength adjustment needed")
             return (list(original_strengths), reasoning)
 
-        # Current combined energy: sqrt(sum(effective[i]^2))
-        current_energy = math.sqrt(sum(e * e for e in effective))
+        # Interference-aware combined energy using the vector-sum formula:
+        #   ||sum(v_i)||^2 = sum(||v_i||^2) + 2 * sum_{i<j}(||v_i|| * ||v_j|| * cos(v_i, v_j))
+        # This is the exact squared magnitude of the sum of vectors given their
+        # pairwise angles. When cos=0 (orthogonal), reduces to sum of squares.
+        energy_sq = sum(e * e for e in effective)
+        orthogonal_energy_sq = energy_sq  # save for reporting
+
+        if pairwise_similarities:
+            for (i, j), cos_sim in pairwise_similarities.items():
+                if effective[i] > 0 and effective[j] > 0:
+                    energy_sq += 2.0 * effective[i] * effective[j] * cos_sim
+
+        # Clamp to avoid sqrt of negative (possible if strong opposing LoRAs)
+        energy_sq = max(energy_sq, 0.0)
+        current_energy = math.sqrt(energy_sq)
 
         # Reference energy: what the strongest single LoRA contributes alone
         reference_energy = max(effective)
@@ -1889,7 +1916,20 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         # Build reasoning
         reasoning.append(f"Scale factor: {scale:.4f}")
-        reasoning.append("Method: L2-aware energy normalization")
+        if pairwise_similarities:
+            avg_cos = sum(pairwise_similarities.values()) / len(pairwise_similarities)
+            orthogonal_energy = math.sqrt(orthogonal_energy_sq)
+            if avg_cos > 0.1:
+                alignment_desc = "mostly aligned (reinforcing)"
+            elif avg_cos < -0.1:
+                alignment_desc = "mostly opposing (cancelling)"
+            else:
+                alignment_desc = "mostly orthogonal (independent)"
+            reasoning.append(f"Method: interference-aware energy normalization")
+            reasoning.append(f"  Avg pairwise cosine similarity: {avg_cos:.3f} ({alignment_desc})")
+            reasoning.append(f"  Interference-aware energy: {current_energy:.4f} (orthogonal assumption: {orthogonal_energy:.4f})")
+        else:
+            reasoning.append("Method: L2-aware energy normalization (no similarity data)")
         for i in range(n):
             if effective[i] > 0 and abs(scale - 1.0) > 1e-9:
                 reasoning.append(f"  {active_loras[i]['name']}: {original_strengths[i]} -> {new_strengths[i]:.4f}")
@@ -2046,6 +2086,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 lines.append(f"  {pc['pair']}:")
                 lines.append(f"    Overlapping positions: {pc['overlap']}")
                 lines.append(f"    Sign conflicts: {pc['conflicts']} ({pc['ratio']:.1%})")
+                if 'cosine_sim' in pc:
+                    lines.append(f"    Cosine similarity: {pc['cosine_sim']:.3f}")
 
         # Collection Statistics
         lines.append("")
@@ -2297,7 +2339,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         pairs = [(i, j) for i in range(len(active_loras))
                          for j in range(i + 1, len(active_loras))]
-        pair_accum = {(i, j): [0, 0] for i, j in pairs}  # [overlap, conflict]
+        pair_accum = {(i, j): [0, 0, 0.0, 0.0, 0.0] for i, j in pairs}  # [overlap, conflict, dot, norm_a_sq, norm_b_sq]
         all_magnitude_samples = []    # list of small CPU tensors
         prefix_count = 0              # number of prefixes with valid diffs
         prefix_stats = {}             # prefix -> {conflict_ratio, n_loras, magnitude_samples, magnitude_ratio}
@@ -2315,9 +2357,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                 per_lora_stats[idx]["ranks"].append(rank)
                 per_lora_stats[idx]["key_count"] += 1
                 per_lora_stats[idx]["l2_norms"].append(l2)
-            for (i, j), (ov, conf) in pair_conflicts.items():
+            for (i, j), (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.items():
                 pair_accum[(i, j)][0] += ov
                 pair_accum[(i, j)][1] += conf
+                pair_accum[(i, j)][2] += dot
+                pair_accum[(i, j)][3] += na_sq
+                pair_accum[(i, j)][4] += nb_sq
             all_magnitude_samples.extend(mag_samples)
 
             # Store per-prefix stats for per_prefix optimization mode
@@ -2326,8 +2371,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 n_contributing = len(partial_stats)
 
                 # Per-prefix conflict ratio
-                pf_overlap = sum(ov for ov, _ in pair_conflicts.values())
-                pf_conflict = sum(conf for _, conf in pair_conflicts.values())
+                pf_overlap = sum(ov for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
+                pf_conflict = sum(conf for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
                 pf_conflict_ratio = pf_conflict / pf_overlap if pf_overlap > 0 else 0.0
 
                 # Per-prefix magnitude ratio (max/min L2 among contributing LoRAs)
@@ -2390,15 +2435,19 @@ class LoRAOptimizer(_LoRAMergeBase):
                 "l2_mean": l2_mean,
             })
 
-        # Pairwise conflict stats from accumulated counts
+        # Pairwise conflict stats and cosine similarity from accumulated counts
         total_overlap = 0
         total_conflict = 0
         pairwise_conflicts = []
+        pairwise_similarities = {}
         for i, j in pairs:
-            pair_overlap, pair_conflict = pair_accum[(i, j)]
+            pair_overlap, pair_conflict, pair_dot, pair_na_sq, pair_nb_sq = pair_accum[(i, j)]
             total_overlap += pair_overlap
             total_conflict += pair_conflict
             ratio = pair_conflict / pair_overlap if pair_overlap > 0 else 0
+            denom = math.sqrt(pair_na_sq) * math.sqrt(pair_nb_sq)
+            cos_sim = pair_dot / denom if denom > 0 else 0.0
+            pairwise_similarities[(i, j)] = cos_sim
             name_i = active_loras[i]['name']
             name_j = active_loras[j]['name']
             if name_i == name_j:
@@ -2410,8 +2459,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                 "overlap": pair_overlap,
                 "conflicts": pair_conflict,
                 "ratio": ratio,
+                "cosine_sim": cos_sim,
             })
-            logging.info(f"[LoRA Optimizer]   {pair_label} -> {ratio:.1%} conflict")
+            logging.info(f"[LoRA Optimizer]   {pair_label} -> {ratio:.1%} conflict, cos_sim={cos_sim:.3f}")
 
         avg_conflict_ratio = total_conflict / total_overlap if total_overlap > 0 else 0
         logging.info(f"[LoRA Optimizer]   Average conflict ratio: {avg_conflict_ratio:.1%}")
@@ -2445,7 +2495,8 @@ class LoRAOptimizer(_LoRAMergeBase):
         auto_strength_info = None
         scale_ratios = {}
         if auto_strength == "enabled":
-            new_strengths, strength_reasoning = self._compute_auto_strengths(active_loras, lora_stats)
+            new_strengths, strength_reasoning = self._compute_auto_strengths(
+                active_loras, lora_stats, pairwise_similarities=pairwise_similarities)
 
             for i in range(len(active_loras)):
                 orig = active_loras[i]["strength"]
@@ -2818,7 +2869,7 @@ class SaveMergedLoRA:
         return {
             "required": {
                 "lora_data": ("LORA_DATA", {"tooltip": "Connect the lora_data output from LoRA Optimizer here."}),
-                "filename": ("STRING", {"default": "merged_lora", "tooltip": "Name for the saved file. The file will be saved to your output/loras_merged/ folder as 'name.safetensors'."}),
+                "filename": ("STRING", {"default": "merged_lora", "tooltip": "Name or path for the saved file. Plain name (e.g. 'merged_lora') saves to your ComfyUI loras folder. Absolute path (e.g. '/path/to/my_lora') saves to that location. Extension .safetensors is added automatically."}),
                 "save_rank": ("INT", {
                     "default": 0, "min": 0, "max": 1024, "step": 4,
                     "tooltip": "0 = auto (uses each layer's existing rank from the merge — recommended). Non-zero = force this rank for any layers that need compression. Higher values = more accurate but larger file."
@@ -2839,10 +2890,15 @@ class SaveMergedLoRA:
 
     def save_lora(self, lora_data, filename, save_rank=0, bake_strength=True):
         # Determine save path
-        output_dir = folder_paths.get_output_directory()
-        save_dir = os.path.join(output_dir, "loras_merged")
+        if os.path.isabs(filename) or os.sep in filename or '/' in filename:
+            # Absolute or relative path provided — use as-is
+            save_path = filename if filename.endswith('.safetensors') else f"{filename}.safetensors"
+            save_dir = os.path.dirname(save_path)
+        else:
+            # Plain filename — save to primary ComfyUI loras folder
+            save_dir = folder_paths.get_folder_paths("loras")[0]
+            save_path = os.path.join(save_dir, f"{filename}.safetensors")
         os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, f"{filename}.safetensors")
 
         model_patches = lora_data["model_patches"]
         clip_patches = lora_data["clip_patches"]

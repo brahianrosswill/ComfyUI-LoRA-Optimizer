@@ -332,7 +332,7 @@ Connect the `LORA_DATA` output from LoRA Optimizer to this node.
 
 | Option | Default | Effect |
 |--------|---------|--------|
-| `filename` | `merged_lora` | Name for the saved file (saved to `output/loras_merged/`) |
+| `filename` | `merged_lora` | Plain name saves to your ComfyUI loras folder. Absolute path (e.g. `/path/to/my_lora`) saves to that location |
 | `save_rank` | 0 (auto) | 0 = use each layer's existing rank from the merge. Non-zero = force this rank for layers that need compression |
 | `bake_strength` | enabled | When on, the saved LoRA reproduces your exact merge at strength 1.0. When off, strengths are not baked in |
 
