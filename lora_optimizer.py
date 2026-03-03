@@ -35,11 +35,11 @@ class LoRAStack:
         lora_list = folder_paths.get_filename_list("loras")
         return {
             "required": {
-                "lora_name": (lora_list, {"tooltip": "LoRA file"}),
+                "lora_name": (lora_list, {"tooltip": "Pick a LoRA file to add to the stack. LoRAs are style/character/concept add-ons trained on top of a base model."}),
                 "strength": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
             },
             "optional": {
-                "lora_stack": ("LORA_STACK", {"tooltip": "Previous LoRA stack"}),
+                "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to chain multiple LoRAs together."}),
             }
         }
     
@@ -72,25 +72,39 @@ class LoRAStackDynamic:
     Outputs standard (name, model_str, clip_str) tuples.
     """
 
-    modes = ["simple", "advanced"]
+    MAX_LORAS = 10
 
     @classmethod
     def INPUT_TYPES(cls):
         loras = ["None"] + folder_paths.get_filename_list("loras")
         inputs = {
             "required": {
-                "input_mode": (cls.modes, {"tooltip": "Simple: one strength per LoRA. Advanced: separate model and CLIP strengths."}),
-                "lora_count": ("INT", {"default": 3, "min": 1, "max": 10, "step": 1,
-                                       "tooltip": "Number of LoRA slots to show"}),
+                "mode": (["simple", "advanced"], {
+                    "tooltip": "Simple: one strength slider per LoRA (controls both image and text). "
+                               "Advanced: separate model_strength and clip_strength sliders for fine-tuning how each LoRA affects image generation vs prompt understanding."
+                }),
+                "lora_count": ("INT", {"default": 3, "min": 1, "max": cls.MAX_LORAS, "step": 1,
+                                       "tooltip": "How many LoRA slots to show. Increase to add more LoRAs."}),
             }
         }
-        for i in range(1, 11):
-            inputs["required"][f"lora_name_{i}"] = (loras,)
-            inputs["required"][f"lora_wt_{i}"] = ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05})
-            inputs["required"][f"model_str_{i}"] = ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05})
-            inputs["required"][f"clip_str_{i}"] = ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05})
+        for i in range(1, cls.MAX_LORAS + 1):
+            inputs["required"][f"lora_name_{i}"] = (loras, {
+                "tooltip": f"LoRA #{i} — pick a LoRA file or leave as 'None' to skip this slot."
+            })
+            inputs["required"][f"strength_{i}"] = ("FLOAT", {
+                "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05,
+                "tooltip": f"How strongly LoRA #{i} affects the output. 1.0 = full effect."
+            })
+            inputs["required"][f"model_strength_{i}"] = ("FLOAT", {
+                "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05,
+                "tooltip": f"How strongly LoRA #{i} affects image generation (visual style, composition)."
+            })
+            inputs["required"][f"clip_strength_{i}"] = ("FLOAT", {
+                "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05,
+                "tooltip": f"How strongly LoRA #{i} affects text understanding (prompt interpretation)."
+            })
         inputs["optional"] = {
-            "lora_stack": ("LORA_STACK", {"tooltip": "Optional stack from another stacker to extend"}),
+            "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to add even more LoRAs to the list."}),
         }
         return inputs
 
@@ -100,23 +114,22 @@ class LoRAStackDynamic:
     CATEGORY = "loaders/lora"
     DESCRIPTION = "Dynamic LoRA stacker with adjustable slot count and optional per-LoRA CLIP strength"
 
-    def build_stack(self, input_mode, lora_count, lora_stack=None, **kwargs):
+    def build_stack(self, mode, lora_count, lora_stack=None, **kwargs):
         loras = []
         for i in range(1, lora_count + 1):
             name = kwargs.get(f"lora_name_{i}", "None")
             if name == "None":
                 continue
-            if input_mode == "simple":
-                wt = kwargs.get(f"lora_wt_{i}", 1.0)
+            if mode == "simple":
+                wt = kwargs.get(f"strength_{i}", 1.0)
                 loras.append((name, wt, wt))
             else:
-                model_str = kwargs.get(f"model_str_{i}", 1.0)
-                clip_str = kwargs.get(f"clip_str_{i}", 1.0)
+                model_str = kwargs.get(f"model_strength_{i}", 1.0)
+                clip_str = kwargs.get(f"clip_strength_{i}", 1.0)
                 loras.append((name, model_str, clip_str))
         if lora_stack is not None:
             for l in lora_stack:
                 if isinstance(l, dict):
-                    # Convert LoRAStack dict format to tuple so the list stays homogeneous
                     if l.get("name", "None") != "None":
                         s = l.get("strength", 1.0)
                         loras.append((l["name"], s, s))
@@ -927,6 +940,38 @@ class _LoRAMergeBase:
         return (mat * mask * rescale).reshape(original_shape)
 
     @staticmethod
+    def _compute_conflict_mask(diffs_with_weights):
+        """
+        Boolean mask: True where 2+ diffs have opposing signs (actual interference).
+        Uses sign-corrected diffs (weight sign applied).
+        """
+        has_positive = torch.zeros_like(diffs_with_weights[0][0], dtype=torch.bool)
+        has_negative = torch.zeros_like(has_positive)
+        for diff, weight in diffs_with_weights:
+            effective = diff if weight >= 0 else -diff
+            nonzero = effective != 0
+            has_positive |= (nonzero & (effective > 0))
+            has_negative |= (nonzero & (effective < 0))
+        return has_positive & has_negative
+
+    @staticmethod
+    def _dare_sparsify_conflict(tensor, conflict_mask, density, generator=None):
+        if density >= 1.0:
+            return tensor
+        rand_mask = torch.bernoulli(
+            torch.full(tensor.shape, density, dtype=tensor.dtype, device=tensor.device),
+            generator=generator
+        )
+        return torch.where(conflict_mask, tensor * rand_mask * (1.0 / density), tensor)
+
+    @staticmethod
+    def _della_sparsify_conflict(tensor, conflict_mask, density, epsilon=0.3, generator=None):
+        if density >= 1.0:
+            return tensor
+        della_result = _LoRAMergeBase._della_sparsify(tensor, density, epsilon, generator)
+        return torch.where(conflict_mask, della_result, tensor)
+
+    @staticmethod
     def _ties_elect_sign(trimmed_diffs, method="frequency"):
         """
         TIES Step 2: Elect Sign — determine majority sign direction per weight position.
@@ -1042,12 +1087,32 @@ class _LoRAMergeBase:
         # DARE/DELLA preprocessing for non-TIES modes
         # (TIES replaces its trim step instead — handled in the ties branch)
         if sparsification != "disabled" and mode != "ties":
-            sparsify_fn = self._dare_sparsify if sparsification == "dare" else self._della_sparsify
-            for idx in range(len(diffs_with_weights)):
-                diff, weight = diffs_with_weights[idx]
-                diff = diff.to(device=dev, dtype=torch.float32)
-                diff = sparsify_fn(diff, sparsification_density, generator=sparsification_generator)
-                diffs_with_weights[idx] = (diff.to(dtype), weight)
+            is_conflict = sparsification in ("dare_conflict", "della_conflict")
+
+            if is_conflict:
+                for idx in range(len(diffs_with_weights)):
+                    diff, weight = diffs_with_weights[idx]
+                    diffs_with_weights[idx] = (diff.to(device=dev, dtype=torch.float32), weight)
+                conflict_mask = self._compute_conflict_mask(diffs_with_weights)
+
+                sparsify_fn = (self._dare_sparsify_conflict
+                               if sparsification == "dare_conflict"
+                               else self._della_sparsify_conflict)
+                for idx in range(len(diffs_with_weights)):
+                    diff, weight = diffs_with_weights[idx]
+                    diff = sparsify_fn(diff, conflict_mask, sparsification_density,
+                                       generator=sparsification_generator)
+                    diffs_with_weights[idx] = (diff.to(dtype), weight)
+                del conflict_mask
+            else:
+                sparsify_fn = (self._dare_sparsify if sparsification == "dare"
+                               else self._della_sparsify)
+                for idx in range(len(diffs_with_weights)):
+                    diff, weight = diffs_with_weights[idx]
+                    diff = diff.to(device=dev, dtype=torch.float32)
+                    diff = sparsify_fn(diff, sparsification_density,
+                                       generator=sparsification_generator)
+                    diffs_with_weights[idx] = (diff.to(dtype), weight)
 
         if mode == "weighted_average":
             result = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
@@ -1153,21 +1218,46 @@ class _LoRAMergeBase:
             # Memory-optimized: free input diffs after trimming to reduce peak VRAM.
             trimmed = []
             abs_weights = []
-            for idx in range(len(diffs_with_weights)):
-                d, w = diffs_with_weights[idx]
-                diffs_with_weights[idx] = None  # Free input diff early
-                d_f = d.to(device=dev, dtype=torch.float32)
-                del d
-                if w < 0:
-                    d_f = -d_f
-                # DARE/DELLA replaces TIES trim step when enabled
-                if sparsification == "dare":
-                    trimmed.append(self._dare_sparsify(d_f, sparsification_density, generator=sparsification_generator))
-                elif sparsification == "della":
-                    trimmed.append(self._della_sparsify(d_f, sparsification_density, generator=sparsification_generator))
-                else:
-                    trimmed.append(self._ties_trim(d_f, density))
-                abs_weights.append(abs(w))
+            is_conflict = sparsification in ("dare_conflict", "della_conflict")
+
+            if is_conflict:
+                signed_diffs = []
+                for idx in range(len(diffs_with_weights)):
+                    d, w = diffs_with_weights[idx]
+                    diffs_with_weights[idx] = None
+                    d_f = d.to(device=dev, dtype=torch.float32)
+                    del d
+                    if w < 0:
+                        d_f = -d_f
+                    signed_diffs.append(d_f)
+                    abs_weights.append(abs(w))
+
+                conflict_mask = self._compute_conflict_mask(
+                    [(d, 1.0) for d in signed_diffs])
+
+                sparsify_fn = (self._dare_sparsify_conflict
+                               if sparsification == "dare_conflict"
+                               else self._della_sparsify_conflict)
+                for d_f in signed_diffs:
+                    trimmed.append(sparsify_fn(d_f, conflict_mask, sparsification_density,
+                                               generator=sparsification_generator))
+                del signed_diffs, conflict_mask
+            else:
+                for idx in range(len(diffs_with_weights)):
+                    d, w = diffs_with_weights[idx]
+                    diffs_with_weights[idx] = None  # Free input diff early
+                    d_f = d.to(device=dev, dtype=torch.float32)
+                    del d
+                    if w < 0:
+                        d_f = -d_f
+                    # DARE/DELLA replaces TIES trim step when enabled
+                    if sparsification == "dare":
+                        trimmed.append(self._dare_sparsify(d_f, sparsification_density, generator=sparsification_generator))
+                    elif sparsification == "della":
+                        trimmed.append(self._della_sparsify(d_f, sparsification_density, generator=sparsification_generator))
+                    else:
+                        trimmed.append(self._ties_trim(d_f, density))
+                    abs_weights.append(abs(w))
 
             # Step 2: Elect majority sign
             majority_sign = self._ties_elect_sign(trimmed, majority_sign_method)
@@ -1303,53 +1393,53 @@ class LoRAOptimizer(_LoRAMergeBase):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": ("MODEL", {"tooltip": "The model to apply LoRA to"}),
-                "lora_stack": ("LORA_STACK", {"tooltip": "LoRA stack - accepts standard (name, model_str, clip_str) tuples or LoRAStack dicts"}),
+                "model": ("MODEL", {"tooltip": "Your base model (e.g. SDXL, Flux). The merged LoRAs will be applied to it."}),
+                "lora_stack": ("LORA_STACK", {"tooltip": "Connect a LoRA Stack node here. This is the list of LoRAs you want to merge together."}),
                 "output_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05,
-                                              "tooltip": "Strength of the merged effect"}),
+                                              "tooltip": "Master volume for the merged result. 1.0 = full effect, 0.5 = half, 0 = no effect. Start at 1.0 and lower if the result looks too strong."}),
             },
             "optional": {
-                "clip": ("CLIP", {"tooltip": "The CLIP model (optional — omit for video/latent-only workflows)"}),
+                "clip": ("CLIP", {"tooltip": "The text encoder. Connect this so LoRAs can also affect how your prompts are understood. Leave empty for video models that don't use CLIP."}),
                 "clip_strength_multiplier": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05,
-                                                       "tooltip": "Strength multiplier for CLIP"}),
+                                                       "tooltip": "How strongly LoRAs affect text understanding, relative to output_strength. At 1.0, CLIP uses the same strength as the model. Lower values reduce LoRA influence on prompt interpretation while keeping the visual effect."}),
                 "auto_strength": (["disabled", "enabled"], {
                     "default": "disabled",
-                    "tooltip": "Auto-reduce LoRA strengths to prevent overexposure from stacking"
+                    "tooltip": "Automatically turns down individual LoRA strengths when combining many LoRAs to avoid oversaturated or distorted results. Useful when stacking 3+ LoRAs."
                 }),
                 "free_vram_between_passes": (["disabled", "enabled"], {
                     "default": "disabled",
-                    "tooltip": "Release GPU cache between analysis and merge passes. Lowers peak VRAM at negligible speed cost."
+                    "tooltip": "Frees GPU memory between processing steps. Enable if you're running out of VRAM. Barely affects speed."
                 }),
                 "optimization_mode": (["per_prefix", "global", "weighted_sum_only"], {
                     "default": "per_prefix",
-                    "tooltip": "per_prefix: each weight group picks its own strategy. global: single strategy for all. weighted_sum_only: force simple weighted sum everywhere (no TIES/averaging, fully compressible)."
+                    "tooltip": "How the optimizer decides to combine LoRAs. 'per_prefix' (recommended): automatically picks the best method for each layer. 'global': uses one method everywhere. 'weighted_sum_only': simple addition, fastest and most compatible but may give worse results with conflicting LoRAs."
                 }),
                 "cache_patches": (["enabled", "disabled"], {
                     "default": "enabled",
-                    "tooltip": "Cache merged patches in RAM for faster re-execution. Disable to free RAM after merge (recommended for video models)."
+                    "tooltip": "Keep the merge result in memory so re-running the workflow is instant (no re-merge needed). Disable to save RAM — recommended for large video models like Wan or LTX."
                 }),
                 "compress_patches": (["non_ties", "all", "disabled"], {
                     "default": "non_ties",
-                    "tooltip": "Re-compress full-rank merged patches to low-rank via SVD. 'non_ties' compresses only weighted_sum/weighted_average prefixes (lossless, TIES stays full-rank). 'all' compresses everything (lossy on TIES prefixes). Recommended for video models."
+                    "tooltip": "Shrink the merged result to use less memory. 'non_ties' (recommended): compresses most layers with no quality loss. 'all': compresses everything, slightly lossy but saves the most memory. 'disabled': no compression, uses more RAM. Enable for large models."
                 }),
                 "svd_device": (["gpu", "cpu"], {
                     "default": "gpu",
-                    "tooltip": "Device for SVD compression. GPU is ~10-50x faster. Use CPU if GPU memory is tight."
+                    "tooltip": "Where to run compression math. GPU is much faster (10-50x). Switch to CPU only if you get out-of-memory errors during the merge."
                 }),
                 "normalize_keys": (["disabled", "enabled"], {
                     "default": "disabled",
-                    "tooltip": "Auto-detect LoRA architecture and normalize keys before merging. Enable when mixing LoRAs from different trainers (e.g., Kohya + AI-Toolkit) or for Z-Image QKV fusion."
+                    "tooltip": "Makes LoRAs from different training tools compatible with each other. Enable if your LoRAs were trained with different software (e.g. Kohya vs AI-Toolkit vs PEFT) or if merging fails without it."
                 }),
-                "sparsification": (["disabled", "dare", "della"], {
+                "sparsification": (["disabled", "dare", "della", "dare_conflict", "della_conflict"], {
                     "default": "disabled",
-                    "tooltip": "Sparsify each LoRA diff before merging to reduce interference. "
-                               "DARE: random dropout. DELLA: magnitude-aware dropout. "
-                               "For TIES mode, replaces the trim step."
+                    "tooltip": "Reduces interference between LoRAs by sparsifying weights before merging. "
+                               "DARE: random dropout everywhere. DELLA: magnitude-aware dropout everywhere. "
+                               "Conflict variants (recommended): same algorithms but ONLY applied where LoRAs "
+                               "push in opposite directions — unique contributions are preserved untouched."
                 }),
                 "sparsification_density": ("FLOAT", {
                     "default": 0.7, "min": 0.01, "max": 1.0, "step": 0.05,
-                    "tooltip": "Fraction of parameters to keep. Lower = more aggressive. "
-                               "Only used when sparsification is enabled."
+                    "tooltip": "What percentage of weights to keep (0.7 = keep 70%, drop 30%). Lower values drop more weights — reduces interference but may lose detail. Only matters when sparsification is enabled."
                 }),
             }
         }
@@ -1979,14 +2069,19 @@ class LoRAOptimizer(_LoRAMergeBase):
         if optimization_mode == "per_prefix":
             lines.append("  (global fallback — each prefix uses its own parameters)")
         if sparsification != "disabled":
-            lines.append(f"  Sparsification: {sparsification.upper()}")
+            display_name = {
+                "dare": "DARE", "della": "DELLA",
+                "dare_conflict": "DARE (conflict-aware)",
+                "della_conflict": "DELLA (conflict-aware)",
+            }.get(sparsification, sparsification.upper())
+            lines.append(f"  Sparsification: {display_name}")
             lines.append(f"  Sparsification density: {sparsification_density:.2f} (keep rate)")
             if optimization_mode == "per_prefix":
                 lines.append(f"  For TIES prefixes: replaces trim step; others: preprocessing")
             elif optimization_mode == "weighted_sum_only":
                 lines.append(f"  Applied as preprocessing before weighted_sum")
             elif mode == "ties":
-                lines.append(f"  Note: {sparsification.upper()} replaces TIES trim step")
+                lines.append(f"  Note: {display_name} replaces TIES trim step")
             else:
                 lines.append(f"  Applied as preprocessing before {mode}")
 
@@ -2722,17 +2817,15 @@ class SaveMergedLoRA:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "lora_data": ("LORA_DATA", {"tooltip": "Merged LoRA data from LoRA Optimizer"}),
-                "filename": ("STRING", {"default": "merged_lora", "tooltip": "Base filename (without extension)"}),
+                "lora_data": ("LORA_DATA", {"tooltip": "Connect the lora_data output from LoRA Optimizer here."}),
+                "filename": ("STRING", {"default": "merged_lora", "tooltip": "Name for the saved file. The file will be saved to your output/loras_merged/ folder as 'name.safetensors'."}),
                 "save_rank": ("INT", {
-                    "default": 128, "min": 4, "max": 1024, "step": 4,
-                    "tooltip": "SVD rank for compressing full-rank diff patches. "
-                               "Higher = more faithful, larger file."
+                    "default": 0, "min": 0, "max": 1024, "step": 4,
+                    "tooltip": "0 = auto (uses each layer's existing rank from the merge — recommended). Non-zero = force this rank for any layers that need compression. Higher values = more accurate but larger file."
                 }),
                 "bake_strength": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Multiply output/clip strength into saved weights so "
-                               "loading at strength 1.0 reproduces the exact merge."
+                    "tooltip": "When enabled, the saved LoRA reproduces your exact merge when loaded at strength 1.0. When disabled, strengths are not baked in — you'll need to set the strength manually when loading."
                 }),
             }
         }
@@ -2744,7 +2837,7 @@ class SaveMergedLoRA:
     OUTPUT_NODE = True
     DESCRIPTION = "Saves merged LoRA data as a standalone .safetensors file that can be loaded by any standard LoRA loader."
 
-    def save_lora(self, lora_data, filename, save_rank=128, bake_strength=True):
+    def save_lora(self, lora_data, filename, save_rank=0, bake_strength=True):
         # Determine save path
         output_dir = folder_paths.get_output_directory()
         save_dir = os.path.join(output_dir, "loras_merged")
@@ -2756,6 +2849,23 @@ class SaveMergedLoRA:
         key_map = lora_data["key_map"]
         output_strength = lora_data["output_strength"]
         clip_strength = lora_data["clip_strength"]
+
+        auto_rank = save_rank == 0
+
+        # Auto mode: collect ranks from existing LoRAAdapter patches to use
+        # as the fallback rank for any full-rank diffs that need compression
+        if auto_rank:
+            existing_ranks = []
+            for patch in list(model_patches.values()) + list(clip_patches.values()):
+                if isinstance(patch, LoRAAdapter):
+                    existing_ranks.append(patch.weights[1].shape[0])  # mat_down rows = rank
+            # Use the most common rank, or 128 as a safe default
+            if existing_ranks:
+                fallback_rank = max(set(existing_ranks), key=existing_ranks.count)
+            else:
+                fallback_rank = 128
+            logging.info(f"[Save Merged LoRA] Auto rank: using rank {fallback_rank} for full-rank patches "
+                         f"(from {len(existing_ranks)} low-rank patches)")
 
         state_dict = {}
 
@@ -2769,7 +2879,8 @@ class SaveMergedLoRA:
                 alpha = float(alpha) if alpha is not None else float(mat_down.shape[0])
             elif isinstance(patch, tuple) and len(patch) == 2 and patch[0] == "diff":
                 diff_tensor = patch[1][0]
-                compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, save_rank)
+                rank = fallback_rank if auto_rank else save_rank
+                compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank)
                 mat_up, mat_down, alpha, mid, _, _ = compressed.weights
                 alpha = float(alpha)
             else:
