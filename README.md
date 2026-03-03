@@ -5,15 +5,17 @@
 <p align="center">
   <img src="https://img.shields.io/badge/ComfyUI-Custom_Nodes-blue?style=flat-square" alt="ComfyUI">
   <img src="https://img.shields.io/badge/TIES_Merging-NeurIPS_2023-8b5cf6?style=flat-square" alt="TIES">
+  <img src="https://img.shields.io/badge/DARE_%7C_DELLA-Sparsification-f59e0b?style=flat-square" alt="DARE/DELLA">
   <img src="https://img.shields.io/badge/Per--Prefix_Adaptive-Merge-e94560?style=flat-square" alt="Per-Prefix">
   <img src="https://img.shields.io/badge/SVD_Patch-Compression-64ffda?style=flat-square" alt="SVD">
-  <img src="https://img.shields.io/badge/Flux_%7C_SDXL_%7C_SD1.5-Compatible-22c55e?style=flat-square" alt="Compatible">
+  <img src="https://img.shields.io/badge/Architecture--Aware-Key_Normalization-22c55e?style=flat-square" alt="Key Normalization">
+  <img src="https://img.shields.io/badge/Flux_%7C_SDXL_%7C_Wan_%7C_LTX_%7C_Z--Image-Compatible-22c55e?style=flat-square" alt="Compatible">
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT">
 </p>
 
 ---
 
-A ComfyUI node that **automatically analyzes your LoRA stack** and selects the best merge strategy per weight group — diff-based merging, TIES conflict resolution, per-prefix adaptive decisions, SVD patch compression, and auto-tuned parameters. Two nodes: **LoRA Stack** (build input) and **LoRA Optimizer** (analyze + merge).
+A ComfyUI node that **automatically analyzes your LoRA stack** and selects the best merge strategy per weight group — diff-based merging, TIES conflict resolution, DARE/DELLA sparsification, per-prefix adaptive decisions, SVD patch compression, architecture-aware key normalization, and auto-tuned parameters. Two nodes: **LoRA Stack** (build input) and **LoRA Optimizer** (analyze + merge).
 
 ## The Problem
 
@@ -79,6 +81,57 @@ This means non-overlapping regions keep 100% of their LoRA's effect, while genui
   <img src="assets/merge-strategies.svg" alt="Merge Strategies Comparison" width="100%">
 </p>
 
+#### DARE / DELLA Sparsification
+
+DARE and DELLA **sparsify each LoRA's diff before merging**, reducing parameter interference between LoRAs. Available in two modes: **standard** (drops weights everywhere) and **conflict-aware** (only drops weights where LoRAs actually interfere).
+
+<p align="center">
+  <img src="assets/sparsification-diagram.svg" alt="DARE / DELLA Sparsification" width="100%">
+</p>
+
+| Method | How It Works |
+|--------|-------------|
+| **DARE** | Bernoulli random mask at given density. Survivors rescaled by 1/density to preserve expected value. Fast and unbiased. |
+| **DELLA** | Per-row magnitude ranking. Low-magnitude elements get higher drop probability, high-magnitude elements are kept. More surgical than DARE. |
+| **DARE (conflict-aware)** | Same as DARE, but only applied at positions where 2+ LoRAs push in **opposite directions**. Same-sign positions (where LoRAs reinforce each other) are left untouched. |
+| **DELLA (conflict-aware)** | Same as DELLA, but only at conflict positions. Unique contributions from each LoRA are fully preserved. |
+
+**Why conflict-aware?** Standard sparsification drops weights everywhere — including positions where only one LoRA contributes, or where multiple LoRAs agree. This destroys useful signal. Conflict-aware variants compute a **sign-conflict mask** first: positions where LoRAs push in opposite directions (actual interference). Only those positions get sparsified. The result: interference is reduced without sacrificing unique features.
+
+**Interaction with merge strategies:**
+- **TIES mode:** DARE/DELLA *replaces* the TIES trim step (both achieve sparsification, no need for both)
+- **Other modes:** Applied as preprocessing before the merge operation
+
+| Setting | Default | Options |
+|---------|---------|---------|
+| `sparsification` | disabled | `disabled`, `dare`, `della`, `dare_conflict`, `della_conflict` |
+| `sparsification_density` | 0.7 | Fraction of parameters to keep (lower = more aggressive) |
+
+#### Architecture-Aware Key Normalization
+
+Different LoRA trainers (Kohya, AI-Toolkit, LyCORIS, diffusers/PEFT) produce LoRAs with **different key naming conventions** for the same model weights. When mixing LoRAs from different trainers, the optimizer sees no key overlap and cannot merge them correctly.
+
+Key normalization auto-detects the model architecture from LoRA key patterns and remaps all keys to a canonical format, enabling correct overlap detection and conflict analysis across trainer formats.
+
+<p align="center">
+  <img src="assets/key-normalization.svg" alt="Architecture-Aware Key Normalization" width="100%">
+</p>
+
+| Architecture | Detected From | Normalization |
+|-------------|--------------|---------------|
+| **Z-Image** (Lumina2) | `diffusion_model.layers.N.attention`, `single_transformer_blocks` | Prefix standardization, QKV split for per-component analysis, re-fuse after merge |
+| **FLUX** | `double_blocks`/`single_blocks`, `transformer.transformer_blocks` | AI-Toolkit / Kohya / diffusers unified to canonical format |
+| **Wan** 2.1/2.2 | `blocks.N` with `self_attn`/`cross_attn`/`ffn` | LyCORIS / diffusers / Musubi Tuner unified, RS-LoRA alpha fix |
+| **SDXL** | `lora_te1_`/`lora_te2_`, `input_blocks`/`down_blocks` | Text encoder + UNet key unification |
+| **LTX Video** | `adaln_single`, `transformer_blocks` with `attn1`/`attn2` | Trainer format unification |
+| **Qwen-Image** | `transformer_blocks` with `img_mlp`/`txt_mlp`/`img_mod`/`txt_mod` | Dual-stream key unification |
+
+**Z-Image QKV handling:** Z-Image LoRAs often fuse Q, K, V projections into a single `attention.qkv` weight. The normalizer splits these into separate `to_q`/`to_k`/`to_v` components for per-component conflict analysis, then **re-fuses** them back to the native format after merging.
+
+| Setting | Default | Effect |
+|---------|---------|--------|
+| `normalize_keys` | disabled | `disabled` or `enabled`. Enable when mixing LoRAs from different trainers or for Z-Image QKV fusion. |
+
 #### Optimization Modes
 
 | Mode | Behavior |
@@ -128,7 +181,7 @@ After merging, full-rank diff patches consume ~128x more RAM than standard LoRA 
 
 The compression rank is automatically computed as the sum of all input LoRA ranks. For example, 3 rank-32 LoRAs produce a rank-96 compressed patch — enough to represent the full merge without quality loss on linear operations.
 
-> **Tip:** For video models (LTX2, Wan, etc.) with high RAM usage, use `weighted_sum_only` + `non_ties` (or `all`). Every patch gets losslessly compressed with minimal RAM footprint.
+> **Tip:** For video models (LTX, Wan, etc.) with high RAM usage, use `weighted_sum_only` + `non_ties` (or `all`). Every patch gets losslessly compressed with minimal RAM footprint.
 
 #### Auto-Strength
 
@@ -156,7 +209,7 @@ Your original strength ratios are always preserved — the algorithm only scales
 
 #### Inputs / Outputs
 
-**Inputs:** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, optimization mode, cache patches, compress patches, SVD device, free VRAM between passes.
+**Inputs:** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, optimization mode, cache patches, compress patches, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (analysis report)
 
@@ -200,6 +253,9 @@ LORA OPTIMIZER - ANALYSIS REPORT
   Merge mode: ties
   Density: 0.42
   Sign method: frequency
+  Sparsification: DARE
+  Sparsification density: 0.70 (keep rate)
+  For TIES prefixes: replaces trim step; others: preprocessing
   (global fallback — each prefix uses its own parameters)
 
 --- Per-Prefix Strategy ---
@@ -255,9 +311,11 @@ Restart ComfyUI. Both nodes appear under the `loaders/lora` category.
 
 ## Compatibility
 
-- **Models:** SD 1.5, SDXL, Flux, and other architectures supported by ComfyUI
-- **LoRA formats:** Standard LoRA, LoCon, diffusers formats
+- **Models:** SD 1.5, SDXL, Flux, Z-Image (Lumina2), Wan 2.1/2.2, LTX Video, Qwen-Image, and other architectures supported by ComfyUI
+- **LoRA formats:** Standard LoRA, LoCon, LyCORIS, diffusers/PEFT formats
+- **Trainers:** Kohya, AI-Toolkit, LyCORIS, Musubi Tuner, diffusers — auto-normalized when `normalize_keys` is enabled
 - **Flux sliced weights:** Handled correctly (linear1_qkv offsets)
+- **Z-Image fused QKV:** Split for per-component analysis, re-fused after merge
 - **Stack formats:** Native LoRA Stack dicts, plus standard tuples from Efficiency Nodes / Comfyroll
 
 ## Credits
@@ -266,6 +324,8 @@ Restart ComfyUI. Both nodes appear under the `loaders/lora` category.
 - Per-prefix adaptive approach inspired by [comfyUI-Realtime-Lora](https://github.com/shootthesound/comfyUI-Realtime-Lora) by shootthesound (per-block LoRA analysis)
 - Thanks to Scruffy and Ramonguthrie for suggesting the per-block analysis approach
 - TIES-Merging: [Yadav et al., NeurIPS 2023](https://arxiv.org/abs/2306.01708)
+- DARE: [Yu et al., ICML 2024](https://arxiv.org/abs/2311.03099) — Drop And REscale for language model merging
+- DELLA: [Deep et al., 2024](https://arxiv.org/abs/2406.11617) — magnitude-aware sparsification
 
 ## License
 
