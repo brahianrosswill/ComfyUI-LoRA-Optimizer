@@ -1094,7 +1094,11 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Auto-Selected Parameters
         lines.append("")
         lines.append("--- Auto-Selected Parameters ---")
-        lines.append(f"  Merge mode: {mode}")
+        if optimization_mode == "weighted_sum_only":
+            lines.append(f"  Merge mode: weighted_sum (forced by weighted_sum_only)")
+            lines.append(f"  Auto-detected mode: {mode} (overridden)")
+        else:
+            lines.append(f"  Merge mode: {mode}")
         if mode == "ties":
             lines.append(f"  Density: {density:.2f}")
             lines.append(f"  Sign method: {sign_method}")
