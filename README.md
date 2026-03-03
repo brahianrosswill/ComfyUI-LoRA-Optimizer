@@ -33,6 +33,10 @@ The optimizer solves this by computing full weight diffs, detecting sign conflic
   <img src="assets/comparison.png" alt="Before/After Comparison" width="100%">
 </p>
 
+---
+
+### Should I Merge This LoRA?
+
 <p align="center"><img src="assets/merge-use-cases.png" width="720" alt="Should I merge this LoRA? Decision guide"></p>
 
 ---
