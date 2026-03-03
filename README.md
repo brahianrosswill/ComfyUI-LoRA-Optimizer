@@ -33,6 +33,8 @@ The optimizer solves this by computing full weight diffs, detecting sign conflic
   <img src="assets/comparison.png" alt="Before/After Comparison" width="100%">
 </p>
 
+<p align="center"><img src="assets/merge-use-cases.png" width="720" alt="Should I merge this LoRA? Decision guide"></p>
+
 ## Nodes
 
 ### LoRA Stack
@@ -317,8 +319,6 @@ LORA OPTIMIZER - ANALYSIS REPORT
 ```
 
 Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI.
-
-<p align="center"><img src="assets/merge-use-cases.png" width="720" alt="Should I merge this LoRA? Decision guide"></p>
 
 > **Structural & Edit LoRAs:** Do not put distillation LoRAs (LCM, Lightning, Turbo, Hyper), DPO LoRAs, or **edit model LoRAs** (Qwen edit, Klein edit, instruction-editing LoRAs) in the optimizer stack. These LoRAs modify the model's fundamental behavior — their weights are precisely calibrated and merging them with style LoRAs can break their training. Apply them via a standard **Load LoRA** node upstream, then feed only your style/character LoRAs into the optimizer. If you must include an edit LoRA in the stack, use `weighted_sum_only` mode and disable sparsification to avoid weight trimming.
 
