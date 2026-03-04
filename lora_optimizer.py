@@ -2938,6 +2938,70 @@ class LoRAOptimizer(_LoRAMergeBase):
         return (new_model, new_clip, report, lora_data)
 
 
+class WanVideoLoRAOptimizer(LoRAOptimizer):
+    """
+    WanVideo variant of the LoRA Optimizer. Accepts WANVIDEOMODEL instead of
+    MODEL, skips CLIP, and applies merged LoRA patches in-memory.
+
+    All merging algorithms (TIES, DARE/DELLA, SVD compression, auto-strength,
+    conflict analysis) are inherited from LoRAOptimizer. Wan LoRA key
+    normalization (LyCORIS, diffusers, Fun LoRA, finetrainer, RS-LoRA) is
+    already handled by the parent's _normalize_keys_wan.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        base = LoRAOptimizer.INPUT_TYPES()
+        # Replace MODEL with WANVIDEOMODEL
+        base["required"]["model"] = ("WANVIDEOMODEL", {
+            "tooltip": "Your WanVideo model from WanVideoModelLoader."
+        })
+        # Remove CLIP-related inputs (WanVideo doesn't use CLIP)
+        base["optional"].pop("clip", None)
+        base["optional"].pop("clip_strength_multiplier", None)
+        base["optional"].pop("free_vram_between_passes", None)
+        # Change defaults for video models
+        base["optional"]["cache_patches"] = (["disabled", "enabled"], {
+            "default": "disabled",
+            "tooltip": "Keep the merge result in memory so re-running the workflow is instant. Disabled by default for large video models to save RAM."
+        })
+        base["optional"]["normalize_keys"] = (["enabled", "disabled"], {
+            "default": "enabled",
+            "tooltip": "Normalizes LoRA keys from different training tools (LyCORIS, diffusers, finetrainer, etc.) to a common format. Enabled by default for WanVideo LoRAs."
+        })
+        return base
+
+    RETURN_TYPES = ("WANVIDEOMODEL", "STRING", "LORA_DATA")
+    RETURN_NAMES = ("model", "analysis_report", "lora_data")
+    CATEGORY = "loaders/lora"
+    DESCRIPTION = (
+        "WanVideo LoRA Optimizer — merges multiple WanVideo LoRAs using "
+        "conflict-aware algorithms (TIES, DARE, auto-strength). "
+        "Connect after WanVideoModelLoader, before WanVideoSampler."
+    )
+
+    def optimize_merge(self, model, lora_stack, output_strength, **kwargs):
+        kwargs.pop("clip", None)
+        kwargs.pop("clip_strength_multiplier", None)
+        kwargs.pop("free_vram_between_passes", None)
+        result = super().optimize_merge(
+            model, lora_stack, output_strength,
+            clip=None, clip_strength_multiplier=0, **kwargs
+        )
+        # Parent returns (model, clip, report, lora_data) — drop clip
+        return (result[0], result[2], result[3])
+
+    @classmethod
+    def IS_CHANGED(cls, model, lora_stack, output_strength, **kwargs):
+        kwargs.pop("clip", None)
+        kwargs.pop("clip_strength_multiplier", None)
+        kwargs.pop("free_vram_between_passes", None)
+        return LoRAOptimizer.IS_CHANGED(
+            model, lora_stack, output_strength,
+            clip=None, clip_strength_multiplier=0, **kwargs
+        )
+
+
 class SaveMergedLoRA:
     """
     Saves merged LoRA patches from LoRA Optimizer as a standalone .safetensors
@@ -3517,6 +3581,7 @@ NODE_CLASS_MAPPINGS = {
     "SaveMergedLoRA": SaveMergedLoRA,
     "LoRAConflictEditor": LoRAConflictEditor,
     "MergedLoRAToHook": MergedLoRAToHook,
+    "WanVideoLoRAOptimizer": WanVideoLoRAOptimizer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -3526,4 +3591,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SaveMergedLoRA": "Save Merged LoRA",
     "LoRAConflictEditor": "LoRA Conflict Editor",
     "MergedLoRAToHook": "Merged LoRA to Hook",
+    "WanVideoLoRAOptimizer": "WanVideo LoRA Optimizer",
 }

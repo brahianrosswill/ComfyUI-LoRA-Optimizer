@@ -388,6 +388,42 @@ The `prev_hooks` input allows chaining multiple hook sources together.
 
 ---
 
+### WanVideo LoRA Optimizer
+
+Variant of the LoRA Optimizer for **WanVideo models** (via [kijai's WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)). Accepts `WANVIDEOMODEL` instead of `MODEL`, skips CLIP, and applies merged patches in-memory.
+
+All merging algorithms are inherited — TIES, DARE/DELLA, SVD compression, auto-strength, per-prefix adaptive merge, and Wan key normalization (LyCORIS, diffusers, Fun LoRA, finetrainer, RS-LoRA) all work identically.
+
+**Inputs:** `WANVIDEOMODEL`, `LORA_STACK`, output strength, and all optimizer options (except CLIP-related ones). Defaults: `normalize_keys=enabled`, `cache_patches=disabled`.
+
+**Outputs:** `WANVIDEOMODEL` (patched), `STRING` (analysis report), `LORA_DATA` (for Save Merged LoRA)
+
+<details>
+<summary><b>Workflow and usage</b></summary>
+
+**Basic workflow:**
+```
+WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA Optimizer → WANVIDEOMODEL → WanVideoSampler
+                                               ↑
+                        LoRA Stack ─────────────┘
+```
+
+**Chaining with individual LoRAs:** Individual (non-merged) LoRAs go through WanVideoLoraSelect → model loader as usual. Our optimizer applies merged LoRAs on top — both coexist in the model patcher.
+
+```
+WanVideoLoraSelect → WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA Optimizer → Sampler
+                                                                    ↑
+                                             LoRA Stack ────────────┘
+```
+
+**Key defaults differ from the standard optimizer:**
+- `normalize_keys` = **enabled** — WanVideo LoRAs come from many trainers, normalization is commonly needed
+- `cache_patches` = **disabled** — video models are large, caching uses significant RAM
+
+</details>
+
+---
+
 ## Installation
 
 ### ComfyUI Manager
