@@ -122,14 +122,12 @@ class LoRAStackDynamic:
             "lora_text": ("STRING", {
                 "multiline": True,
                 "default": "",
-                "placeholder": "path/to/lora.safetensors:0.8\npath/to/another.safetensors:0.8:0.5",
+                "placeholder": "Milena_20260216180133:0.8\npath/to/lora.safetensors:0.8:0.5",
                 "pysssss.autocomplete": False,
                 "dynamicPrompts": False,
-                "tooltip": "Type LoRA paths directly, one per line. "
-                           "Format: path.safetensors (strength 1.0), "
-                           "path.safetensors:0.8 (both strengths), or "
-                           "path.safetensors:0.8:0.5 (model:clip). "
-                           "Autocomplete available when ComfyUI-Lora-Manager is installed."
+                "tooltip": "Type LoRA names or paths, one per line. "
+                           "Short names (e.g. Milena_20260216180133) are matched against installed LoRAs. "
+                           "Format: name (strength 1.0), name:0.8 (both strengths), or name:0.8:0.5 (model:clip)."
             }),
             "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to add even more LoRAs to the list."}),
             "base_model_filter": (["All"], {
@@ -146,10 +144,56 @@ class LoRAStackDynamic:
     DESCRIPTION = "Dynamic LoRA stacker with adjustable slot count and optional per-LoRA CLIP strength"
 
     @staticmethod
+    def _resolve_lora_name(name):
+        """Resolve a short LoRA name to its full relative path.
+
+        Accepts full relative paths (returned as-is) or short names like
+        'Milena_20260216180133' which are matched against installed LoRAs
+        by filename (with or without extension).
+        """
+        lora_list = folder_paths.get_filename_list("loras")
+
+        # Exact match (full relative path)
+        if name in lora_list:
+            return name
+
+        # Match by filename stem (without extension)
+        name_lower = name.lower()
+        for lora_path in lora_list:
+            filename = os.path.basename(lora_path)
+            stem = os.path.splitext(filename)[0]
+            if stem.lower() == name_lower:
+                return lora_path
+
+        # Match by filename with extension
+        for lora_path in lora_list:
+            filename = os.path.basename(lora_path)
+            if filename.lower() == name_lower:
+                return lora_path
+
+        # Substring match on filename stem (if unique)
+        matches = []
+        for lora_path in lora_list:
+            stem = os.path.splitext(os.path.basename(lora_path))[0]
+            if name_lower in stem.lower():
+                matches.append(lora_path)
+        if len(matches) == 1:
+            return matches[0]
+
+        logger = logging.getLogger("LoRAOptimizer")
+        if len(matches) > 1:
+            logger.warning(f"lora_text: '{name}' matches multiple LoRAs: {matches[:5]}... using first match")
+            return matches[0]
+
+        logger.warning(f"lora_text: '{name}' not found in installed LoRAs, skipping")
+        return None
+
+    @staticmethod
     def _parse_lora_text(lora_text):
-        """Parse multiline text into LoRA entries.
+        """Parse multiline text into LoRA entries with name resolution.
 
         Formats (one per line):
+          Milena_20260216180133              -> resolved to full path, strength 1.0
           path/to/lora.safetensors           -> (path, 1.0, 1.0, "all")
           path/to/lora.safetensors:0.8       -> (path, 0.8, 0.8, "all")
           path/to/lora.safetensors:0.8:0.5   -> (path, 0.8, 0.5, "all")
@@ -163,29 +207,35 @@ class LoRAStackDynamic:
             if not line or line.startswith("#"):
                 continue
 
+            name = line
+            model_str = 1.0
+            clip_str = 1.0
+
             # Try 3-part split: path:model_str:clip_str
             parts = line.rsplit(":", 2)
             if len(parts) == 3:
                 try:
                     clip_str = float(parts[2])
                     model_str = float(parts[1])
-                    entries.append((parts[0].strip(), model_str, clip_str, "all"))
-                    continue
+                    name = parts[0].strip()
                 except ValueError:
                     pass
 
-            # Try 2-part split: path:strength
-            parts = line.rsplit(":", 1)
-            if len(parts) == 2:
-                try:
-                    strength = float(parts[1])
-                    entries.append((parts[0].strip(), strength, strength, "all"))
-                    continue
-                except ValueError:
-                    pass
+            # Try 2-part split: path:strength (only if 3-part didn't match)
+            if name == line:
+                parts = line.rsplit(":", 1)
+                if len(parts) == 2:
+                    try:
+                        strength = float(parts[1])
+                        model_str = strength
+                        clip_str = strength
+                        name = parts[0].strip()
+                    except ValueError:
+                        pass
 
-            # No numeric suffix — entire line is the path, strength 1.0
-            entries.append((line.strip(), 1.0, 1.0, "all"))
+            resolved = LoRAStackDynamic._resolve_lora_name(name)
+            if resolved:
+                entries.append((resolved, model_str, clip_str, "all"))
 
         return entries
 
