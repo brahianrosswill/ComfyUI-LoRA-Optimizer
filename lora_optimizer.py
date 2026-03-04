@@ -3092,10 +3092,12 @@ class LoRAConflictEditor(_LoRAMergeBase):
             entries = []
             if isinstance(first, (tuple, list)):
                 for entry in lora_stack:
-                    entries.append((str(entry[0]), float(entry[1]), float(entry[2])))
+                    cm = entry[3] if len(entry) > 3 else "all"
+                    entries.append((str(entry[0]), float(entry[1]), float(entry[2]), cm))
             elif isinstance(first, dict):
                 for item in lora_stack:
-                    entries.append((str(item.get("name", "")), float(item.get("strength", 0))))
+                    cm = item.get("conflict_mode", "all")
+                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm))
             entries.sort()
             h.update(json.dumps(entries).encode())
         h.update(f"|ms={merge_strategy}".encode())
@@ -3123,17 +3125,18 @@ class LoRAConflictEditor(_LoRAMergeBase):
             cm = kwargs.get("conflict_mode_1", "auto")
             resolved = "all" if cm == "auto" else cm
             first = lora_stack[0]
+            item = active_loras[0]
             if isinstance(first, dict):
-                enriched = [dict(active_loras[0], conflict_mode=resolved)]
+                enriched = [dict(item, conflict_mode=resolved)]
             else:
-                item = active_loras[0]
-                cs = item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
-                enriched = [(item["name"], item["strength"], cs, resolved)]
+                # clip_strength may be None (dict-format LoRAs use global multiplier);
+                # preserve None so the optimizer applies clip_strength_multiplier correctly
+                enriched = [(item["name"], item["strength"], item["clip_strength"], resolved)]
             report = (
                 "=" * 46 + "\n"
                 "LORA CONFLICT EDITOR - ANALYSIS REPORT\n"
                 "=" * 46 + "\n\n"
-                f"Single LoRA: {active_loras[0]['name']}\n"
+                f"Single LoRA: {item['name']}\n"
                 f"Conflict mode: {resolved}\n"
                 f"No pairwise conflicts to analyze."
             )
@@ -3209,10 +3212,6 @@ class LoRAConflictEditor(_LoRAMergeBase):
                 )
                 del mat_up, mat_down
                 diff = diff * scale * item["strength"]
-
-                if compute_device.type != "cpu":
-                    diff = diff.cpu()
-
                 diffs[idx] = diff
 
             if len(diffs) < 2:
