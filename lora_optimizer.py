@@ -2984,12 +2984,11 @@ class WanVideoLoRAOptimizer(LoRAOptimizer):
         kwargs.pop("clip", None)
         kwargs.pop("clip_strength_multiplier", None)
         kwargs.pop("free_vram_between_passes", None)
-        result = super().optimize_merge(
+        model_out, _clip, report, lora_data = super().optimize_merge(
             model, lora_stack, output_strength,
-            clip=None, clip_strength_multiplier=0, **kwargs
+            clip=None, clip_strength_multiplier=1.0, **kwargs
         )
-        # Parent returns (model, clip, report, lora_data) — drop clip
-        return (result[0], result[2], result[3])
+        return (model_out, report, lora_data)
 
     @classmethod
     def IS_CHANGED(cls, model, lora_stack, output_strength, **kwargs):
