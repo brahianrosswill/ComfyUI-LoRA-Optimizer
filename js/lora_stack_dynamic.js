@@ -46,6 +46,7 @@ function updateVisibility(node) {
         toggleWidget(node, findWidget(node, `strength_${i}`), visible && isSimple);
         toggleWidget(node, findWidget(node, `model_strength_${i}`), visible && !isSimple);
         toggleWidget(node, findWidget(node, `clip_strength_${i}`), visible && !isSimple);
+        toggleWidget(node, findWidget(node, `conflict_mode_${i}`), visible);
     }
 
     const newHeight = node.computeSize()[1];

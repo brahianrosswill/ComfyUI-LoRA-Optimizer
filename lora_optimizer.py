@@ -37,6 +37,13 @@ class LoRAStack:
             "required": {
                 "lora_name": (lora_list, {"tooltip": "Pick a LoRA file to add to the stack. LoRAs are style/character/concept add-ons trained on top of a base model."}),
                 "strength": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05}),
+                "conflict_mode": (["all", "low_conflict", "high_conflict"], {
+                    "default": "all",
+                    "tooltip": "Filter where this LoRA applies based on conflicts with other LoRAs. "
+                               "'all': apply everywhere (default). "
+                               "'low_conflict': only apply where this LoRA agrees with the majority — safe, avoids contested weights. "
+                               "'high_conflict': only apply where this LoRA disagrees — forces this LoRA to dominate contested regions."
+                }),
             },
             "optional": {
                 "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to chain multiple LoRAs together."}),
@@ -49,16 +56,17 @@ class LoRAStack:
     CATEGORY = "loaders/lora"
     DESCRIPTION = "Adds a LoRA to the stack for use with LoRA Optimizer"
     
-    def add_to_stack(self, lora_name, strength, lora_stack=None):
+    def add_to_stack(self, lora_name, strength, conflict_mode="all", lora_stack=None):
         lora_list = list(lora_stack) if lora_stack else []
-        
+
         lora_path = folder_paths.get_full_path_or_raise("loras", lora_name)
         lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
-        
+
         lora_list.append({
             "name": lora_name,
             "lora": lora,
-            "strength": strength
+            "strength": strength,
+            "conflict_mode": conflict_mode,
         })
         
         return (lora_list,)
@@ -103,6 +111,13 @@ class LoRAStackDynamic:
                 "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05,
                 "tooltip": f"How strongly LoRA #{i} affects text understanding (prompt interpretation)."
             })
+            inputs["required"][f"conflict_mode_{i}"] = (["all", "low_conflict", "high_conflict"], {
+                "default": "all",
+                "tooltip": f"LoRA #{i} conflict filter. "
+                           f"'all': apply everywhere (default). "
+                           f"'low_conflict': only where this LoRA agrees with the majority. "
+                           f"'high_conflict': only where this LoRA disagrees."
+            })
         inputs["optional"] = {
             "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to add even more LoRAs to the list."}),
         }
@@ -120,19 +135,21 @@ class LoRAStackDynamic:
             name = kwargs.get(f"lora_name_{i}", "None")
             if name == "None":
                 continue
+            conflict_mode = kwargs.get(f"conflict_mode_{i}", "all")
             if mode == "simple":
                 wt = kwargs.get(f"strength_{i}", 1.0)
-                loras.append((name, wt, wt))
+                loras.append((name, wt, wt, conflict_mode))
             else:
                 model_str = kwargs.get(f"model_strength_{i}", 1.0)
                 clip_str = kwargs.get(f"clip_strength_{i}", 1.0)
-                loras.append((name, model_str, clip_str))
+                loras.append((name, model_str, clip_str, conflict_mode))
         if lora_stack is not None:
             for l in lora_stack:
                 if isinstance(l, dict):
                     if l.get("name", "None") != "None":
                         s = l.get("strength", 1.0)
-                        loras.append((l["name"], s, s))
+                        cm = l.get("conflict_mode", "all")
+                        loras.append((l["name"], s, s, cm))
                 elif isinstance(l, (tuple, list)):
                     if l[0] != "None":
                         loras.append(tuple(l))
@@ -1324,12 +1341,13 @@ class LoRAOptimizer(_LoRAMergeBase):
         normalized = []
 
         if isinstance(first, (tuple, list)):
-            # Standard format: (lora_name, model_strength, clip_strength)
+            # Standard format: (lora_name, model_strength, clip_strength[, conflict_mode])
             for entry in lora_stack:
                 if not isinstance(entry, (tuple, list)) or len(entry) < 3:
                     logging.warning("[LoRA Optimizer] Skipping malformed tuple entry (expected 3 elements)")
                     continue
                 lora_name, model_str, clip_str = entry[0], entry[1], entry[2]
+                conflict_mode = entry[3] if len(entry) > 3 else "all"
 
                 # Load LoRA with caching
                 if lora_name in self.loaded_loras:
@@ -1348,6 +1366,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "lora": lora_dict,
                     "strength": model_str,
                     "clip_strength": clip_str,
+                    "conflict_mode": conflict_mode,
                 })
 
         elif isinstance(first, dict):
@@ -1361,6 +1380,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "lora": item["lora"],
                     "strength": item["strength"],
                     "clip_strength": None,  # use global multiplier
+                    "conflict_mode": item.get("conflict_mode", "all"),
                 })
 
         else:
@@ -1466,10 +1486,12 @@ class LoRAOptimizer(_LoRAMergeBase):
             entries = []
             if isinstance(first, (tuple, list)):
                 for entry in lora_stack:
-                    entries.append((str(entry[0]), float(entry[1]), float(entry[2])))
+                    cm = entry[3] if len(entry) > 3 else "all"
+                    entries.append((str(entry[0]), float(entry[1]), float(entry[2]), cm))
             elif isinstance(first, dict):
                 for item in lora_stack:
-                    entries.append((str(item.get("name", "")), float(item.get("strength", 0))))
+                    cm = item.get("conflict_mode", "all")
+                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm))
             entries.sort()
             h.update(json.dumps(entries).encode())
         h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}".encode())
@@ -2066,6 +2088,8 @@ class LoRAOptimizer(_LoRAMergeBase):
             else:
                 lines.append(f"    Avg rank: N/A (no compatible keys)")
                 lines.append(f"    L2 norm (mean): N/A")
+            if stat.get("conflict_mode", "all") != "all":
+                lines.append(f"    Conflict mode: {stat['conflict_mode']}")
 
         # Auto-Strength Adjustment (between Per-LoRA and Pairwise)
         if auto_strength_info is not None:
@@ -2423,7 +2447,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Finalize per-LoRA stats
         lora_stats = []
         l2_means = []
-        for stat in per_lora_stats:
+        for i, stat in enumerate(per_lora_stats):
             avg_rank = sum(stat["ranks"]) / len(stat["ranks"]) if stat["ranks"] else 0
             l2_mean = sum(stat["l2_norms"]) / len(stat["l2_norms"]) if stat["l2_norms"] else 0
             l2_means.append(l2_mean)
@@ -2433,6 +2457,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 "key_count": stat["key_count"],
                 "avg_rank": avg_rank,
                 "l2_mean": l2_mean,
+                "conflict_mode": active_loras[i].get("conflict_mode", "all"),
             })
 
         # Pairwise conflict stats and cosine similarity from accumulated counts
@@ -2626,6 +2651,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             # FULL-RANK PATH: compute diffs on GPU, merge
             diffs_list = []
+            diff_to_lora = []  # maps diffs_list index -> active_loras index
             for i, item in enumerate(active_loras):
                 lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
                 if lora_info is None:
@@ -2672,9 +2698,35 @@ class LoRAOptimizer(_LoRAMergeBase):
                         eff_strength *= scale_ratios.get(i, 1.0)
 
                 diffs_list.append((diff, eff_strength))
+                diff_to_lora.append(i)
 
             if len(diffs_list) == 0:
                 return None
+
+            # Conflict-mode masking (zero overhead when all use "all")
+            if len(diffs_list) > 1:
+                has_conflict_modes = any(
+                    active_loras[diff_to_lora[idx]].get("conflict_mode", "all") != "all"
+                    for idx in range(len(diffs_list))
+                )
+                if has_conflict_modes:
+                    # Unweighted sign voting (frequency method, consistent with TIES):
+                    # each LoRA gets one vote per element regardless of strength.
+                    sign_sum = torch.zeros_like(diffs_list[0][0])
+                    for diff, _ in diffs_list:
+                        sign_sum += diff.sign()
+                    majority_sign = torch.where(sign_sum >= 0, 1.0, -1.0)
+
+                    masked_diffs = []
+                    for idx, (diff, weight) in enumerate(diffs_list):
+                        cm = active_loras[diff_to_lora[idx]].get("conflict_mode", "all")
+                        if cm == "low_conflict":
+                            diff = diff * ((diff * majority_sign) > 0).float()
+                        elif cm == "high_conflict":
+                            diff = diff * ((diff * majority_sign) < 0).float()
+                        masked_diffs.append((diff, weight))
+                    diffs_list = masked_diffs
+                    del sign_sum, majority_sign
 
             # Re-check single-LoRA case (diff computation may have failed for some)
             if pf_mode == "weighted_sum" and len(diffs_list) <= 1:
