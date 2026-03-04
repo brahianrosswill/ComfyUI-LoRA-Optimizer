@@ -1492,7 +1492,8 @@ class LoRAOptimizer(_LoRAMergeBase):
             if isinstance(first, (tuple, list)):
                 for entry in lora_stack:
                     cm = entry[3] if len(entry) > 3 else "all"
-                    entries.append((str(entry[0]), float(entry[1]), float(entry[2]), cm))
+                    cs = float(entry[2]) if entry[2] is not None else -1.0
+                    entries.append((str(entry[0]), float(entry[1]), cs, cm))
             elif isinstance(first, dict):
                 for item in lora_stack:
                     cm = item.get("conflict_mode", "all")
@@ -2964,6 +2965,10 @@ class SaveMergedLoRA:
     DESCRIPTION = "Saves merged LoRA data as a standalone .safetensors file that can be loaded by any standard LoRA loader."
 
     def save_lora(self, lora_data, filename, save_rank=0, bake_strength=True):
+        if lora_data is None:
+            logging.warning("[Save Merged LoRA] No lora_data received (optimizer may have returned early). Nothing to save.")
+            return ("",)
+
         # Determine save path
         if os.path.isabs(filename) or os.sep in filename or '/' in filename:
             # Absolute or relative path provided — use as-is
@@ -3096,7 +3101,8 @@ class LoRAConflictEditor(_LoRAMergeBase):
             if isinstance(first, (tuple, list)):
                 for entry in lora_stack:
                     cm = entry[3] if len(entry) > 3 else "all"
-                    entries.append((str(entry[0]), float(entry[1]), float(entry[2]), cm))
+                    cs = float(entry[2]) if entry[2] is not None else -1.0
+                    entries.append((str(entry[0]), float(entry[1]), cs, cm))
             elif isinstance(first, dict):
                 for item in lora_stack:
                     cm = item.get("conflict_mode", "all")
