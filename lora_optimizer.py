@@ -120,6 +120,10 @@ class LoRAStackDynamic:
             })
         inputs["optional"] = {
             "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to add even more LoRAs to the list."}),
+            "base_model_filter": (["All"], {
+                "default": "All",
+                "tooltip": "Filter LoRA dropdowns by base model type. Requires ComfyUI-Lora-Manager installed. Hidden if not available."
+            }),
         }
         return inputs
 
