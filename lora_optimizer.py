@@ -1406,8 +1406,8 @@ class LoRAOptimizer(_LoRAMergeBase):
     """
 
     def __init__(self):
-        self.loaded_loras = {}
-        self._merge_cache = {}  # single-entry: {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
+        super().__init__()
+        self._merge_cache = {}  # single-entry: {cache_key: (model_patches, clip_patches, report, clip_strength_out, lora_data)}
         self._detected_arch = None
 
     @classmethod
@@ -3133,7 +3133,9 @@ class LoRAConflictEditor(_LoRAMergeBase):
 
         if n_active == 1:
             # Single LoRA — no pairwise conflicts to analyze
-            cm = kwargs.get("conflict_mode_1", "auto")
+            # Find the original stack position (may not be slot 1 if earlier LoRAs have strength=0)
+            orig_pos = next(i for i, item in enumerate(normalized) if item["strength"] != 0)
+            cm = kwargs.get(f"conflict_mode_{orig_pos + 1}", "auto")
             resolved = "all" if cm == "auto" else cm
             first = lora_stack[0]
             item = active_loras[0]
