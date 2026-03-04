@@ -56,6 +56,33 @@ function interceptWidgetValue(widget, onChange) {
     });
 }
 
+function syncLoraValues(node, toText) {
+    const MAX = 10;
+    for (let i = 1; i <= MAX; i++) {
+        const combo = findWidget(node, `lora_name_${i}`);
+        const text = findWidget(node, `lora_name_text_${i}`);
+        if (!combo || !text) continue;
+
+        if (toText) {
+            // dropdown -> text: copy COMBO value
+            text.value = combo.value || "None";
+        } else {
+            // text -> dropdown: try to match text against COMBO options
+            const val = (text.value || "").trim();
+            const options = combo.options?.values || [];
+            const match = options.find((o) => o === val)
+                || options.find((o) => o.toLowerCase().endsWith("/" + val.toLowerCase() + ".safetensors"))
+                || options.find((o) => {
+                    const stem = o.split("/").pop()?.replace(/\.[^.]+$/, "") || "";
+                    return stem.toLowerCase() === val.toLowerCase();
+                });
+            if (match) {
+                combo.value = match;
+            }
+        }
+    }
+}
+
 function updateVisibility(node) {
     const strengthModeWidget = findWidget(node, "strength_mode");
     const inputModeWidget = findWidget(node, "input_mode");
@@ -244,8 +271,14 @@ app.registerExtension({
 
         // Intercept strength_mode, input_mode, and lora_count changes to update visibility
         for (const w of node.widgets || []) {
-            if (w.name !== "strength_mode" && w.name !== "input_mode" && w.name !== "lora_count") continue;
-            interceptWidgetValue(w, () => updateVisibility(node));
+            if (w.name === "input_mode") {
+                interceptWidgetValue(w, (newVal) => {
+                    syncLoraValues(node, newVal === "text");
+                    updateVisibility(node);
+                });
+            } else if (w.name === "strength_mode" || w.name === "lora_count") {
+                interceptWidgetValue(w, () => updateVisibility(node));
+            }
         }
 
         // Initial visibility update — delay to ensure widgets are fully initialized
