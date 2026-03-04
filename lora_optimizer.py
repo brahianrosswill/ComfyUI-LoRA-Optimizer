@@ -143,6 +143,11 @@ class LoRAStackDynamic:
     CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Dynamic LoRA stacker with adjustable slot count and optional per-LoRA CLIP strength"
 
+    @classmethod
+    def VALIDATE_INPUTS(cls, **kwargs):
+        # base_model_filter options are populated dynamically by JS from Lora Manager
+        return True
+
     @staticmethod
     def _resolve_lora_name(name):
         """Resolve a short LoRA name to its full relative path.
