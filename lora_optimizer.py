@@ -1288,38 +1288,6 @@ class _LoRAMergeBase:
 
         return None
 
-
-class LoRAOptimizer(_LoRAMergeBase):
-    """
-    Auto-optimizer that analyzes a LoRA stack (sign conflicts, magnitude
-    distributions, overlap) and automatically selects the best merge mode
-    and parameters, then performs the merge.
-
-    Outputs the merged model/clip plus an analysis report explaining
-    what was chosen and why.
-
-    Two-pass streaming architecture:
-      Pass 1 — Analysis: computes diffs per weight prefix, samples conflict
-        and magnitude statistics, then discards diffs immediately. Only
-        lightweight scalars and small sample tensors are kept in memory.
-      Pass 2 — Merge: recomputes diffs per prefix and merges with the
-        auto-selected strategy. Each prefix's diffs are freed after merging.
-    Peak memory is ~one prefix's diffs at a time (~260MB) regardless of
-    the total number of LoRAs or weight prefixes.
-
-    Limitation: the optimizer only analyzes LoRAs in its own stack. It has
-    no visibility into LoRA patches already applied to the model by upstream
-    nodes (via Load LoRA, etc.). Those patches stack additively on top of
-    the optimizer's output, which could cause overexposure. Fully baked
-    merges (safetensors checkpoints) are indistinguishable from base weights
-    and cannot be detected at all.
-    """
-
-    def __init__(self):
-        self.loaded_loras = {}
-        self._merge_cache = {}  # single-entry: {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
-        self._detected_arch = None
-
     def _normalize_stack(self, lora_stack, normalize_keys="disabled"):
         """
         Normalize a LoRA stack into a consistent list of dicts.
@@ -1409,6 +1377,38 @@ class LoRAOptimizer(_LoRAMergeBase):
             self._detected_arch = None
 
         return normalized
+
+
+class LoRAOptimizer(_LoRAMergeBase):
+    """
+    Auto-optimizer that analyzes a LoRA stack (sign conflicts, magnitude
+    distributions, overlap) and automatically selects the best merge mode
+    and parameters, then performs the merge.
+
+    Outputs the merged model/clip plus an analysis report explaining
+    what was chosen and why.
+
+    Two-pass streaming architecture:
+      Pass 1 — Analysis: computes diffs per weight prefix, samples conflict
+        and magnitude statistics, then discards diffs immediately. Only
+        lightweight scalars and small sample tensors are kept in memory.
+      Pass 2 — Merge: recomputes diffs per prefix and merges with the
+        auto-selected strategy. Each prefix's diffs are freed after merging.
+    Peak memory is ~one prefix's diffs at a time (~260MB) regardless of
+    the total number of LoRAs or weight prefixes.
+
+    Limitation: the optimizer only analyzes LoRAs in its own stack. It has
+    no visibility into LoRA patches already applied to the model by upstream
+    nodes (via Load LoRA, etc.). Those patches stack additively on top of
+    the optimizer's output, which could cause overexposure. Fully baked
+    merges (safetensors checkpoints) are indistinguishable from base weights
+    and cannot be detected at all.
+    """
+
+    def __init__(self):
+        self.loaded_loras = {}
+        self._merge_cache = {}  # single-entry: {cache_key: (model_patches, clip_patches, report, clip_strength_out)}
+        self._detected_arch = None
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -2736,9 +2736,11 @@ class LoRAOptimizer(_LoRAMergeBase):
                 if has_conflict_modes:
                     # Unweighted sign voting (frequency method, consistent with TIES):
                     # each LoRA gets one vote per element regardless of strength.
+                    # Negative eff_strength flips the effective direction, so we
+                    # negate the sign vote accordingly.
                     sign_sum = torch.zeros_like(diffs_list[0][0])
-                    for diff, _ in diffs_list:
-                        sign_sum += diff.sign()
+                    for diff, weight in diffs_list:
+                        sign_sum += diff.sign() if weight >= 0 else -diff.sign()
                     majority_sign = torch.where(sign_sum >= 0, 1.0, -1.0)
 
                     masked_diffs = []
@@ -3152,11 +3154,15 @@ class LoRAConflictEditor(_LoRAMergeBase):
             resolved_strategy = merge_strategy if merge_strategy != "auto" else "weighted_average"
             return (enriched, report, resolved_strategy)
 
-        # Read per-LoRA conflict_mode widgets
+        # Read per-LoRA conflict_mode widgets, mapping by original stack position
+        # (not active-only index) so widgets align with what the user sees
         widget_modes = {}
-        for i, item in enumerate(active_loras):
-            widget_key = f"conflict_mode_{i + 1}"
-            widget_modes[i] = kwargs.get(widget_key, "auto")
+        active_idx = 0
+        for orig_idx, item in enumerate(normalized):
+            if item["strength"] != 0:
+                widget_key = f"conflict_mode_{orig_idx + 1}"
+                widget_modes[active_idx] = kwargs.get(widget_key, "auto")
+                active_idx += 1
 
         # --- 2. Collect all unique LoRA prefixes ---
         # Must match the optimizer's suffix list (line ~2330) for consistency
@@ -3245,6 +3251,11 @@ class LoRAConflictEditor(_LoRAMergeBase):
 
             # Free diffs for this prefix immediately
             del diffs
+
+        # Release GPU memory after analysis
+        compute_device = self._get_compute_device()
+        if compute_device.type != "cpu":
+            torch.cuda.empty_cache()
 
         # --- 4. Compute per-LoRA average conflict ratio ---
         per_lora_conflict_ratios = [0.0] * n_active
