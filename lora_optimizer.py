@@ -3067,8 +3067,6 @@ class LoRAConflictEditor(_LoRAMergeBase):
         Analyze pairwise conflicts in the LoRA stack, auto-suggest conflict
         modes, and return an enriched stack with the analysis report.
         """
-        import os
-
         # --- 1. Normalize and filter ---
         normalized = self._normalize_stack(lora_stack)
         active_loras = [item for item in normalized if item["strength"] != 0]
@@ -3077,6 +3075,28 @@ class LoRAConflictEditor(_LoRAMergeBase):
         if n_active == 0:
             return (lora_stack, "No active LoRAs in stack.", merge_strategy)
 
+        if n_active == 1:
+            # Single LoRA — no pairwise conflicts to analyze
+            cm = kwargs.get("conflict_mode_1", "auto")
+            resolved = "all" if cm == "auto" else cm
+            first = lora_stack[0]
+            if isinstance(first, dict):
+                enriched = [dict(active_loras[0], conflict_mode=resolved)]
+            else:
+                item = active_loras[0]
+                cs = item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
+                enriched = [(item["name"], item["strength"], cs, resolved)]
+            report = (
+                "=" * 46 + "\n"
+                "LORA CONFLICT EDITOR - ANALYSIS REPORT\n"
+                "=" * 46 + "\n\n"
+                f"Single LoRA: {active_loras[0]['name']}\n"
+                f"Conflict mode: {resolved}\n"
+                f"No pairwise conflicts to analyze."
+            )
+            resolved_strategy = merge_strategy if merge_strategy != "auto" else "weighted_average"
+            return (enriched, report, resolved_strategy)
+
         # Read per-LoRA conflict_mode widgets
         widget_modes = {}
         for i, item in enumerate(active_loras):
@@ -3084,21 +3104,20 @@ class LoRAConflictEditor(_LoRAMergeBase):
             widget_modes[i] = kwargs.get(widget_key, "auto")
 
         # --- 2. Collect all unique LoRA prefixes ---
+        # Must match the optimizer's suffix list (line ~2330) for consistency
         all_prefixes = set()
         suffixes_to_strip = [
             ".lora_up.weight", ".lora_down.weight",
             ".lora_A.weight", ".lora_B.weight",
             ".lora.up.weight", ".lora.down.weight",
             "_lora.up.weight", "_lora.down.weight",
-            ".lora_up", ".lora_down",
         ]
         for item in active_loras:
             for key in item["lora"].keys():
-                if "lora_up" in key or "lora_down" in key or "lora_A" in key or "lora_B" in key:
-                    for suffix in suffixes_to_strip:
-                        if key.endswith(suffix):
-                            all_prefixes.add(key[:-len(suffix)])
-                            break
+                for suffix in suffixes_to_strip:
+                    if key.endswith(suffix):
+                        all_prefixes.add(key[:-len(suffix)])
+                        break
 
         compute_device = self._get_compute_device()
 
@@ -3145,6 +3164,7 @@ class LoRAConflictEditor(_LoRAMergeBase):
                     mat_up.flatten(start_dim=1).float(),
                     mat_down.flatten(start_dim=1).float()
                 )
+                del mat_up, mat_down
                 diff = diff * scale * item["strength"]
 
                 if compute_device.type != "cpu":
