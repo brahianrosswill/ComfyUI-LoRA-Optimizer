@@ -26,7 +26,7 @@ A ComfyUI node that **automatically analyzes your LoRA stack** and selects the b
 ---
 
 <details>
-<summary><b>Should I Merge This LoRA?</b></summary>
+<summary><img src="https://img.shields.io/badge/Should_I_Merge_This_LoRA%3F-4a90d9?style=flat-square&labelColor=e8edf3" alt="Should I Merge This LoRA?"></summary>
 
 <p align="center"><img src="assets/merge-use-cases.png" width="720" alt="Should I merge this LoRA? Decision guide"></p>
 
@@ -76,7 +76,7 @@ Peak memory is ~one prefix at a time (~260MB) regardless of LoRA count or model 
 <p align="center"><img src="assets/optimizer-pipeline.svg" alt="Optimizer Pipeline" width="100%"></p>
 
 <details>
-<summary><b>What It Analyzes</b></summary>
+<summary><img src="https://img.shields.io/badge/What_It_Analyzes-4a90d9?style=flat-square&labelColor=e8edf3" alt="What It Analyzes"></summary>
 
 - Per-LoRA metrics (rank, key count, effective L2 norms)
 - Pairwise sign conflict ratios per prefix (sampled for efficiency)
@@ -105,7 +105,7 @@ This means non-overlapping regions keep 100% of their LoRA's effect, while genui
 <p align="center"><img src="assets/merge-strategies.svg" alt="Merge Strategies Comparison" width="100%"></p>
 
 <details>
-<summary><b>TIES Merging</b></summary>
+<summary><img src="https://img.shields.io/badge/TIES_Merging-4a90d9?style=flat-square&labelColor=e8edf3" alt="TIES Merging"></summary>
 
 The optimizer automatically selects TIES-Merging (Trim, Elect Sign, Disjoint Merge — [Yadav et al., NeurIPS 2023](https://arxiv.org/abs/2306.01708)) on prefixes where sign conflicts are detected between LoRAs.
 
@@ -114,7 +114,7 @@ The optimizer automatically selects TIES-Merging (Trim, Elect Sign, Disjoint Mer
 </details>
 
 <details>
-<summary><b>DARE / DELLA Sparsification</b></summary>
+<summary><img src="https://img.shields.io/badge/DARE_%2F_DELLA_Sparsification-4a90d9?style=flat-square&labelColor=e8edf3" alt="DARE / DELLA Sparsification"></summary>
 
 DARE and DELLA **sparsify each LoRA's diff before merging**, reducing parameter interference between LoRAs. Available in two modes: **standard** (drops weights everywhere) and **conflict-aware** (only drops weights where LoRAs actually interfere).
 
@@ -141,7 +141,7 @@ DARE and DELLA **sparsify each LoRA's diff before merging**, reducing parameter 
 </details>
 
 <details>
-<summary><b>Auto-Strength</b></summary>
+<summary><img src="https://img.shields.io/badge/Auto--Strength-4a90d9?style=flat-square&labelColor=e8edf3" alt="Auto-Strength"></summary>
 
 When `auto_strength` is set to `enabled`, the optimizer automatically reduces per-LoRA strengths before merging to prevent overexposure from stacking. This is especially useful on distilled/turbo models where 2+ LoRAs at full strength cause blown-out results even with optimal merge mode selection.
 
@@ -165,7 +165,7 @@ Your original strength ratios are always preserved — the algorithm only scales
 </details>
 
 <details>
-<summary><b>Architecture-Aware Key Normalization</b></summary>
+<summary><img src="https://img.shields.io/badge/Architecture--Aware_Key_Normalization-4a90d9?style=flat-square&labelColor=e8edf3" alt="Architecture-Aware Key Normalization"></summary>
 
 Different LoRA trainers (Kohya, AI-Toolkit, LyCORIS, diffusers/PEFT) produce LoRAs with **different key naming conventions** for the same model weights. When mixing LoRAs from different trainers, the optimizer sees no key overlap and cannot merge them correctly.
 
@@ -191,7 +191,7 @@ Key normalization auto-detects the model architecture from LoRA key patterns and
 </details>
 
 <details>
-<summary><b>SVD Patch Compression</b></summary>
+<summary><img src="https://img.shields.io/badge/SVD_Patch_Compression-4a90d9?style=flat-square&labelColor=e8edf3" alt="SVD Patch Compression"></summary>
 
 After merging, full-rank diff patches consume ~128x more RAM than standard LoRA patches (64MB vs 0.5MB per key for a 4096x4096 weight). The optimizer re-compresses merged patches to low-rank via truncated SVD, dramatically reducing post-merge RAM.
 
@@ -208,7 +208,7 @@ The compression rank is automatically computed as the sum of all input LoRA rank
 </details>
 
 <details>
-<summary><b>Optimization Modes</b></summary>
+<summary><img src="https://img.shields.io/badge/Optimization_Modes-4a90d9?style=flat-square&labelColor=e8edf3" alt="Optimization Modes"></summary>
 
 | Mode | Behavior |
 |------|----------|
@@ -219,7 +219,7 @@ The compression rank is automatically computed as the sum of all input LoRA rank
 </details>
 
 <details>
-<summary><b>Block Strategy Map</b></summary>
+<summary><img src="https://img.shields.io/badge/Block_Strategy_Map-4a90d9?style=flat-square&labelColor=e8edf3" alt="Block Strategy Map"></summary>
 
 The analysis report includes a visual block-by-block map showing what strategy was used and why:
 
@@ -236,7 +236,7 @@ The analysis report includes a visual block-by-block map showing what strategy w
 </details>
 
 <details>
-<summary><b>Memory Options</b></summary>
+<summary><img src="https://img.shields.io/badge/Memory_Options-4a90d9?style=flat-square&labelColor=e8edf3" alt="Memory Options"></summary>
 
 | Option | Default | Effect |
 |--------|---------|--------|
@@ -254,7 +254,7 @@ The analysis report includes a visual block-by-block map showing what strategy w
 **Outputs:** `MODEL`, `CLIP`, `STRING` (analysis report), `LORA_DATA` (for Save Merged LoRA / Merged LoRA to Hook)
 
 <details>
-<summary><b>Example Report</b></summary>
+<summary><img src="https://img.shields.io/badge/Example_Report-4a90d9?style=flat-square&labelColor=e8edf3" alt="Example Report"></summary>
 
 ```
 ==================================================
@@ -340,7 +340,7 @@ Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI
 </details>
 
 <details>
-<summary><b>Important notes & limitations</b></summary>
+<summary><img src="https://img.shields.io/badge/Important_notes_%26_limitations-4a90d9?style=flat-square&labelColor=e8edf3" alt="Important notes & limitations"></summary>
 
 > **Structural & Edit LoRAs:** Do not put distillation LoRAs (LCM, Lightning, Turbo, Hyper), DPO LoRAs, or **edit model LoRAs** (Qwen edit, Klein edit, instruction-editing LoRAs) in the optimizer stack. These LoRAs modify the model's fundamental behavior — their weights are precisely calibrated and merging them with style LoRAs can break their training. Apply them via a standard **Load LoRA** node upstream, then feed only your style/character LoRAs into the optimizer. If you must include an edit LoRA in the stack, use `weighted_sum_only` mode and disable sparsification to avoid weight trimming.
 
@@ -351,7 +351,7 @@ Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI
 ---
 
 <details>
-<summary><b>Save Merged LoRA</b></summary>
+<summary><img src="https://img.shields.io/badge/Save_Merged_LoRA-4a90d9?style=flat-square&labelColor=e8edf3" alt="Save Merged LoRA"></summary>
 
 Saves the optimizer's merged result as a standalone `.safetensors` file that works with any standard LoRA loader.
 
@@ -370,7 +370,7 @@ Connect the `LORA_DATA` output from LoRA Optimizer to this node.
 ---
 
 <details>
-<summary><b>Merged LoRA to Hook</b></summary>
+<summary><img src="https://img.shields.io/badge/Merged_LoRA_to_Hook-4a90d9?style=flat-square&labelColor=e8edf3" alt="Merged LoRA to Hook"></summary>
 
 Wraps the optimizer's merged patches as a **conditioning hook** (`HOOKS`) for per-conditioning LoRA application. Instead of applying the merged LoRA globally to the model, you can attach it to specific conditioning entries using ComfyUI's hook system.
 
@@ -401,7 +401,7 @@ The `prev_hooks` input allows chaining multiple hook sources together.
 ---
 
 <details>
-<summary><b>WanVideo LoRA Optimizer</b></summary>
+<summary><img src="https://img.shields.io/badge/WanVideo_LoRA_Optimizer-4a90d9?style=flat-square&labelColor=e8edf3" alt="WanVideo LoRA Optimizer"></summary>
 
 Variant of the LoRA Optimizer for **WanVideo models** (via [kijai's WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)). Accepts `WANVIDEOMODEL` instead of `MODEL`, skips CLIP, and applies merged patches in-memory.
 
@@ -440,7 +440,7 @@ WanVideoLoraSelect → WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA O
 Search for "LoRA Optimizer" in ComfyUI Manager and install.
 
 <details>
-<summary><b>Manual install</b></summary>
+<summary><img src="https://img.shields.io/badge/Manual_install-4a90d9?style=flat-square&labelColor=e8edf3" alt="Manual install"></summary>
 
 ```bash
 cd ComfyUI/custom_nodes/
@@ -451,7 +451,7 @@ Restart ComfyUI. Nodes appear under the `loaders` category.
 </details>
 
 <details>
-<summary><b>Compatibility</b></summary>
+<summary><img src="https://img.shields.io/badge/Compatibility-4a90d9?style=flat-square&labelColor=e8edf3" alt="Compatibility"></summary>
 
 - **Models:** SD 1.5, SDXL, Flux, Z-Image (Lumina2), Wan 2.1/2.2, LTX Video, Qwen-Image, and other architectures supported by ComfyUI
 - **LoRA formats:** Standard LoRA, LoCon, LyCORIS, diffusers/PEFT formats
@@ -463,7 +463,7 @@ Restart ComfyUI. Nodes appear under the `loaders` category.
 </details>
 
 <details>
-<summary><b>Credits</b></summary>
+<summary><img src="https://img.shields.io/badge/Credits-4a90d9?style=flat-square&labelColor=e8edf3" alt="Credits"></summary>
 
 - Originally based on [ComfyUI-ZImage-LoRA-Merger](https://github.com/DanrisiUA/ComfyUI-ZImage-LoRA-Merger) by DanrisiUA
 - Per-prefix adaptive approach inspired by [comfyUI-Realtime-Lora](https://github.com/shootthesound/comfyUI-Realtime-Lora) by shootthesound (per-block LoRA analysis)
@@ -471,6 +471,13 @@ Restart ComfyUI. Nodes appear under the `loaders` category.
 - TIES-Merging: [Yadav et al., NeurIPS 2023](https://arxiv.org/abs/2306.01708)
 - DARE: [Yu et al., ICML 2024](https://arxiv.org/abs/2311.03099) — Drop And REscale for language model merging
 - DELLA: [Deep et al., 2024](https://arxiv.org/abs/2406.11617) — magnitude-aware sparsification
+
+</details>
+
+<details>
+<summary><img src="https://img.shields.io/badge/Development_Timeline-4a90d9?style=flat-square&labelColor=e8edf3" alt="Development Timeline"></summary>
+
+<p align="center"><img src="assets/timeline.svg" alt="Development Timeline" width="720"></p>
 
 </details>
 
