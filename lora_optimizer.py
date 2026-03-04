@@ -53,7 +53,7 @@ class LoRAStack:
     RETURN_TYPES = ("LORA_STACK",)
     RETURN_NAMES = ("lora_stack",)
     FUNCTION = "add_to_stack"
-    CATEGORY = "loaders/lora"
+    CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Adds a LoRA to the stack for use with LoRA Optimizer"
     
     def add_to_stack(self, lora_name, strength, conflict_mode="all", lora_stack=None):
@@ -140,7 +140,7 @@ class LoRAStackDynamic:
     RETURN_TYPES = ("LORA_STACK",)
     RETURN_NAMES = ("lora_stack",)
     FUNCTION = "build_stack"
-    CATEGORY = "loaders/lora"
+    CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Dynamic LoRA stacker with adjustable slot count and optional per-LoRA CLIP strength"
 
     @staticmethod
@@ -1543,7 +1543,7 @@ class LoRAOptimizer(_LoRAMergeBase):
     RETURN_TYPES = ("MODEL", "CLIP", "STRING", "LORA_DATA")
     RETURN_NAMES = ("model", "clip", "analysis_report", "lora_data")
     FUNCTION = "optimize_merge"
-    CATEGORY = "loaders/lora"
+    CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Auto-analyzes LoRA stack and selects optimal merge strategy per weight group. Outputs merged model + analysis report. Best for style/character LoRAs — apply edit, distillation (LCM/Turbo/Hyper), or DPO LoRAs via a standard Load LoRA node instead."
 
     @staticmethod
@@ -3041,7 +3041,7 @@ class WanVideoLoRAOptimizer(LoRAOptimizer):
 
     RETURN_TYPES = ("WANVIDEOMODEL", "STRING", "LORA_DATA")
     RETURN_NAMES = ("model", "analysis_report", "lora_data")
-    CATEGORY = "loaders/lora"
+    CATEGORY = "LoRA Optimizer"
     DESCRIPTION = (
         "WanVideo LoRA Optimizer — merges multiple WanVideo LoRAs using "
         "conflict-aware algorithms (TIES, DARE, auto-strength). "
@@ -3095,7 +3095,7 @@ class SaveMergedLoRA:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("file_path",)
     FUNCTION = "save_lora"
-    CATEGORY = "loaders/lora"
+    CATEGORY = "LoRA Optimizer"
     OUTPUT_NODE = True
     DESCRIPTION = "Saves merged LoRA data as a standalone .safetensors file that can be loaded by any standard LoRA loader."
 
@@ -3193,7 +3193,7 @@ class MergedLoRAToHook:
     RETURN_TYPES = ("HOOKS",)
     RETURN_NAMES = ("hooks",)
     FUNCTION = "convert"
-    CATEGORY = "loaders"
+    CATEGORY = "LoRA Optimizer"
     DESCRIPTION = (
         "Wraps merged LoRA patches as a conditioning hook (HOOKS). "
         "Connect to 'Cond Set Props' or similar nodes to apply the merged LoRA "
@@ -3288,7 +3288,7 @@ class LoRAConflictEditor(_LoRAMergeBase):
     RETURN_TYPES = ("LORA_STACK", "STRING", "STRING")
     RETURN_NAMES = ("lora_stack", "analysis_report", "merge_strategy")
     FUNCTION = "analyze_and_enrich"
-    CATEGORY = "loaders/lora"
+    CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Analyzes LoRA conflicts and lets you control per-LoRA conflict modes and merge strategy. Connect between a LoRA Stack and the LoRA Optimizer."
 
     def __init__(self):
