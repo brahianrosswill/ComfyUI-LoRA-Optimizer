@@ -1464,6 +1464,11 @@ class LoRAOptimizer(_LoRAMergeBase):
                                "At 1.0, no weights are dropped (equivalent to disabled). "
                                "Note: in TIES mode, sparsification replaces the trim step — setting density to 1.0 disables both sparsification AND trimming."
                 }),
+                "merge_strategy_override": ("STRING", {
+                    "default": "",
+                    "forceInput": True,
+                    "tooltip": "Connect the merge_strategy output from a LoRA Conflict Editor to override the optimizer's auto-detected strategy."
+                }),
             }
         }
 
@@ -1474,7 +1479,7 @@ class LoRAOptimizer(_LoRAMergeBase):
     DESCRIPTION = "Auto-analyzes LoRA stack and selects optimal merge strategy per weight group. Outputs merged model + analysis report. Best for style/character LoRAs — apply edit, distillation (LCM/Turbo/Hyper), or DPO LoRAs via a standard Load LoRA node instead."
 
     @staticmethod
-    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7):
+    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, merge_strategy_override=""):
         """
         Build a deterministic SHA-256 hash (16 hex chars) from the stack
         configuration. Used by IS_CHANGED to let ComfyUI skip re-execution
@@ -1494,7 +1499,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm))
             entries.sort()
             h.update(json.dumps(entries).encode())
-        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}".encode())
+        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}|mso={merge_strategy_override}".encode())
         return h.hexdigest()[:16]
 
     @classmethod
@@ -1503,12 +1508,14 @@ class LoRAOptimizer(_LoRAMergeBase):
                    free_vram_between_passes="disabled", optimization_mode="per_prefix",
                    cache_patches="enabled", compress_patches="non_ties",
                    svd_device="gpu", normalize_keys="disabled",
-                   sparsification="disabled", sparsification_density=0.7):
+                   sparsification="disabled", sparsification_density=0.7,
+                   merge_strategy_override=""):
         return cls._compute_cache_key(lora_stack, output_strength,
                                       clip_strength_multiplier, auto_strength,
                                       optimization_mode, compress_patches,
                                       svd_device, normalize_keys,
-                                      sparsification, sparsification_density)
+                                      sparsification, sparsification_density,
+                                      merge_strategy_override)
 
     def _save_report_to_disk(self, cache_key, lora_combo, auto_strength, report, selected_params):
         """
@@ -2246,7 +2253,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         lines.append("=" * 50)
         return "\n".join(lines)
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, merge_strategy_override=""):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
@@ -2300,7 +2307,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                                             clip_strength_multiplier, auto_strength,
                                             optimization_mode, compress_patches,
                                             svd_device, normalize_keys,
-                                            sparsification, sparsification_density)
+                                            sparsification, sparsification_density,
+                                            merge_strategy_override)
         if cache_patches == "enabled" and cache_key in self._merge_cache:
             model_patches, clip_patches, report, clip_strength_out, lora_data = self._merge_cache[cache_key]
             new_model = model
@@ -2511,6 +2519,11 @@ class LoRAOptimizer(_LoRAMergeBase):
         )
         del all_magnitude_samples
 
+        # Apply merge strategy override from Conflict Editor
+        if merge_strategy_override and merge_strategy_override in ("ties", "weighted_average", "weighted_sum"):
+            mode = merge_strategy_override
+            reasoning.append(f"Merge mode overridden to '{mode}' by Conflict Editor")
+
         logging.info(f"[LoRA Optimizer] Decision: {mode} (conflict {avg_conflict_ratio:.1%} "
                      f"{'>' if avg_conflict_ratio > 0.25 else '<='} 25% threshold)")
         if mode == "ties":
@@ -2627,6 +2640,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     # SLERP preserves magnitude better (no cancellation from opposing vectors)
                     if pf_mode == "weighted_average" and pf["n_loras"] == 2:
                         pf_mode = "slerp"
+
+            # Apply merge strategy override from Conflict Editor (takes priority over all auto-selection)
+            if merge_strategy_override and merge_strategy_override in ("ties", "weighted_average", "weighted_sum"):
+                pf_mode = merge_strategy_override
 
             # LOW-RANK PATH: single-LoRA weighted_sum — keep low-rank matrices
             # instead of expanding to full-rank diff. Saves ~128x memory per key.
