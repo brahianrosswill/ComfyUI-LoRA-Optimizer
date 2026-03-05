@@ -90,12 +90,12 @@ function syncLoraValues(node, toText) {
 }
 
 function updateVisibility(node) {
-    const strengthModeWidget = findWidget(node, "strength_mode");
+    const settingsVisWidget = findWidget(node, "settings_visibility");
     const inputModeWidget = findWidget(node, "input_mode");
     const countWidget = findWidget(node, "lora_count");
-    if (!strengthModeWidget || !inputModeWidget || !countWidget) return;
+    if (!settingsVisWidget || !inputModeWidget || !countWidget) return;
 
-    const isSimple = strengthModeWidget.value === "simple";
+    const isSimple = settingsVisWidget.value === "simple";
     const isText = inputModeWidget.value === "text";
     const count = countWidget.value;
     const MAX = 10;
@@ -276,14 +276,14 @@ app.registerExtension({
     nodeCreated(node) {
         if (node.comfyClass !== "LoRAStackDynamic") return;
 
-        // Intercept strength_mode, input_mode, and lora_count changes to update visibility
+        // Intercept settings_visibility, input_mode, and lora_count changes to update visibility
         for (const w of node.widgets || []) {
             if (w.name === "input_mode") {
                 interceptWidgetValue(w, (newVal) => {
                     syncLoraValues(node, newVal === "text");
                     updateVisibility(node);
                 });
-            } else if (w.name === "strength_mode" || w.name === "lora_count") {
+            } else if (w.name === "settings_visibility" || w.name === "lora_count") {
                 interceptWidgetValue(w, () => updateVisibility(node));
             }
         }
