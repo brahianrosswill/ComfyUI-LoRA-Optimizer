@@ -1489,6 +1489,81 @@ class _LoRAMergeBase:
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
+        elif mode == "consensus":
+            # Consensus merge: Fisher-proxy + MAGIC calibration + MonoSoup spectral cleanup
+            # Optimized for similar LoRAs (high cosine similarity, low conflict)
+
+            # Step 1: Fisher-Proxy weighted merge
+            # Weight each parameter by |diff|^2 as importance proxy
+            numerator = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
+            denominator = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
+            input_norms = []
+            abs_weight_list = []
+
+            for idx in range(len(diffs_with_weights)):
+                d, w = diffs_with_weights[idx]
+                diffs_with_weights[idx] = None  # Free early
+                d_f = d.to(device=dev, dtype=torch.float32)
+                del d
+                importance = d_f.square()
+                aw = abs(w)
+                numerator.add_(d_f * w * importance)
+                denominator.add_(aw * importance)
+                input_norms.append(d_f.norm().item() * aw)
+                abs_weight_list.append(aw)
+                del d_f, importance
+
+            # Safe division (zero importance → zero result)
+            result = torch.where(denominator > 0, numerator / denominator, torch.zeros_like(numerator))
+            del numerator, denominator
+
+            # Step 2: MAGIC magnitude calibration
+            # Rescale merged result so L2 norm matches weighted average of input norms
+            merged_norm = result.norm().item()
+            total_aw = sum(abs_weight_list)
+            if total_aw > 0 and merged_norm > 1e-8:
+                target_norm = sum(input_norms) / total_aw
+                result.mul_(target_norm / merged_norm)
+            del input_norms, abs_weight_list
+
+            # Step 3: MonoSoup spectral cleanup (2D+ weights only)
+            if result.dim() >= 2 and min(result.shape) >= 4:
+                mat = result.reshape(result.shape[0], -1)
+                try:
+                    rank_budget = min(min(mat.shape), 128)
+                    U, S, V = torch.svd_lowrank(mat, q=rank_budget)
+
+                    # Entropy-based effective rank
+                    s_sum = S.sum()
+                    if s_sum < 1e-10:
+                        del U, S, V, mat
+                        raise RuntimeError("zero singular values")
+                    p = S / s_sum
+                    p = p.clamp(min=1e-10)  # avoid log(0)
+                    entropy = -(p * p.log()).sum().item()
+                    eff_rank = min(int(math.exp(entropy) + 0.5), rank_budget)
+                    eff_rank = max(eff_rank, 1)
+
+                    # Soft spectral gate: smooth transition instead of hard cutoff
+                    gate = torch.sigmoid(4.0 * (torch.arange(rank_budget, device=dev, dtype=torch.float32) - eff_rank) * (-1.0 / max(eff_rank, 1)))
+                    S_gated = S * gate
+
+                    # Preserve original norm (spectral cleanup shouldn't change magnitude)
+                    pre_norm = result.norm()
+                    result = (U * S_gated.unsqueeze(0)) @ V.T
+                    result = result.reshape(ref_diff.shape)
+                    post_norm = result.norm()
+                    if post_norm > 1e-8:
+                        result.mul_(pre_norm / post_norm)
+                    del U, S, V, S_gated, gate, mat
+                except (RuntimeError, torch.cuda.OutOfMemoryError):
+                    pass  # SVD failed, skip spectral cleanup
+
+            if selfish_additions is not None:
+                result = result + selfish_additions.to(device=result.device, dtype=torch.float32)
+            result = result.to(dtype)
+            return result.cpu() if to_cpu else result
+
         elif mode == "ties":
             # TIES-Merging: Trim, Elect Sign, Disjoint Merge
             # Pre-multiply diffs by sign(weight) so negative strengths vote correctly,
@@ -2304,7 +2379,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             return meaningful[0]
         return prefix[:30]
 
-    def _auto_select_params(self, avg_conflict_ratio, magnitude_ratio, all_key_diffs=None, magnitude_samples=None):
+    def _auto_select_params(self, avg_conflict_ratio, magnitude_ratio, all_key_diffs=None, magnitude_samples=None, avg_cos_sim=0.0):
         """
         Decision logic for auto-selecting merge parameters.
         Returns (mode, density, sign_method, reasoning_lines).
@@ -2313,6 +2388,15 @@ class LoRAOptimizer(_LoRAMergeBase):
         or magnitude_samples (streaming path).
         """
         reasoning = []
+
+        # High similarity + low conflict → consensus mode (Fisher-proxy + magnitude calibration)
+        if avg_cos_sim > 0.5 and avg_conflict_ratio < 0.15:
+            mode = "consensus"
+            reasoning.append(f"Cosine similarity {avg_cos_sim:.2f} > 0.5 and conflict {avg_conflict_ratio:.1%} < 15% -> consensus mode")
+            reasoning.append("  Fisher-proxy importance weighting + magnitude calibration + spectral cleanup")
+            density = 0.5  # unused
+            sign_method = "frequency"  # unused
+            return (mode, density, sign_method, reasoning)
 
         # Select mode based on sign conflict
         if avg_conflict_ratio > 0.25:
@@ -2473,6 +2557,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                 if strategy_counts.get("weighted_average", 0) > 0:
                     n = strategy_counts["weighted_average"]
                     lines.append(f"  weighted_average (low conflict):  {n:>4} prefixes ({n/total_pf:.0%})")
+                if strategy_counts.get("consensus", 0) > 0:
+                    n = strategy_counts["consensus"]
+                    lines.append(f"  consensus (high similarity):     {n:>4} prefixes ({n/total_pf:.0%})")
                 if strategy_counts.get("ties", 0) > 0:
                     n = strategy_counts["ties"]
                     lines.append(f"  ties (high conflict):            {n:>4} prefixes ({n/total_pf:.0%})")
@@ -2490,7 +2577,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             # Aggregate per block: dominant strategy, avg conflict, max n_loras
             # Priority-based dominant: ties > slerp > avg > sum (show most interesting)
-            mode_priority = {"ties": 3, "slerp": 2, "weighted_average": 1, "weighted_sum": 0}
+            mode_priority = {"ties": 4, "consensus": 3, "slerp": 2, "weighted_average": 1, "weighted_sum": 0}
             block_summary = []
             for block_name, entries in block_data.items():
                 modes = [e[0] for e in entries]
@@ -2512,8 +2599,8 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             lines.append("")
             lines.append("--- Block Strategy Map ---")
-            symbols = {"weighted_sum": "====", "slerp": "~~~~", "weighted_average": "----", "ties": "####"}
-            labels = {"weighted_sum": "sum", "slerp": "slrp", "weighted_average": "avg", "ties": "TIES"}
+            symbols = {"weighted_sum": "====", "slerp": "~~~~", "weighted_average": "----", "ties": "####", "consensus": "++++"}
+            labels = {"weighted_sum": "sum", "slerp": "slrp", "weighted_average": "avg", "ties": "TIES", "consensus": "cons"}
             # Find max block name length for alignment
             max_name = max(len(b[0]) for b in block_summary) if block_summary else 10
             for block_name, dominant, avg_conflict, n_loras_max, n_prefixes, mode_counts in block_summary:
@@ -2524,13 +2611,13 @@ class LoRAOptimizer(_LoRAMergeBase):
                 else:
                     # Show breakdown when block has mixed strategies
                     parts = []
-                    for m in ("weighted_sum", "weighted_average", "slerp", "ties"):
+                    for m in ("weighted_sum", "weighted_average", "slerp", "consensus", "ties"):
                         if mode_counts.get(m, 0) > 0:
                             parts.append(f"{mode_counts[m]} {labels.get(m, m)}")
                     detail = f"{avg_conflict:.0%} conflict ({', '.join(parts)})"
                 count_str = f"({n_prefixes}x)" if n_prefixes > 1 else ""
                 lines.append(f"  {block_name:<{max_name}}  {sym}  {lbl:<5} {detail} {count_str}")
-            lines.append(f"  Legend: ==== sum  ~~~~ slerp  ---- avg  #### TIES")
+            lines.append(f"  Legend: ==== sum  ~~~~ slerp  ---- avg  ++++ cons  #### TIES")
 
         # Reasoning
         lines.append("")
@@ -2714,11 +2801,20 @@ class LoRAOptimizer(_LoRAMergeBase):
                 else:
                     pf_mag_ratio = 1.0
 
+                # Per-prefix average cosine similarity
+                pf_cos_sims = []
+                for (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.values():
+                    denom = (na_sq ** 0.5) * (nb_sq ** 0.5)
+                    if denom > 0:
+                        pf_cos_sims.append(dot / denom)
+                avg_cos_sim = sum(pf_cos_sims) / len(pf_cos_sims) if pf_cos_sims else 0.0
+
                 prefix_stats[prefix] = {
                     "n_loras": n_contributing,
                     "conflict_ratio": pf_conflict_ratio,
                     "magnitude_ratio": pf_mag_ratio,
                     "magnitude_samples": list(mag_samples),  # copy, not reference
+                    "avg_cos_sim": avg_cos_sim,
                 }
 
         if use_gpu:
@@ -2822,7 +2918,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Apply merge strategy override from Conflict Editor
         # Skip when user explicitly chose weighted_sum_only (protects DPO/edit LoRAs)
         if merge_strategy_override and optimization_mode != "weighted_sum_only":
-            if merge_strategy_override in ("ties", "weighted_average", "weighted_sum"):
+            if merge_strategy_override in ("ties", "weighted_average", "weighted_sum", "consensus"):
                 mode = merge_strategy_override
                 reasoning.append(f"Merge mode overridden to '{mode}' by Conflict Editor")
             else:
@@ -2892,7 +2988,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         clip_patches = {}
         processed_keys = 0
         compressed_count = 0
-        strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "slerp": 0, "ties": 0}
+        strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "slerp": 0, "ties": 0, "consensus": 0}
         prefix_decisions = []  # list of (prefix, mode, conflict_ratio, n_loras) for block map
 
         def _merge_one_prefix(lora_prefix, target_key, is_clip_key):
@@ -2938,7 +3034,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 else:
                     pf_mode, pf_density, pf_sign, _ = self._auto_select_params(
                         pf["conflict_ratio"], pf["magnitude_ratio"],
-                        magnitude_samples=pf.get("magnitude_samples")
+                        magnitude_samples=pf.get("magnitude_samples"),
+                        avg_cos_sim=pf.get("avg_cos_sim", 0.0)
                     )
                     # Upgrade weighted_average → slerp for exactly 2 LoRAs
                     # SLERP preserves magnitude better (no cancellation from opposing vectors)
@@ -2948,7 +3045,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             # Apply merge strategy override from Conflict Editor (takes priority over auto-selection)
             # Skip when user explicitly chose weighted_sum_only (protects DPO/edit LoRAs)
             if (merge_strategy_override and optimization_mode != "weighted_sum_only"
-                    and merge_strategy_override in ("ties", "weighted_average", "weighted_sum")):
+                    and merge_strategy_override in ("ties", "weighted_average", "weighted_sum", "consensus")):
                 pf_mode = merge_strategy_override
 
             # LOW-RANK PATH: single-LoRA weighted_sum — keep low-rank matrices
@@ -3152,6 +3249,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                          f"{strategy_counts.get('weighted_sum', 0)} sum, "
                          f"{strategy_counts.get('slerp', 0)} slerp, "
                          f"{strategy_counts.get('weighted_average', 0)} avg, "
+                         f"{strategy_counts.get('consensus', 0)} cons, "
                          f"{strategy_counts.get('ties', 0)} ties")
         if compressed_count > 0:
             passthrough_count = lowrank_count - compressed_count
@@ -3510,11 +3608,12 @@ class LoRAConflictEditor(_LoRAMergeBase):
                 "lora_stack": ("LORA_STACK", {
                     "tooltip": "Connect a LoRA Stack node here. The editor will analyze conflicts between these LoRAs."
                 }),
-                "merge_strategy": (["auto", "ties", "weighted_average", "weighted_sum"], {
+                "merge_strategy": (["auto", "ties", "consensus", "weighted_average", "weighted_sum"], {
                     "default": "auto",
                     "tooltip": "Merge strategy to pass to the optimizer. "
                                "'auto': let the optimizer decide based on conflict analysis. "
                                "'ties': force TIES merging (good for high-conflict stacks). "
+                               "'consensus': force Fisher-proxy + magnitude calibration + spectral cleanup (good for highly similar LoRAs). "
                                "'weighted_average': force simple averaging (good for compatible LoRAs). "
                                "'weighted_sum': force direct addition (preserves all weights exactly)."
                 }),
