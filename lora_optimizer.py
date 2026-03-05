@@ -3914,9 +3914,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             if norm_ratio < 1.0:
                 suggested_max_strength = min(1.0 / norm_ratio, arch_preset["suggested_max_strength_cap"])
 
-        # Free analysis data no longer needed
-        prefix_stats.clear()
-        self.loaded_loras.clear()
+        # Free analysis data no longer needed (skip when AutoTuner owns the data)
+        if _analysis_cache is None:
+            prefix_stats.clear()
+            self.loaded_loras.clear()
         if use_gpu:
             torch.cuda.empty_cache()
 
@@ -4354,6 +4355,12 @@ class LoRAAutoTuner(LoRAOptimizer):
                          f"{' +' + c['sparsification'] if c['sparsification'] != 'disabled' else ''}"
                          f" auto_str={c['auto_strength']} {c['optimization_mode']}")
 
+        # Free magnitude samples — only needed for Phase 1 density estimation
+        _analysis_cache["all_magnitude_samples"] = []
+        for pf in prefix_stats.values():
+            pf.pop("magnitude_samples", None)
+        gc.collect()
+
         # --- Phase 2: Merge top-N and measure ---
         # Only keep the current best in memory to avoid accumulating ~40GB per candidate.
         top_candidates = scored[:top_n]
@@ -4421,6 +4428,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                 # Discard this candidate's heavy objects immediately
                 del merged_model, merged_clip, lora_data
             gc.collect()
+            if use_gpu:
+                torch.cuda.empty_cache()
 
             results.append({
                 "rank": rank_idx + 1,
@@ -4437,6 +4446,11 @@ class LoRAAutoTuner(LoRAOptimizer):
 
         del all_magnitude_samples
         del _analysis_cache
+        prefix_stats.clear()
+        self.loaded_loras.clear()
+        gc.collect()
+        if use_gpu:
+            torch.cuda.empty_cache()
 
         # Sort by measured score
         results.sort(key=lambda x: x["score_measured"], reverse=True)
