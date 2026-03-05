@@ -264,6 +264,27 @@ Key normalization auto-detects the model architecture from LoRA key patterns and
 </details>
 
 <details>
+<summary><b>Architecture-Aware Behavior Profiles</b></summary>
+
+All numeric thresholds in the optimizer (density estimation, conflict detection, auto-strength scaling, scoring heuristics) are tuned per architecture family. The `architecture_preset` setting selects the appropriate thresholds — `auto` detects from LoRA key patterns.
+
+| Preset | Architectures | Key Differences |
+|--------|--------------|-----------------|
+| `sd_unet` | SD 1.5, SDXL | Density range [0.1, 0.9], noise floor 10%, max strength cap 3.0 |
+| `dit` | Flux, WAN, Z-Image, LTX, HunyuanVideo | Density range [0.4, 0.95], noise floor 5%, max strength cap 5.0 |
+| `llm` | Qwen-Image, LLaMA-based | Density range [0.1, 0.8], noise floor 15%, max strength cap 3.0 |
+
+**Why it matters:** DiT architectures have denser weight distributions than UNet — with UNet thresholds, the optimizer underestimates density and clips suggested strength too aggressively. LLM-based models are sparser and benefit from lower density ceilings.
+
+| Setting | Default | Options |
+|---------|---------|---------|
+| `architecture_preset` | auto | `auto`, `sd_unet`, `dit`, `llm`. Auto-detection uses the same key pattern matching as key normalization |
+
+**Note:** This is orthogonal to `behavior_profile` (which controls *strategy features* like consensus mode and SLERP upgrade). Architecture preset controls the *numeric thresholds* those strategies use.
+
+</details>
+
+<details>
 <summary><b>SVD Patch Compression</b></summary>
 
 After merging, full-rank diff patches consume ~128x more RAM than standard LoRA patches (64MB vs 0.5MB per key for a 4096x4096 weight). The optimizer re-compresses merged patches to low-rank via truncated SVD, dramatically reducing post-merge RAM.
@@ -322,7 +343,7 @@ The analysis report includes a visual block-by-block map showing what strategy w
 
 #### Inputs / Outputs
 
-**Inputs (Advanced):** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, optimization mode, merge quality, cache patches, compress patches, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density, DARE dampening.
+**Inputs (Advanced):** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, optimization mode, merge quality, behavior profile, architecture preset, cache patches, compress patches, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density, DARE dampening.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (analysis report), `LORA_DATA` (for Save Merged LoRA / Merged LoRA to Hook)
 
@@ -333,6 +354,7 @@ The analysis report includes a visual block-by-block map showing what strategy w
 ==================================================
 LORA OPTIMIZER - ANALYSIS REPORT
 ==================================================
+Architecture preset: sd_unet (SD/SDXL UNet)
 
 --- Per-LoRA Analysis ---
   style_lora.safetensors:
@@ -502,6 +524,7 @@ WanVideoLoraSelect → WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA O
 **Key defaults differ from the standard optimizer:**
 - `normalize_keys` = **enabled** — WanVideo LoRAs come from many trainers, normalization is commonly needed
 - `cache_patches` = **disabled** — video models are large, caching uses significant RAM
+- `architecture_preset` = **dit** — DiT-tuned thresholds (higher density floor, wider strength range)
 
 </details>
 
