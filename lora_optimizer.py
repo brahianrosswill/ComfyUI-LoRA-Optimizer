@@ -1736,6 +1736,50 @@ class _LoRAMergeBase:
 
         return normalized
 
+    def _sample_conflict(self, diff_a, diff_b, device=None):
+        """
+        Compute sign conflict ratio and cosine similarity components between
+        two diff tensors. Samples up to 100k positions for large tensors.
+        Returns (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq).
+        """
+        # Avoid unnecessary .float() copies — diffs from _analyze_prefix are already float32
+        flat_a = diff_a.flatten()
+        flat_b = diff_b.flatten()
+        if device is not None:
+            flat_a = flat_a.to(device=device, dtype=torch.float32)
+            flat_b = flat_b.to(device=device, dtype=torch.float32)
+        elif flat_a.dtype != torch.float32:
+            flat_a = flat_a.float()
+            flat_b = flat_b.float()
+
+        if flat_a.numel() != flat_b.numel():
+            return (0, 0, 0.0, 0.0, 0.0)
+
+        n = flat_a.numel()
+        if n > 100000:
+            target_device = flat_a.device
+            g = torch.Generator(device=target_device).manual_seed(42)
+            indices = torch.randperm(n, device=target_device, generator=g)[:100000]
+            flat_a = flat_a[indices]
+            flat_b = flat_b[indices]
+
+        # Only consider positions where both are non-zero
+        mask = (flat_a != 0) & (flat_b != 0)
+        n_overlap = mask.sum().item()
+        if n_overlap == 0:
+            return (0, 0, 0.0, 0.0, 0.0)
+
+        a_overlap = flat_a[mask]
+        b_overlap = flat_b[mask]
+        n_conflict = (a_overlap.sign() != b_overlap.sign()).sum().item()
+
+        # Cosine similarity components (on overlap region)
+        dot = (a_overlap * b_overlap).sum().item()
+        norm_a_sq = (a_overlap * a_overlap).sum().item()
+        norm_b_sq = (b_overlap * b_overlap).sum().item()
+
+        return (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq)
+
 
 class LoRAOptimizer(_LoRAMergeBase):
     """
@@ -1908,50 +1952,6 @@ class LoRAOptimizer(_LoRAMergeBase):
         except Exception as e:
             logging.warning(f"[LoRA Optimizer] Failed to save report: {e}")
             return None
-
-    def _sample_conflict(self, diff_a, diff_b, device=None):
-        """
-        Compute sign conflict ratio and cosine similarity components between
-        two diff tensors. Samples up to 100k positions for large tensors.
-        Returns (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq).
-        """
-        # Avoid unnecessary .float() copies — diffs from _analyze_prefix are already float32
-        flat_a = diff_a.flatten()
-        flat_b = diff_b.flatten()
-        if device is not None:
-            flat_a = flat_a.to(device=device, dtype=torch.float32)
-            flat_b = flat_b.to(device=device, dtype=torch.float32)
-        elif flat_a.dtype != torch.float32:
-            flat_a = flat_a.float()
-            flat_b = flat_b.float()
-
-        if flat_a.numel() != flat_b.numel():
-            return (0, 0, 0.0, 0.0, 0.0)
-
-        n = flat_a.numel()
-        if n > 100000:
-            target_device = flat_a.device
-            g = torch.Generator(device=target_device).manual_seed(42)
-            indices = torch.randperm(n, device=target_device, generator=g)[:100000]
-            flat_a = flat_a[indices]
-            flat_b = flat_b[indices]
-
-        # Only consider positions where both are non-zero
-        mask = (flat_a != 0) & (flat_b != 0)
-        n_overlap = mask.sum().item()
-        if n_overlap == 0:
-            return (0, 0, 0.0, 0.0, 0.0)
-
-        a_overlap = flat_a[mask]
-        b_overlap = flat_b[mask]
-        n_conflict = (a_overlap.sign() != b_overlap.sign()).sum().item()
-
-        # Cosine similarity components (on overlap region)
-        dot = (a_overlap * b_overlap).sum().item()
-        norm_a_sq = (a_overlap * a_overlap).sum().item()
-        norm_b_sq = (b_overlap * b_overlap).sum().item()
-
-        return (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq)
 
     def _process_prefix(self, lora_prefix, active_loras, model_keys, clip_keys,
                         model, clip, device):
