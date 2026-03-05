@@ -3124,8 +3124,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             else:
                 logging.warning(f"[LoRA Optimizer] Invalid merge_strategy_override '{merge_strategy_override}' — ignoring")
 
-        logging.info(f"[LoRA Optimizer] Decision: {mode} (conflict {avg_conflict_ratio:.1%} "
-                     f"{'>' if avg_conflict_ratio > 0.25 else '<='} 25% threshold)")
+        logging.info(f"[LoRA Optimizer] Decision: {mode} ({reasoning[0] if reasoning else 'no reasoning'})")
         if mode == "ties":
             logging.info(f"[LoRA Optimizer]   density={density:.2f}, sign_method={sign_method}")
 
