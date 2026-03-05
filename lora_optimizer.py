@@ -22,6 +22,76 @@ from comfy.weight_adapter.lora import LoRAAdapter
 from safetensors.torch import save_file
 
 
+# ---------------------------------------------------------------------------
+# Architecture-aware threshold presets
+# ---------------------------------------------------------------------------
+# Each preset contains numeric thresholds used by density estimation, conflict
+# detection, auto-strength, and scoring heuristics.  The preset is selected
+# based on detected model architecture (or manual override).
+_ARCH_PRESETS = {
+    "sd_unet": {
+        "density_noise_floor_ratio": 0.1,
+        "density_clamp_min": 0.1,
+        "density_clamp_max": 0.9,
+        "dare_ideal_density": 0.7,
+        "consensus_cos_sim_min": 0.5,
+        "consensus_conflict_max": 0.15,
+        "orthogonal_cos_sim_max": 0.25,
+        "orthogonal_conflict_max": 0.60,
+        "ties_conflict_threshold": 0.25,
+        "magnitude_ratio_total_sign": 2.0,
+        "alignment_threshold": 0.1,
+        "suggested_max_strength_cap": 3.0,
+        "display_name": "SD/SDXL UNet",
+    },
+    "dit": {
+        "density_noise_floor_ratio": 0.05,
+        "density_clamp_min": 0.4,
+        "density_clamp_max": 0.95,
+        "dare_ideal_density": 0.8,
+        "consensus_cos_sim_min": 0.5,
+        "consensus_conflict_max": 0.15,
+        "orthogonal_cos_sim_max": 0.25,
+        "orthogonal_conflict_max": 0.60,
+        "ties_conflict_threshold": 0.25,
+        "magnitude_ratio_total_sign": 2.0,
+        "alignment_threshold": 0.1,
+        "suggested_max_strength_cap": 5.0,
+        "display_name": "DiT (Flux/WAN/Z-Image/LTX/HunyuanVideo)",
+    },
+    "llm": {
+        "density_noise_floor_ratio": 0.15,
+        "density_clamp_min": 0.1,
+        "density_clamp_max": 0.8,
+        "dare_ideal_density": 0.5,
+        "consensus_cos_sim_min": 0.5,
+        "consensus_conflict_max": 0.15,
+        "orthogonal_cos_sim_max": 0.25,
+        "orthogonal_conflict_max": 0.60,
+        "ties_conflict_threshold": 0.25,
+        "magnitude_ratio_total_sign": 2.0,
+        "alignment_threshold": 0.1,
+        "suggested_max_strength_cap": 3.0,
+        "display_name": "LLM (Qwen/LLaMA)",
+    },
+}
+
+_ARCH_TO_PRESET = {
+    "sdxl": "sd_unet", "unknown": "sd_unet",
+    "flux": "dit", "wan": "dit", "zimage": "dit", "ltx": "dit",
+    "qwen_image": "llm",
+}
+
+
+def _resolve_arch_preset(arch_override, detected_arch):
+    """Resolve architecture preset from override or detected architecture."""
+    if arch_override and arch_override != "auto" and arch_override in _ARCH_PRESETS:
+        key = arch_override
+    else:
+        key = _ARCH_TO_PRESET.get(detected_arch, "sd_unet")
+    return key, _ARCH_PRESETS[key]
+
+
 class LoRAStack:
     """
     Node for creating a LoRA stack (input format for LoRAOptimizer).
@@ -1860,24 +1930,25 @@ class _LoRAMergeBase:
             logging.warning("[LoRA Optimizer] Unrecognized stack format")
             return []
 
-        # Architecture-aware key normalization
-        if normalize_keys == "enabled" and len(normalized) > 0:
-            # Detect from first LoRA that yields a known architecture
+        # Always detect architecture (used for preset selection even without key normalization)
+        if len(normalized) > 0:
             arch = "unknown"
             for item in normalized:
                 detected = self._detect_architecture(item["lora"])
                 if detected != "unknown":
                     arch = detected
                     break
-            if arch != "unknown":
-                logging.info(f"[LoRA Optimizer] Architecture detected: {arch}")
-                logging.info(f"[LoRA Optimizer] Normalizing keys for {len(normalized)} LoRAs...")
-                for item in normalized:
-                    item["lora"] = self._normalize_keys(item["lora"], arch)
-                self._detected_arch = arch
-            else:
-                logging.info("[LoRA Optimizer] Architecture: unknown (no key normalization applied)")
-                self._detected_arch = None
+            self._detected_arch = arch if arch != "unknown" else None
+
+            # Architecture-aware key normalization (only when enabled)
+            if normalize_keys == "enabled":
+                if arch != "unknown":
+                    logging.info(f"[LoRA Optimizer] Architecture detected: {arch}")
+                    logging.info(f"[LoRA Optimizer] Normalizing keys for {len(normalized)} LoRAs...")
+                    for item in normalized:
+                        item["lora"] = self._normalize_keys(item["lora"], arch)
+                else:
+                    logging.info("[LoRA Optimizer] Architecture: unknown (no key normalization applied)")
         else:
             self._detected_arch = None
 
@@ -1961,11 +2032,14 @@ def _generate_param_grid():
 
 
 def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
-                            magnitude_ratio, prefix_stats):
+                            magnitude_ratio, prefix_stats, arch_preset=None):
     """
     Score a merge config against analysis metrics (no merge needed).
     Returns float score in [0, 1] where higher = better predicted quality.
+    Thresholds come from arch_preset.
     """
+    if arch_preset is None:
+        arch_preset = _ARCH_PRESETS["sd_unet"]
     mode = config["merge_mode"]
     spars = config["sparsification"]
     density = config["sparsification_density"]
@@ -1975,32 +2049,40 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
 
     score = 0.0
 
+    consensus_cos = arch_preset["consensus_cos_sim_min"]
+    consensus_conf = arch_preset["consensus_conflict_max"]
+    ortho_cos = arch_preset["orthogonal_cos_sim_max"]
+    ortho_conf = arch_preset["orthogonal_conflict_max"]
+    ties_thresh = arch_preset["ties_conflict_threshold"]
+    mag_thresh = arch_preset["magnitude_ratio_total_sign"]
+    ideal_density = arch_preset["dare_ideal_density"]
+
     # --- Mode fit score (0-0.4) ---
     if mode == "consensus":
-        if avg_cos_sim > 0.5 and avg_conflict_ratio < 0.15:
+        if avg_cos_sim > consensus_cos and avg_conflict_ratio < consensus_conf:
             score += 0.4
-        elif avg_cos_sim > 0.3 and avg_conflict_ratio < 0.25:
+        elif avg_cos_sim > consensus_cos * 0.6 and avg_conflict_ratio < ties_thresh:
             score += 0.25
         else:
             score += 0.05
     elif mode == "slerp":
-        if avg_conflict_ratio < 0.30:
+        if avg_conflict_ratio < ties_thresh * 1.2:
             score += 0.35
-        elif avg_conflict_ratio < 0.50:
+        elif avg_conflict_ratio < ortho_conf * 0.83:
             score += 0.20
         else:
             score += 0.10
     elif mode == "weighted_average":
-        if abs(avg_cos_sim) < 0.25 and avg_conflict_ratio < 0.60:
+        if abs(avg_cos_sim) < ortho_cos and avg_conflict_ratio < ortho_conf:
             score += 0.30
-        elif avg_conflict_ratio < 0.40:
+        elif avg_conflict_ratio < ortho_conf * 0.67:
             score += 0.20
         else:
             score += 0.10
     elif mode == "ties":
-        if avg_conflict_ratio > 0.25:
+        if avg_conflict_ratio > ties_thresh:
             score += 0.35
-        elif avg_conflict_ratio > 0.15:
+        elif avg_conflict_ratio > ties_thresh * 0.6:
             score += 0.20
         else:
             score += 0.10
@@ -2009,10 +2091,10 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
     if spars != "disabled":
         conflict_benefit = min(avg_conflict_ratio / 0.5, 1.0) * 0.10
         score += conflict_benefit
-        density_penalty = abs(density - 0.7) * 0.05
+        density_penalty = abs(density - ideal_density) * 0.05
         score += 0.05 - density_penalty
     else:
-        if avg_conflict_ratio < 0.15:
+        if avg_conflict_ratio < consensus_conf:
             score += 0.10
 
     # --- Quality fit (0-0.15) ---
@@ -2029,14 +2111,14 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
 
     # --- Auto-strength fit (0-0.15) ---
     if auto_str == "enabled":
-        if magnitude_ratio > 2.0:
+        if magnitude_ratio > mag_thresh:
             score += 0.15
-        elif magnitude_ratio > 1.5:
+        elif magnitude_ratio > mag_thresh * 0.75:
             score += 0.10
         else:
             score += 0.05
     else:
-        if magnitude_ratio < 1.5:
+        if magnitude_ratio < mag_thresh * 0.75:
             score += 0.10
         else:
             score += 0.03
@@ -2293,6 +2375,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                                "'no_slerp': v1.2 detection without SLERP upgrade (weighted_average stays as-is). "
                                "'classic': pre-1.2 behavior (TIES vs weighted_average only, no SLERP)."
                 }),
+                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                    "default": "auto",
+                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys. "
+                               "'sd_unet': SD/SDXL UNet defaults. 'dit': DiT models (Flux, WAN, Z-Image, LTX, HunyuanVideo) "
+                               "with higher density floors and wider strength range. 'llm': LLM-based models (Qwen, LLaMA)."
+                }),
                 "merge_strategy_override": ("STRING", {
                     "default": "",
                     "forceInput": True,
@@ -2308,7 +2396,7 @@ class LoRAOptimizer(_LoRAMergeBase):
     DESCRIPTION = "Auto-analyzes LoRA stack and selects optimal merge strategy per weight group. Outputs merged model + analysis report. Best for style/character LoRAs — apply edit, distillation (LCM/Turbo/Hyper), or DPO LoRAs via a standard Load LoRA node instead."
 
     @staticmethod
-    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_quality="standard", behavior_profile="v1.2"):
+    def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_quality="standard", behavior_profile="v1.2", architecture_preset="auto"):
         """
         Build a deterministic SHA-256 hash (16 hex chars) from the stack
         configuration. Used by IS_CHANGED to let ComfyUI skip re-execution
@@ -2331,7 +2419,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf))
             entries.sort()
             h.update(json.dumps(entries).encode())
-        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}|dd={dare_dampening}|mso={merge_strategy_override}|mq={merge_quality}|bp={behavior_profile}".encode())
+        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}|dd={dare_dampening}|mso={merge_strategy_override}|mq={merge_quality}|bp={behavior_profile}|ap={architecture_preset}".encode())
         return h.hexdigest()[:16]
 
     @classmethod
@@ -2343,7 +2431,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                    sparsification="disabled", sparsification_density=0.7,
                    dare_dampening=0.0,
                    merge_strategy_override="", merge_quality="standard",
-                   behavior_profile="v1.2"):
+                   behavior_profile="v1.2", architecture_preset="auto"):
         return cls._compute_cache_key(lora_stack, output_strength,
                                       clip_strength_multiplier, auto_strength,
                                       optimization_mode, compress_patches,
@@ -2351,7 +2439,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                                       sparsification, sparsification_density,
                                       dare_dampening,
                                       merge_strategy_override, merge_quality,
-                                      behavior_profile)
+                                      behavior_profile, architecture_preset)
 
     def _save_report_to_disk(self, cache_key, lora_combo, auto_strength, report, selected_params):
         """
@@ -2605,12 +2693,14 @@ class LoRAOptimizer(_LoRAMergeBase):
         return (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
                 (target_key, is_clip), skip_count)
 
-    def _estimate_density(self, all_key_diffs):
+    def _estimate_density(self, all_key_diffs, arch_preset=None):
         """
         Estimate TIES density parameter from magnitude distribution.
-        Uses fraction of values above 10% of the max magnitude as a
-        sparsity proxy. Returns float in [0.1, 0.9].
+        Uses fraction of values above noise floor of the max magnitude as a
+        sparsity proxy. Thresholds come from arch_preset.
         """
+        if arch_preset is None:
+            arch_preset = _ARCH_PRESETS["sd_unet"]
         samples = []
         max_samples_per_key = 1000
         g = torch.Generator().manual_seed(42)
@@ -2636,18 +2726,19 @@ class LoRAOptimizer(_LoRAMergeBase):
         if max_val <= 0:
             return 0.5
 
-        # Fraction of values above 10% of max magnitude
-        noise_floor = max_val * 0.1
+        noise_floor = max_val * arch_preset["density_noise_floor_ratio"]
         above_noise = (all_samples > noise_floor).float().mean().item()
 
-        return max(0.1, min(0.9, above_noise))
+        return max(arch_preset["density_clamp_min"], min(arch_preset["density_clamp_max"], above_noise))
 
-    def _estimate_density_from_samples(self, magnitude_samples):
+    def _estimate_density_from_samples(self, magnitude_samples, arch_preset=None):
         """
         Estimate TIES density from pre-sampled magnitude tensors.
         Takes a list of 1D CPU float tensors (from _analyze_prefix).
-        Returns float in [0.1, 0.9].
+        Thresholds come from arch_preset.
         """
+        if arch_preset is None:
+            arch_preset = _ARCH_PRESETS["sd_unet"]
         if len(magnitude_samples) == 0:
             return 0.5
 
@@ -2659,12 +2750,12 @@ class LoRAOptimizer(_LoRAMergeBase):
         if max_val <= 0:
             return 0.5
 
-        noise_floor = max_val * 0.1
+        noise_floor = max_val * arch_preset["density_noise_floor_ratio"]
         above_noise = (all_samples > noise_floor).float().mean().item()
 
-        return max(0.1, min(0.9, above_noise))
+        return max(arch_preset["density_clamp_min"], min(arch_preset["density_clamp_max"], above_noise))
 
-    def _compute_auto_strengths(self, active_loras, lora_stats, pairwise_similarities=None):
+    def _compute_auto_strengths(self, active_loras, lora_stats, pairwise_similarities=None, arch_preset=None):
         """
         Compute reduced per-LoRA strengths using interference-aware energy
         normalization. Uses pairwise cosine similarity to account for
@@ -2676,6 +2767,8 @@ class LoRAOptimizer(_LoRAMergeBase):
         Returns (new_strengths, reasoning_lines) where new_strengths is a list
         of floats (one per active LoRA) and reasoning_lines is a list of strings.
         """
+        if arch_preset is None:
+            arch_preset = _ARCH_PRESETS["sd_unet"]
         n = len(active_loras)
         original_strengths = [item["strength"] for item in active_loras]
         reasoning = []
@@ -2740,9 +2833,10 @@ class LoRAOptimizer(_LoRAMergeBase):
         if pairwise_similarities:
             avg_cos = sum(pairwise_similarities.values()) / len(pairwise_similarities)
             orthogonal_energy = math.sqrt(orthogonal_energy_sq)
-            if avg_cos > 0.1:
+            alignment_thresh = arch_preset["alignment_threshold"]
+            if avg_cos > alignment_thresh:
                 alignment_desc = "mostly aligned (reinforcing)"
-            elif avg_cos < -0.1:
+            elif avg_cos < -alignment_thresh:
                 alignment_desc = "mostly opposing (cancelling)"
             else:
                 alignment_desc = "mostly orthogonal (independent)"
@@ -2804,20 +2898,25 @@ class LoRAOptimizer(_LoRAMergeBase):
             return meaningful[0]
         return prefix[:30]
 
-    def _auto_select_params(self, avg_conflict_ratio, magnitude_ratio, all_key_diffs=None, magnitude_samples=None, avg_cos_sim=0.0, behavior_profile="v1.2"):
+    def _auto_select_params(self, avg_conflict_ratio, magnitude_ratio, all_key_diffs=None, magnitude_samples=None, avg_cos_sim=0.0, behavior_profile="v1.2", arch_preset=None):
         """
         Decision logic for auto-selecting merge parameters.
         Returns (mode, density, sign_method, reasoning_lines).
 
         Density can be estimated from either all_key_diffs (legacy bulk path)
-        or magnitude_samples (streaming path).
+        or magnitude_samples (streaming path). Thresholds come from arch_preset.
         """
+        if arch_preset is None:
+            arch_preset = _ARCH_PRESETS["sd_unet"]
         reasoning = []
 
         # High similarity + low conflict → consensus mode (Fisher-proxy + magnitude calibration)
-        if behavior_profile == "v1.2" and avg_cos_sim > 0.5 and avg_conflict_ratio < 0.15:
+        if (behavior_profile == "v1.2"
+                and avg_cos_sim > arch_preset["consensus_cos_sim_min"]
+                and avg_conflict_ratio < arch_preset["consensus_conflict_max"]):
             mode = "consensus"
-            reasoning.append(f"Cosine similarity {avg_cos_sim:.2f} > 0.5 and conflict {avg_conflict_ratio:.1%} < 15% -> consensus mode")
+            reasoning.append(f"Cosine similarity {avg_cos_sim:.2f} > {arch_preset['consensus_cos_sim_min']} "
+                             f"and conflict {avg_conflict_ratio:.1%} < {arch_preset['consensus_conflict_max']:.0%} -> consensus mode")
             reasoning.append("  Fisher-proxy importance weighting + magnitude calibration + spectral cleanup")
             density = 0.5  # unused
             sign_method = "frequency"  # unused
@@ -2826,7 +2925,9 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Near-orthogonal LoRAs: ~50% sign conflict is the base rate for
         # independent vectors, not actual semantic conflict. TIES trimming
         # destroys both signals. Use weighted_average (→ SLERP per-prefix).
-        if behavior_profile in ("v1.2", "no_slerp") and abs(avg_cos_sim) < 0.25 and avg_conflict_ratio < 0.60:
+        if (behavior_profile in ("v1.2", "no_slerp")
+                and abs(avg_cos_sim) < arch_preset["orthogonal_cos_sim_max"]
+                and avg_conflict_ratio < arch_preset["orthogonal_conflict_max"]):
             mode = "weighted_average"
             reasoning.append(f"Cosine similarity {avg_cos_sim:.2f} near zero (orthogonal LoRAs) — "
                              f"sign conflict {avg_conflict_ratio:.1%} is base-rate noise, not real conflict")
@@ -2839,34 +2940,34 @@ class LoRAOptimizer(_LoRAMergeBase):
             return (mode, density, sign_method, reasoning)
 
         # Select mode based on sign conflict
-        if avg_conflict_ratio > 0.25:
+        if avg_conflict_ratio > arch_preset["ties_conflict_threshold"]:
             mode = "ties"
-            reasoning.append(f"Sign conflict ratio {avg_conflict_ratio:.1%} > 25% threshold -> TIES mode selected")
+            reasoning.append(f"Sign conflict ratio {avg_conflict_ratio:.1%} > {arch_preset['ties_conflict_threshold']:.0%} threshold -> TIES mode selected")
             reasoning.append("  TIES resolves sign conflicts via trim + elect sign + disjoint merge")
         else:
             mode = "weighted_average"
-            reasoning.append(f"Sign conflict ratio {avg_conflict_ratio:.1%} <= 25% threshold -> weighted_average mode selected")
+            reasoning.append(f"Sign conflict ratio {avg_conflict_ratio:.1%} <= {arch_preset['ties_conflict_threshold']:.0%} threshold -> weighted_average mode selected")
             reasoning.append("  Low conflict means LoRAs are mostly compatible, simple averaging works well")
 
         # Auto-density (TIES only)
         if mode == "ties":
             if magnitude_samples is not None:
-                density = self._estimate_density_from_samples(magnitude_samples)
+                density = self._estimate_density_from_samples(magnitude_samples, arch_preset=arch_preset)
             else:
-                density = self._estimate_density(all_key_diffs)
+                density = self._estimate_density(all_key_diffs, arch_preset=arch_preset)
             reasoning.append(f"Auto-density estimated at {density:.2f} from magnitude distribution")
         else:
             density = 0.5  # unused but set for completeness
 
         # Sign method (only relevant for TIES mode)
         if mode == "ties":
-            if magnitude_ratio > 2.0:
+            if magnitude_ratio > arch_preset["magnitude_ratio_total_sign"]:
                 sign_method = "total"
-                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x > 2x -> 'total' sign method (magnitude-weighted voting)")
+                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x > {arch_preset['magnitude_ratio_total_sign']:.0f}x -> 'total' sign method (magnitude-weighted voting)")
                 reasoning.append("  Stronger LoRA gets more influence in sign election")
             else:
                 sign_method = "frequency"
-                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x <= 2x -> 'frequency' sign method (equal voting)")
+                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x <= {arch_preset['magnitude_ratio_total_sign']:.0f}x -> 'frequency' sign method (equal voting)")
                 reasoning.append("  Similar-strength LoRAs get equal votes")
         else:
             sign_method = "frequency"  # unused, default for completeness
@@ -2881,15 +2982,32 @@ class LoRAOptimizer(_LoRAMergeBase):
                       dare_dampening=0.0,
                       merge_quality="standard",
                       compatibility_warnings=None,
-                      behavior_profile="v1.2"):
+                      behavior_profile="v1.2",
+                      architecture_preset=None):
         """Format analysis as a multi-line report string."""
         lines = []
         lines.append("=" * 50)
         lines.append("LORA OPTIMIZER - ANALYSIS REPORT")
         lines.append("=" * 50)
 
-        # Architecture info (when normalization is enabled)
-        if normalize_keys == "enabled" and detected_arch:
+        # Architecture preset info
+        if architecture_preset and architecture_preset in _ARCH_PRESETS:
+            preset_info = _ARCH_PRESETS[architecture_preset]
+            lines.append(f"Architecture preset: {architecture_preset} ({preset_info['display_name']})")
+            if detected_arch:
+                arch_names = {
+                    'zimage': 'Z-Image Turbo (Lumina2)',
+                    'flux': 'FLUX',
+                    'wan': 'Wan 2.1/2.2',
+                    'sdxl': 'SDXL',
+                    'ltx': 'LTX Video',
+                    'qwen_image': 'Qwen-Image',
+                }
+                lines.append(f"Detected architecture: {arch_names.get(detected_arch, detected_arch)}")
+            if normalize_keys == "enabled":
+                lines.append(f"Key normalization: enabled")
+            lines.append("")
+        elif normalize_keys == "enabled" and detected_arch:
             arch_names = {
                 'zimage': 'Z-Image Turbo (Lumina2)',
                 'flux': 'FLUX',
@@ -3109,7 +3227,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         lines.append("=" * 50)
         return "\n".join(lines)
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_quality="standard", behavior_profile="v1.2", _analysis_cache=None, _skip_report=False):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", free_vram_between_passes="disabled", optimization_mode="per_prefix", cache_patches="enabled", compress_patches="non_ties", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_quality="standard", behavior_profile="v1.2", architecture_preset="auto", _analysis_cache=None, _skip_report=False):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Compute diffs per-prefix, sample conflicts + magnitudes, discard diffs
@@ -3126,6 +3244,11 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         if len(active_loras) == 0:
             return (model, clip, "No LoRAs in stack (all zero strength or malformed).", None)
+
+        # Resolve architecture preset from override or auto-detection
+        preset_key, arch_preset = _resolve_arch_preset(
+            architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
+        logging.info(f"[LoRA Optimizer] Architecture preset: {preset_key} ({arch_preset['display_name']})")
 
         # Single LoRA: skip analysis, apply directly via ComfyUI's standard
         # additive LoRA application (faster than diff-based pipeline).
@@ -3166,7 +3289,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                                             sparsification, sparsification_density,
                                             dare_dampening,
                                             merge_strategy_override, merge_quality,
-                                            behavior_profile)
+                                            behavior_profile, architecture_preset)
         if cache_patches == "enabled" and cache_key in self._merge_cache:
             model_patches, clip_patches, report, clip_strength_out, lora_data = self._merge_cache[cache_key]
             new_model = model
@@ -3413,7 +3536,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                               / len(pairwise_conflicts)) if pairwise_conflicts else 0.0
         mode, density, sign_method, reasoning = self._auto_select_params(
             avg_conflict_ratio, magnitude_ratio, magnitude_samples=all_magnitude_samples,
-            avg_cos_sim=global_avg_cos_sim, behavior_profile=behavior_profile
+            avg_cos_sim=global_avg_cos_sim, behavior_profile=behavior_profile,
+            arch_preset=arch_preset
         )
         del all_magnitude_samples
 
@@ -3435,7 +3559,8 @@ class LoRAOptimizer(_LoRAMergeBase):
         scale_ratios = {}
         if auto_strength == "enabled":
             new_strengths, strength_reasoning = self._compute_auto_strengths(
-                active_loras, lora_stats, pairwise_similarities=pairwise_similarities)
+                active_loras, lora_stats, pairwise_similarities=pairwise_similarities,
+                arch_preset=arch_preset)
 
             for i in range(len(active_loras)):
                 orig = active_loras[i]["strength"]
@@ -3537,7 +3662,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                         pf["conflict_ratio"], pf["magnitude_ratio"],
                         magnitude_samples=pf.get("magnitude_samples"),
                         avg_cos_sim=pf.get("avg_cos_sim", 0.0),
-                        behavior_profile=behavior_profile
+                        behavior_profile=behavior_profile,
+                        arch_preset=arch_preset
                     )
                     # Upgrade weighted_average → slerp for 2+ LoRAs
                     # SLERP preserves magnitude better (no cancellation from opposing vectors)
@@ -3786,7 +3912,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         if total_merged_energy > 0 and total_input_energy > 0:
             norm_ratio = total_merged_energy / total_input_energy
             if norm_ratio < 1.0:
-                suggested_max_strength = min(1.0 / norm_ratio, 3.0)
+                suggested_max_strength = min(1.0 / norm_ratio, arch_preset["suggested_max_strength_cap"])
 
         # Free analysis data no longer needed
         prefix_stats.clear()
@@ -3855,6 +3981,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             merge_quality=merge_quality,
             compatibility_warnings=compatibility_warnings,
             behavior_profile=behavior_profile,
+            architecture_preset=preset_key,
         )
 
         # Bundle LORA_DATA for optional downstream saving
@@ -3941,6 +4068,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
         merge_strategy_override="",
         merge_quality="standard",
         behavior_profile="v1.2",
+        architecture_preset="auto",
     )
 
     def optimize_merge(self, model, lora_stack, output_strength,
@@ -4009,6 +4137,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": "gpu",
                     "tooltip": "Device for scoring computations. GPU is much faster when SVD scoring is enabled."
                 }),
+                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                    "default": "auto",
+                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys."
+                }),
             },
         }
 
@@ -4025,7 +4157,8 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     def auto_tune(self, model, lora_stack, output_strength, clip=None,
                   clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
-                  scoring_svd="disabled", scoring_device="gpu"):
+                  scoring_svd="disabled", scoring_device="gpu",
+                  architecture_preset="auto"):
         import hashlib, json
 
         # --- Normalize & validate stack ---
@@ -4040,6 +4173,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 model, lora_stack, output_strength,
                 clip=clip, clip_strength_multiplier=clip_strength_multiplier,
                 normalize_keys=normalize_keys, behavior_profile="v1.2",
+                architecture_preset=architecture_preset,
             )
             return (merged_model, merged_clip,
                     "Single LoRA detected -- no parameters to tune.\n\n" + report, None)
@@ -4193,6 +4327,11 @@ class LoRAAutoTuner(LoRAOptimizer):
             "skipped_keys": skipped_keys,
         }
 
+        # Resolve architecture preset for scoring
+        tuner_preset_key, tuner_arch_preset = _resolve_arch_preset(
+            architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
+        logging.info(f"[LoRA AutoTuner] Architecture preset: {tuner_preset_key} ({tuner_arch_preset['display_name']})")
+
         # --- Phase 1: Score all parameter combos (heuristic, fast) ---
         logging.info("[LoRA AutoTuner] Phase 1: Scoring parameter grid...")
         grid = _generate_param_grid()
@@ -4200,7 +4339,7 @@ class LoRAAutoTuner(LoRAOptimizer):
         for config in grid:
             h_score = _score_config_heuristic(
                 config, avg_conflict_ratio, avg_cos_sim,
-                magnitude_ratio, prefix_stats)
+                magnitude_ratio, prefix_stats, arch_preset=tuner_arch_preset)
             scored.append((h_score, config))
         scored.sort(key=lambda x: x[0], reverse=True)
         logging.info(f"[LoRA AutoTuner] Scored {len(grid)} combos in {time.time() - t_start:.1f}s")
@@ -4245,6 +4384,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 svd_device="gpu",
                 normalize_keys=normalize_keys,
                 behavior_profile="v1.2",
+                architecture_preset=architecture_preset,
                 _analysis_cache=_analysis_cache,
                 _skip_report=True,
             )
@@ -4309,6 +4449,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             "version": 1,
             "lora_hash": lora_hash,
             "normalize_keys": normalize_keys,
+            "architecture_preset": architecture_preset,
             "analysis_summary": {
                 "n_loras": len(active_loras),
                 "prefix_count": prefix_count,
@@ -4381,9 +4522,10 @@ class LoRAAutoTuner(LoRAOptimizer):
     @classmethod
     def IS_CHANGED(cls, model, lora_stack, output_strength, clip=None,
                    clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
-                   scoring_svd="disabled", scoring_device="gpu"):
+                   scoring_svd="disabled", scoring_device="gpu",
+                   architecture_preset="auto"):
         return (id(lora_stack), output_strength, clip_strength_multiplier, top_n,
-                normalize_keys, scoring_svd, scoring_device)
+                normalize_keys, scoring_svd, scoring_device, architecture_preset)
 
 
 class LoRAMergeSelector(LoRAOptimizer):
@@ -4484,6 +4626,7 @@ class LoRAMergeSelector(LoRAOptimizer):
             svd_device="gpu",
             normalize_keys=tuner_data.get("normalize_keys", "disabled"),
             behavior_profile="v1.2",
+            architecture_preset=tuner_data.get("architecture_preset", "auto"),
         )
 
         # Build report for this selection
@@ -4537,6 +4680,11 @@ class WanVideoLoRAOptimizer(LoRAOptimizer):
         base["optional"]["normalize_keys"] = (["enabled", "disabled"], {
             "default": "enabled",
             "tooltip": "Normalizes LoRA keys from different training tools (LyCORIS, diffusers, finetrainer, etc.) to a common format. Enabled by default for WanVideo LoRAs."
+        })
+        base["optional"]["architecture_preset"] = (["auto", "dit", "sd_unet", "llm"], {
+            "default": "dit",
+            "tooltip": "Architecture-aware threshold tuning. Default 'dit' for WanVideo models. "
+                       "'auto' detects from LoRA keys."
         })
         return base
 
