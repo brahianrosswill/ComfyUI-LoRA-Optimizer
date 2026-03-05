@@ -2549,6 +2549,18 @@ class LoRAOptimizer(_LoRAMergeBase):
             sign_method = "frequency"  # unused
             return (mode, density, sign_method, reasoning)
 
+        # Near-orthogonal LoRAs: ~50% sign conflict is the base rate for
+        # independent vectors, not actual semantic conflict. TIES trimming
+        # destroys both signals. Use weighted_average (→ SLERP per-prefix).
+        if abs(avg_cos_sim) < 0.25 and avg_conflict_ratio < 0.60:
+            mode = "weighted_average"
+            reasoning.append(f"Cosine similarity {avg_cos_sim:.2f} near zero (orthogonal LoRAs) — "
+                             f"sign conflict {avg_conflict_ratio:.1%} is base-rate noise, not real conflict")
+            reasoning.append("  Using weighted_average (upgraded to SLERP per-prefix) to preserve both signals")
+            density = 0.5
+            sign_method = "frequency"
+            return (mode, density, sign_method, reasoning)
+
         # Select mode based on sign conflict
         if avg_conflict_ratio > 0.25:
             mode = "ties"
@@ -3095,8 +3107,11 @@ class LoRAOptimizer(_LoRAMergeBase):
         }
 
         # Auto-select parameters (density estimated from pre-sampled magnitudes)
+        global_avg_cos_sim = (sum(ps.get("cosine_sim", 0.0) for ps in pairwise_conflicts)
+                              / len(pairwise_conflicts)) if pairwise_conflicts else 0.0
         mode, density, sign_method, reasoning = self._auto_select_params(
-            avg_conflict_ratio, magnitude_ratio, magnitude_samples=all_magnitude_samples
+            avg_conflict_ratio, magnitude_ratio, magnitude_samples=all_magnitude_samples,
+            avg_cos_sim=global_avg_cos_sim
         )
         del all_magnitude_samples
 
