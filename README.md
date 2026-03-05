@@ -93,6 +93,8 @@ The key insight: two LoRAs may overlap in some model blocks but not others. A fa
 
 Instead of picking one global strategy (which either wastes TIES trimming on non-overlapping blocks or misses real conflicts), the optimizer decides **per weight prefix**:
 
+<div align="center">
+
 | Condition | Strategy |
 |-----------|----------|
 | Only 1 LoRA touches this prefix | `weighted_sum` — full strength, no dilution |
@@ -100,6 +102,8 @@ Instead of picking one global strategy (which either wastes TIES trimming on non
 | 2+ LoRAs, sign conflict > 25% | `ties` — resolve conflicts with trim/elect/merge |
 | Magnitude ratio > 2x at prefix | `total` sign method (stronger LoRA dominates) |
 | Magnitude ratio <= 2x at prefix | `frequency` sign method (equal votes) |
+
+</div>
 
 This means non-overlapping regions keep 100% of their LoRA's effect, while genuinely conflicting regions get proper TIES resolution.
 
