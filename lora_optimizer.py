@@ -44,19 +44,26 @@ class LoRAStack:
                                "'low_conflict': only apply where this LoRA agrees with the majority — safe, avoids contested weights. "
                                "'high_conflict': only apply where this LoRA disagrees — forces this LoRA to dominate contested regions."
                 }),
+                "key_filter": (["all", "shared_only", "unique_only"], {
+                    "default": "all",
+                    "tooltip": "Filter which keys this LoRA contributes based on how many LoRAs share each key. "
+                               "'all': contribute all keys (default). "
+                               "'shared_only': only contribute to keys present in 2+ LoRAs. "
+                               "'unique_only': only contribute to keys present in exactly 1 LoRA."
+                }),
             },
             "optional": {
                 "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to chain multiple LoRAs together."}),
             }
         }
-    
+
     RETURN_TYPES = ("LORA_STACK",)
     RETURN_NAMES = ("lora_stack",)
     FUNCTION = "add_to_stack"
     CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Adds a LoRA to the stack for use with LoRA Optimizer"
-    
-    def add_to_stack(self, lora_name, strength, conflict_mode="all", lora_stack=None):
+
+    def add_to_stack(self, lora_name, strength, conflict_mode="all", key_filter="all", lora_stack=None):
         lora_list = list(lora_stack) if lora_stack else []
 
         lora_path = folder_paths.get_full_path_or_raise("loras", lora_name)
@@ -67,6 +74,7 @@ class LoRAStack:
             "lora": lora,
             "strength": strength,
             "conflict_mode": conflict_mode,
+            "key_filter": key_filter,
         })
         
         return (lora_list,)
@@ -98,13 +106,6 @@ class LoRAStackDynamic:
                 }),
                 "lora_count": ("INT", {"default": 3, "min": 1, "max": cls.MAX_LORAS, "step": 1,
                                        "tooltip": "How many LoRA slots to show. Increase to add more LoRAs."}),
-                "key_filter": (["all", "shared_only", "unique_only"], {
-                    "default": "all",
-                    "tooltip": "Filter which keys to merge. "
-                               "'all': use all keys from all LoRAs (default). "
-                               "'shared_only': only merge keys present in 2+ LoRAs (strips variant-specific keys like I2V or VACE adapters). "
-                               "'unique_only': only merge keys present in exactly 1 LoRA (extracts variant-specific adapters)."
-                }),
             }
         }
         for i in range(1, cls.MAX_LORAS + 1):
@@ -134,6 +135,13 @@ class LoRAStackDynamic:
                            f"'all': apply everywhere (default). "
                            f"'low_conflict': only where this LoRA agrees with the majority. "
                            f"'high_conflict': only where this LoRA disagrees."
+            })
+            inputs["required"][f"key_filter_{i}"] = (["all", "shared_only", "unique_only"], {
+                "default": "all",
+                "tooltip": f"LoRA #{i} key filter. "
+                           f"'all': contribute all keys (default). "
+                           f"'shared_only': only contribute to keys present in 2+ LoRAs. "
+                           f"'unique_only': only contribute to keys present in exactly 1 LoRA."
             })
         inputs["optional"] = {
             "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to add even more LoRAs to the list."}),
@@ -200,10 +208,8 @@ class LoRAStackDynamic:
         logger.warning(f"LoRA name '{name}' not found in installed LoRAs, skipping")
         return None
 
-    def build_stack(self, strength_mode, input_mode, lora_count, key_filter="all", lora_stack=None, base_model_filter=None, **kwargs):
+    def build_stack(self, strength_mode, input_mode, lora_count, lora_stack=None, base_model_filter=None, **kwargs):
         loras = []
-        if key_filter != "all":
-            loras.append({"__key_filter__": key_filter})
         use_text = input_mode == "text"
         for i in range(1, lora_count + 1):
             if use_text:
@@ -216,13 +222,14 @@ class LoRAStackDynamic:
             if not resolved:
                 continue
             conflict_mode = kwargs.get(f"conflict_mode_{i}", "all")
+            kf = kwargs.get(f"key_filter_{i}", "all")
             if strength_mode == "simple":
                 wt = kwargs.get(f"strength_{i}", 1.0)
-                loras.append((resolved, wt, wt, conflict_mode))
+                loras.append((resolved, wt, wt, conflict_mode, kf))
             else:
                 model_str = kwargs.get(f"model_strength_{i}", 1.0)
                 clip_str = kwargs.get(f"clip_strength_{i}", 1.0)
-                loras.append((resolved, model_str, clip_str, conflict_mode))
+                loras.append((resolved, model_str, clip_str, conflict_mode, kf))
 
         # Chained lora_stack entries
         if lora_stack is not None:
@@ -231,7 +238,8 @@ class LoRAStackDynamic:
                     if l.get("name", "None") != "None":
                         s = l.get("strength", 1.0)
                         cm = l.get("conflict_mode", "all")
-                        loras.append((l["name"], s, s, cm))
+                        kf = l.get("key_filter", "all")
+                        loras.append((l["name"], s, s, cm, kf))
                 elif isinstance(l, (tuple, list)):
                     if l[0] != "None":
                         loras.append(tuple(l))
@@ -1796,13 +1804,14 @@ class _LoRAMergeBase:
         normalized = []
 
         if isinstance(first, (tuple, list)):
-            # Standard format: (lora_name, model_strength, clip_strength[, conflict_mode])
+            # Standard format: (lora_name, model_strength, clip_strength[, conflict_mode[, key_filter]])
             for entry in lora_stack:
                 if not isinstance(entry, (tuple, list)) or len(entry) < 3:
                     logging.warning("[LoRA Optimizer] Skipping malformed tuple entry (expected 3 elements)")
                     continue
                 lora_name, model_str, clip_str = entry[0], entry[1], entry[2]
                 conflict_mode = entry[3] if len(entry) > 3 else "all"
+                key_filter = entry[4] if len(entry) > 4 else "all"
 
                 # Load LoRA with caching
                 if lora_name in self.loaded_loras:
@@ -1822,6 +1831,7 @@ class _LoRAMergeBase:
                     "strength": model_str,
                     "clip_strength": clip_str,
                     "conflict_mode": conflict_mode,
+                    "key_filter": key_filter,
                 })
 
         elif isinstance(first, dict):
@@ -1836,6 +1846,7 @@ class _LoRAMergeBase:
                     "strength": item["strength"],
                     "clip_strength": None,  # use global multiplier
                     "conflict_mode": item.get("conflict_mode", "all"),
+                    "key_filter": item.get("key_filter", "all"),
                 })
 
         else:
@@ -2032,29 +2043,23 @@ class LoRAOptimizer(_LoRAMergeBase):
         when nothing changed.
         """
         h = hashlib.sha256()
-        # Extract key_filter metadata and filter it from stack entries
-        key_filter = "all"
         if lora_stack:
-            filtered_stack = []
-            for item in lora_stack:
-                if isinstance(item, dict) and "__key_filter__" in item:
-                    key_filter = item["__key_filter__"]
-                else:
-                    filtered_stack.append(item)
-            first = filtered_stack[0] if len(filtered_stack) > 0 else None
+            first = lora_stack[0] if len(lora_stack) > 0 else None
             entries = []
             if isinstance(first, (tuple, list)):
-                for entry in filtered_stack:
+                for entry in lora_stack:
                     cm = entry[3] if len(entry) > 3 else "all"
+                    kf = entry[4] if len(entry) > 4 else "all"
                     cs = float(entry[2]) if entry[2] is not None else -1.0
-                    entries.append((str(entry[0]), float(entry[1]), cs, cm))
+                    entries.append((str(entry[0]), float(entry[1]), cs, cm, kf))
             elif isinstance(first, dict):
-                for item in filtered_stack:
+                for item in lora_stack:
                     cm = item.get("conflict_mode", "all")
-                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm))
+                    kf = item.get("key_filter", "all")
+                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf))
             entries.sort()
             h.update(json.dumps(entries).encode())
-        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}|dd={dare_dampening}|mso={merge_strategy_override}|mq={merge_quality}|kf={key_filter}".encode())
+        h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={compress_patches}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}|dd={dare_dampening}|mso={merge_strategy_override}|mq={merge_quality}".encode())
         return h.hexdigest()[:16]
 
     @classmethod
@@ -2585,7 +2590,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                       prefix_decisions=None, detected_arch=None, normalize_keys="disabled",
                       sparsification="disabled", sparsification_density=0.7,
                       dare_dampening=0.0,
-                      merge_quality="standard", key_filter="all",
+                      merge_quality="standard",
                       compatibility_warnings=None):
         """Format analysis as a multi-line report string."""
         lines = []
@@ -2605,10 +2610,6 @@ class LoRAOptimizer(_LoRAMergeBase):
             }
             lines.append(f"Architecture: {arch_names.get(detected_arch, detected_arch)} (auto-detected)")
             lines.append(f"Key normalization: enabled")
-            lines.append("")
-
-        if key_filter != "all":
-            lines.append(f"  Key filter: {key_filter}")
             lines.append("")
 
         if compatibility_warnings:
@@ -2635,6 +2636,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 lines.append(f"    L2 norm (mean): N/A")
             if stat.get("conflict_mode", "all") != "all":
                 lines.append(f"    Conflict mode: {stat['conflict_mode']}")
+            if stat.get("key_filter", "all") != "all":
+                lines.append(f"    Key filter: {stat['key_filter']}")
 
         # Auto-Strength Adjustment (between Per-LoRA and Pairwise)
         if auto_strength_info is not None:
@@ -2815,13 +2818,6 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Normalize stack format (standard tuples or LoRAStack dicts)
         if not lora_stack or len(lora_stack) == 0:
             return (model, clip, "No LoRAs in stack.", None)
-
-        # Extract key_filter metadata from stack (embedded by LoRAStackDynamic)
-        key_filter = "all"
-        for item in lora_stack:
-            if isinstance(item, dict) and "__key_filter__" in item:
-                key_filter = item["__key_filter__"]
-        lora_stack = [item for item in lora_stack if not (isinstance(item, dict) and "__key_filter__" in item)]
 
         normalized_stack = self._normalize_stack(lora_stack, normalize_keys=normalize_keys)
         active_loras = [item for item in normalized_stack if item["strength"] != 0]
@@ -3018,22 +3014,6 @@ class LoRAOptimizer(_LoRAMergeBase):
                          f"{stat['key_count']} keys, avg rank {avg_r:.0f}")
         logging.info(f"[LoRA Optimizer]   Total: {prefix_count} prefixes ({time.time() - t_pass1:.1f}s)")
 
-        # Apply key_filter from LoRA Stack
-        if key_filter == "shared_only":
-            filtered = {p for p in all_key_targets if prefix_stats.get(p, {}).get("n_loras", 0) >= 2}
-            removed = len(all_key_targets) - len(filtered)
-            if removed > 0:
-                all_key_targets = {p: all_key_targets[p] for p in filtered}
-                logging.info(f"[LoRA Optimizer] key_filter=shared_only: kept {len(filtered)} shared prefixes, removed {removed} unique prefixes")
-            if len(filtered) == 0:
-                logging.warning("[LoRA Optimizer] key_filter=shared_only removed ALL prefixes (no keys shared by 2+ LoRAs)")
-        elif key_filter == "unique_only":
-            filtered = {p for p in all_key_targets if prefix_stats.get(p, {}).get("n_loras", 0) == 1}
-            removed = len(all_key_targets) - len(filtered)
-            if removed > 0:
-                all_key_targets = {p: all_key_targets[p] for p in filtered}
-                logging.info(f"[LoRA Optimizer] key_filter=unique_only: kept {len(filtered)} unique prefixes, removed {removed} shared prefixes")
-
         # =====================================================================
         # Decision — finalize stats, auto-select params (scalars only)
         # =====================================================================
@@ -3052,6 +3032,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 "avg_rank": avg_rank,
                 "l2_mean": l2_mean,
                 "conflict_mode": active_loras[i].get("conflict_mode", "all"),
+                "key_filter": active_loras[i].get("key_filter", "all"),
             })
 
         # Pairwise conflict stats and cosine similarity from accumulated counts
@@ -3256,9 +3237,15 @@ class LoRAOptimizer(_LoRAMergeBase):
             # instead of expanding to full-rank diff. Saves ~128x memory per key.
             # ComfyUI applies "lora" patches as: up @ down * (alpha/rank) * strength
             if pf_mode == "weighted_sum" and pf_n_loras <= 1:
+                raw_n = prefix_stats.get(lora_prefix, {}).get("n_loras", 0)
                 for i, item in enumerate(active_loras):
                     lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
                     if lora_info is None:
+                        continue
+                    kf = item.get("key_filter", "all")
+                    if kf == "shared_only" and raw_n < 2:
+                        continue
+                    if kf == "unique_only" and raw_n != 1:
                         continue
                     mat_up, mat_down, alpha, mid = lora_info
                     if is_clip_key and item["clip_strength"] is not None:
@@ -3276,9 +3263,15 @@ class LoRAOptimizer(_LoRAMergeBase):
             # FULL-RANK PATH: compute diffs on GPU, merge
             diffs_list = []
             diff_to_lora = []  # maps diffs_list index -> active_loras index
+            raw_n = prefix_stats.get(lora_prefix, {}).get("n_loras", 0)
             for i, item in enumerate(active_loras):
                 lora_info = self._get_lora_key_info(item["lora"], lora_prefix)
                 if lora_info is None:
+                    continue
+                kf = item.get("key_filter", "all")
+                if kf == "shared_only" and raw_n < 2:
+                    continue
+                if kf == "unique_only" and raw_n != 1:
                     continue
 
                 mat_up, mat_down, alpha, mid = lora_info
@@ -3526,7 +3519,6 @@ class LoRAOptimizer(_LoRAMergeBase):
             sparsification_density=sparsification_density,
             dare_dampening=dare_dampening,
             merge_quality=merge_quality,
-            key_filter=key_filter,
             compatibility_warnings=compatibility_warnings,
         )
 
@@ -3558,6 +3550,78 @@ class LoRAOptimizer(_LoRAMergeBase):
         logging.info(f"[LoRA Optimizer] Done! {processed_keys} keys processed ({time.time() - t_start:.1f}s total)")
 
         return (new_model, new_clip, report, lora_data)
+
+
+class LoRAOptimizerSimple(LoRAOptimizer):
+    """
+    Simplified LoRA Optimizer with sensible defaults.  Exposes only model,
+    LoRA stack, output strength, and optional CLIP inputs.  For sparsification,
+    merge-quality, SVD-device, and other knobs use the Advanced variant.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL", {
+                    "tooltip": "Base model to merge LoRAs into."
+                }),
+                "lora_stack": ("LORA_STACK", {
+                    "tooltip": "LoRA stack from a LoRA Stack node."
+                }),
+                "output_strength": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05,
+                    "tooltip": "Global multiplier applied after merging."
+                }),
+            },
+            "optional": {
+                "clip": ("CLIP", {
+                    "tooltip": "Optional CLIP model for text-encoder LoRA keys."
+                }),
+                "clip_strength_multiplier": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05,
+                    "tooltip": "Multiplier for CLIP LoRA strengths (stacks with per-LoRA clip_strength when provided)."
+                }),
+            },
+        }
+
+    DESCRIPTION = (
+        "Simplified LoRA Optimizer — merges a LoRA stack with good defaults. "
+        "Use LoRA Optimizer (Advanced) for sparsification, merge quality, "
+        "SVD device, and other fine-tuning options."
+    )
+
+    _SIMPLE_DEFAULTS = dict(
+        auto_strength="enabled",
+        free_vram_between_passes="disabled",
+        optimization_mode="per_prefix",
+        cache_patches="enabled",
+        compress_patches="non_ties",
+        svd_device="gpu",
+        normalize_keys="disabled",
+        sparsification="disabled",
+        sparsification_density=0.7,
+        dare_dampening=0.0,
+        merge_strategy_override="",
+        merge_quality="standard",
+    )
+
+    def optimize_merge(self, model, lora_stack, output_strength,
+                       clip=None, clip_strength_multiplier=1.0, **_kwargs):
+        return super().optimize_merge(
+            model, lora_stack, output_strength,
+            clip=clip, clip_strength_multiplier=clip_strength_multiplier,
+            **self._SIMPLE_DEFAULTS,
+        )
+
+    @classmethod
+    def IS_CHANGED(cls, model, lora_stack, output_strength,
+                   clip=None, clip_strength_multiplier=1.0, **_kwargs):
+        return LoRAOptimizer.IS_CHANGED(
+            model, lora_stack, output_strength,
+            clip=clip, clip_strength_multiplier=clip_strength_multiplier,
+            **cls._SIMPLE_DEFAULTS,
+        )
 
 
 class WanVideoLoRAOptimizer(LoRAOptimizer):
@@ -4201,6 +4265,7 @@ NODE_CLASS_MAPPINGS = {
     "LoRAStack": LoRAStack,
     "LoRAStackDynamic": LoRAStackDynamic,
     "LoRAOptimizer": LoRAOptimizer,
+    "LoRAOptimizerSimple": LoRAOptimizerSimple,
     "SaveMergedLoRA": SaveMergedLoRA,
     "LoRAConflictEditor": LoRAConflictEditor,
     "MergedLoRAToHook": MergedLoRAToHook,
@@ -4210,7 +4275,8 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAStack": "LoRA Stack",
     "LoRAStackDynamic": "LoRA Stack (Dynamic)",
-    "LoRAOptimizer": "LoRA Optimizer",
+    "LoRAOptimizer": "LoRA Optimizer (Advanced)",
+    "LoRAOptimizerSimple": "LoRA Optimizer",
     "SaveMergedLoRA": "Save Merged LoRA",
     "LoRAConflictEditor": "LoRA Conflict Editor",
     "MergedLoRAToHook": "Merged LoRA to Hook",
