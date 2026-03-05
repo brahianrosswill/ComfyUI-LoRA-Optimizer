@@ -2076,10 +2076,14 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True, score_dev
     sparsities = []
 
     all_patches = list(model_patches.values()) + list(clip_patches.values())
+    total = len(all_patches)
     device_label = f", device={score_device}" if score_device else ""
-    logging.info(f"[LoRA AutoTuner]   Scoring merge quality ({len(all_patches)} patches"
+    logging.info(f"[LoRA AutoTuner]   Scoring merge quality ({total} patches"
                  f"{', +SVD' if compute_svd else ''}{device_label})")
-    for patch in all_patches:
+    log_interval = max(1, total // 4)  # Log at ~25%, 50%, 75%, 100%
+    for patch_idx, patch in enumerate(all_patches):
+        if (patch_idx + 1) % log_interval == 0 or patch_idx + 1 == total:
+            logging.info(f"[LoRA AutoTuner]     Scored {patch_idx + 1}/{total} patches")
         if patch is None:
             continue
         if isinstance(patch, tuple) and len(patch) >= 2:
