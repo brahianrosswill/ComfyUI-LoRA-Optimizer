@@ -41,7 +41,7 @@ A ComfyUI node that **automatically analyzes your LoRA stack** and selects the b
 
 Builds a list of LoRAs for the optimizer. Chain multiple Stack nodes to add any number of LoRAs.
 
-**Inputs:** LoRA selector, strength, optional previous `LORA_STACK`
+**Inputs:** LoRA selector, strength, conflict_mode, key_filter, optional previous `LORA_STACK`
 
 **Outputs:** `LORA_STACK`
 
@@ -53,12 +53,10 @@ Single node with adjustable slot count (1–10) — replaces chaining multiple S
 
 | Mode | Behavior |
 |------|----------|
-| **Simple** | One `strength` slider per LoRA (applies to both model and CLIP) |
-| **Advanced** | Separate `model_strength` and `clip_strength` per LoRA for independent control |
+| **Simple** | One `strength` slider per LoRA — clean and beginner-friendly |
+| **Advanced** | Separate `model_strength` and `clip_strength`, plus `conflict_mode` and `key_filter` per LoRA |
 
 Accepts an optional `lora_stack` input to chain with other Stack nodes.
-
-**Key Filter:** Filter which weight keys get merged based on how many LoRAs share them. Useful for Wan T2V/I2V/VACE LoRA compatibility — see [Key Filter](#key-filter) below.
 
 **Outputs:** `LORA_STACK`
 
@@ -66,7 +64,12 @@ Accepts an optional `lora_stack` input to chain with other Stack nodes.
 
 ### LoRA Optimizer
 
-The auto-optimizer. Takes a `LORA_STACK`, analyzes the LoRAs, and automatically selects the best merge mode and parameters **per weight group**. Outputs the merged result plus a detailed analysis report with a block strategy map.
+The auto-optimizer. Takes a `LORA_STACK`, analyzes the LoRAs, and automatically selects the best merge mode and parameters **per weight group**. Outputs the merged result plus a detailed analysis report with a block strategy map. Available in two variants:
+
+| Variant | Description |
+|---------|-------------|
+| **LoRA Optimizer** (Simple) | Sensible defaults — just model, stack, output strength, and optional CLIP. Auto-strength enabled. |
+| **LoRA Optimizer (Advanced)** | Full control — sparsification, merge quality, SVD device, key normalization, and all other knobs. |
 
 Also accepts standard tuple-format stacks `(lora_name, model_strength, clip_strength)` from Efficiency Nodes, Comfyroll, and similar packs.
 
@@ -183,26 +186,30 @@ Three quality levels for merge conflict resolution, selectable via the `merge_qu
 
 <a name="key-filter"></a>
 
-Wan T2V, I2V, and VACE models share ~90% of weights, but each variant has unique keys (I2V: `cross_attn.k_img/v_img`, `img_emb`; VACE: `vace_blocks.*`, `vace_patch_embedding`). The `key_filter` dropdown on **LoRA Stack (Dynamic)** lets you filter keys by how many LoRAs in the stack share each key prefix:
+Each LoRA has a per-LoRA `key_filter` setting (available on both **LoRA Stack** and **LoRA Stack (Dynamic)** in advanced mode) that controls which key prefixes that LoRA contributes to, based on how many LoRAs in the stack share each prefix:
 
 | Filter | Behavior | Use Case |
 |--------|----------|----------|
-| `all` (default) | Merge all keys from all LoRAs | Normal merging |
-| `shared_only` | Only merge keys present in 2+ LoRAs | Strip variant-specific keys (I2V/VACE) to make a LoRA T2V-compatible |
-| `unique_only` | Only merge keys present in exactly 1 LoRA | Extract only the variant-specific adapter keys |
+| `all` (default) | Contribute to all keys | Normal merging |
+| `shared_only` | Only contribute to keys present in 2+ LoRAs | Strip variant-specific keys (I2V/VACE) from this LoRA |
+| `unique_only` | Only contribute to keys present in exactly 1 LoRA | Extract only the variant-specific adapter keys from this LoRA |
+
+This is especially useful for Wan T2V/I2V/VACE LoRAs, which share ~90% of weights but each variant has unique keys (I2V: `cross_attn.k_img/v_img`, `img_emb`; VACE: `vace_blocks.*`, `vace_patch_embedding`).
+
+Because the filter is per-LoRA, you can apply different filters to different LoRAs in the same stack — e.g., "take only the unique VACE keys from LoRA #2 while merging all keys from LoRA #1".
 
 **Example — making an I2V LoRA T2V-compatible:**
 1. Stack a T2V LoRA + an I2V LoRA together
-2. Set `key_filter` to `shared_only`
-3. The I2V-only keys (`k_img`, `v_img`, `img_emb`, etc.) are automatically removed since they only appear in 1 LoRA
+2. Set the I2V LoRA's `key_filter` to `shared_only`
+3. The I2V-only keys (`k_img`, `v_img`, `img_emb`, etc.) are skipped for that LoRA since they appear in only 1 LoRA
 4. The merged result contains only the shared T2V-compatible weights
 
 **Example — extracting a lightweight I2V adapter:**
 1. Same stack (T2V + I2V)
-2. Set `key_filter` to `unique_only`
-3. Only the I2V-specific keys remain — a small adapter with just the variant-specific weights
+2. Set the I2V LoRA's `key_filter` to `unique_only`
+3. Only the I2V-specific keys are contributed by that LoRA — a small adapter with just the variant-specific weights
 
-The filter operates between Pass 1 (analysis) and Pass 2 (merge) using the existing `prefix_stats["n_loras"]` count — no extra analysis needed.
+The filter uses the raw `n_loras` count from Pass 1 (before any filtering) and is applied per-LoRA during Pass 2 merge.
 
 </details>
 
@@ -315,7 +322,7 @@ The analysis report includes a visual block-by-block map showing what strategy w
 
 #### Inputs / Outputs
 
-**Inputs:** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, optimization mode, merge quality, cache patches, compress patches, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density.
+**Inputs (Advanced):** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, optimization mode, merge quality, cache patches, compress patches, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density, DARE dampening.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (analysis report), `LORA_DATA` (for Save Merged LoRA / Merged LoRA to Hook)
 
