@@ -4427,6 +4427,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             else:
                 # Discard this candidate's heavy objects immediately
                 del merged_model, merged_clip, lora_data
+            del m_patches, c_patches  # Drop patch-dict references so tensors can free
             gc.collect()
             if use_gpu:
                 torch.cuda.empty_cache()
