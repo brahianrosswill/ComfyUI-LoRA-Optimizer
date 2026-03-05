@@ -4245,6 +4245,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": "disabled",
                     "tooltip": "Record analysis metrics and scored configs to a JSONL dataset file for threshold tuning research. Saved to lora_optimizer_reports/autotuner_dataset.jsonl."
                 }),
+                "vram_budget": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Fraction of free VRAM to use for storing merged patches. 0 = all CPU (default), 1.0 = use all free VRAM. Reduces RAM usage on GPU systems."
+                }),
             },
         }
 
@@ -4262,7 +4266,8 @@ class LoRAAutoTuner(LoRAOptimizer):
     def auto_tune(self, model, lora_stack, output_strength, clip=None,
                   clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
                   scoring_svd="disabled", scoring_device="gpu",
-                  architecture_preset="auto", record_dataset="disabled"):
+                  architecture_preset="auto", record_dataset="disabled",
+                  vram_budget=0.0):
         import hashlib, json
 
         # --- Normalize & validate stack ---
@@ -4277,7 +4282,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 model, lora_stack, output_strength,
                 clip=clip, clip_strength_multiplier=clip_strength_multiplier,
                 normalize_keys=normalize_keys, behavior_profile="v1.2",
-                architecture_preset=architecture_preset, vram_budget=0.0,
+                architecture_preset=architecture_preset, vram_budget=vram_budget,
             )
             return (merged_model, merged_clip,
                     "Single LoRA detected -- no parameters to tune.\n\n" + report, None, lora_data)
@@ -4489,7 +4494,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 merge_quality=config["merge_quality"],
                 merge_strategy_override=config["merge_mode"],
                 free_vram_between_passes="disabled",
-                vram_budget=0.0,
+                vram_budget=vram_budget,
                 cache_patches="disabled",
                 compress_patches="disabled",
                 svd_device="gpu",
