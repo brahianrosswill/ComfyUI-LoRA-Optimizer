@@ -4090,6 +4090,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             "key_map": reverse_key_map,
             "output_strength": output_strength,
             "clip_strength": clip_strength_out,
+            "suggested_max_strength": suggested_max_strength,
         }
 
         # Cache patches for re-use (single entry to limit memory)
@@ -4597,8 +4598,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                 getattr(self, '_detected_arch', None))
 
         # Build report
+        suggested_max = best_lora_data.get("suggested_max_strength") if best_lora_data else None
         report = self._build_autotuner_report(
-            results, tuner_data["analysis_summary"], output_strength)
+            results, tuner_data["analysis_summary"], output_strength,
+            suggested_max_strength=suggested_max)
 
         # Extract return values, then free heavy intermediates
         ret_model = best["merged_model"]
@@ -4679,7 +4682,8 @@ class LoRAAutoTuner(LoRAOptimizer):
         except Exception as e:
             logging.warning(f"[LoRA AutoTuner] Failed to save dataset entry: {e}")
 
-    def _build_autotuner_report(self, results, analysis_summary, output_strength):
+    def _build_autotuner_report(self, results, analysis_summary, output_strength,
+                               suggested_max_strength=None):
         """Build the ranked report for AutoTuner results."""
         lines = []
         lines.append("=" * 54)
@@ -4692,6 +4696,9 @@ class LoRAAutoTuner(LoRAOptimizer):
                      f"| Avg conflict: {s['avg_conflict_ratio']:.1%}")
         lines.append(f"    Avg cosine similarity: {s['avg_cosine_sim']:.2f} "
                      f"| Magnitude ratio: {s['magnitude_ratio']:.1f}x")
+        lines.append(f"    Output strength: {output_strength}")
+        if suggested_max_strength is not None:
+            lines.append(f"    Suggested max output_strength: {suggested_max_strength:.2f}")
         lines.append("")
         lines.append("  " + "-" * 38)
         lines.append(f"  Top {len(results)} Configurations")
