@@ -345,7 +345,8 @@ class _DiffCache:
         self._disk_failed = False
         if mode in ("disk", "auto"):
             import tempfile
-            self._cache_dir = tempfile.mkdtemp(prefix="lora_diff_cache_")
+            self._cache_dir = tempfile.mkdtemp(prefix="lora_diff_cache_",
+                                                   dir=folder_paths.get_temp_directory())
         if mode == "auto":
             try:
                 import psutil
@@ -440,7 +441,8 @@ class _DiffCache:
         if self._cache_dir is not None:
             import shutil, tempfile
             shutil.rmtree(self._cache_dir, ignore_errors=True)
-            self._cache_dir = tempfile.mkdtemp(prefix="lora_diff_cache_")
+            self._cache_dir = tempfile.mkdtemp(prefix="lora_diff_cache_",
+                                                   dir=folder_paths.get_temp_directory())
 
     def __contains__(self, key):
         return key in self._ram_store or key in self._disk_store
