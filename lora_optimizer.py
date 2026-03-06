@@ -1738,8 +1738,13 @@ class _LoRAMergeBase:
 
         # Enhanced/maximum merge quality pipeline (non-TIES modes)
         # TIES has its own enhancement path below (after trim)
+        # Order matters: TALL-masks must run BEFORE orthogonalization.
+        # Orthogonalized diffs have uncorrelated element-wise distributions,
+        # which causes TALL-masks to classify every position as "selfish"
+        # (agreement=1 everywhere), zeroing out all consensus diffs.
         selfish_additions = None
         if merge_quality != "standard" and len(diffs_with_weights) >= 2 and mode != "ties":
+            diffs_with_weights, selfish_additions = self._tall_masks(diffs_with_weights)
             first = diffs_with_weights[0][0]
             if first.dim() >= 2:
                 diffs_with_weights = self._do_orthogonalize(diffs_with_weights)
@@ -1748,7 +1753,6 @@ class _LoRAMergeBase:
                 if first.dim() >= 2 and min(first.shape) >= 2:
                     diffs_with_weights = self._knots_align(
                         diffs_with_weights, compute_device=dev, svd_device=dev)
-            diffs_with_weights, selfish_additions = self._tall_masks(diffs_with_weights)
 
         if mode == "weighted_average":
             result = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
@@ -1996,10 +2000,12 @@ class _LoRAMergeBase:
                     abs_weights.append(abs(w))
 
             # Enhanced/maximum merge quality pipeline for TIES
+            # TALL-masks before orthogonalization (see non-TIES comment above)
             ties_selfish = None
             if merge_quality != "standard" and len(trimmed) >= 2:
                 # Re-pair trimmed diffs with abs_weights for enhancement pipeline
                 trimmed_pairs = list(zip(trimmed, abs_weights))
+                trimmed_pairs, ties_selfish = self._tall_masks(trimmed_pairs)
                 first = trimmed_pairs[0][0]
                 if first.dim() >= 2:
                     trimmed_pairs = self._do_orthogonalize(trimmed_pairs)
@@ -2008,7 +2014,6 @@ class _LoRAMergeBase:
                     if first.dim() >= 2 and min(first.shape) >= 2:
                         trimmed_pairs = self._knots_align(
                             trimmed_pairs, compute_device=dev, svd_device=dev)
-                trimmed_pairs, ties_selfish = self._tall_masks(trimmed_pairs)
                 trimmed = [d for d, _ in trimmed_pairs]
                 abs_weights = [w for _, w in trimmed_pairs]
                 del trimmed_pairs
