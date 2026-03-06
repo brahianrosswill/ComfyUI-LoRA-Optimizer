@@ -4413,6 +4413,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": "disabled",
                     "tooltip": "Record analysis metrics and scored configs to a JSONL dataset file for threshold tuning research. Saved to lora_optimizer_reports/autotuner_dataset.jsonl."
                 }),
+                "cache_patches": (["enabled", "disabled"], {
+                    "default": "enabled",
+                    "tooltip": "Cache the AutoTuner result in RAM so re-execution with the same inputs skips the full sweep. Disable to free RAM after merge (recommended for video models)."
+                }),
                 "diff_cache_mode": (["disabled", "auto", "ram", "disk"], {
                     "default": "disabled",
                     "tooltip": "Cache LoRA diffs across candidates to skip redundant computation. 'disabled' recomputes each time (slowest, no extra memory). 'auto' uses RAM up to diff_cache_ram_pct of free memory then spills to disk (recommended). 'ram' caches entirely in memory (~1.5GB SDXL, ~6GB Flux — fastest). 'disk' caches entirely to temp files (~1-10ms per diff vs 5-50ms to recompute). WARNING: ram/disk can use significant memory/storage on large models."
@@ -4442,6 +4446,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                   clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
                   scoring_svd="disabled", scoring_device="gpu",
                   architecture_preset="auto", record_dataset="disabled",
+                  cache_patches="enabled",
                   diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0):
         import hashlib, json
 
@@ -4466,6 +4471,17 @@ class LoRAAutoTuner(LoRAOptimizer):
         hash_input = json.dumps([(l["name"], l["strength"]) for l in active_loras],
                                 sort_keys=True)
         lora_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+
+        # Check AutoTuner cache
+        at_cache_key = hashlib.sha256(
+            f"{lora_hash}|os={output_strength}|csm={clip_strength_multiplier}"
+            f"|top_n={top_n}|nk={normalize_keys}|ss={scoring_svd}"
+            f"|ap={architecture_preset}|vb={vram_budget}".encode()
+        ).hexdigest()[:16]
+        if cache_patches == "enabled" and hasattr(self, '_autotuner_cache') and at_cache_key in self._autotuner_cache:
+            cached = self._autotuner_cache[at_cache_key]
+            logging.info(f"[LoRA AutoTuner] Using cached result")
+            return cached
 
         # --- Pass 1: Analysis (run once, reuse for all configs) ---
         model_keys = self._get_model_keys(model)
@@ -4805,7 +4821,14 @@ class LoRAAutoTuner(LoRAOptimizer):
         if use_gpu:
             torch.cuda.empty_cache()
 
-        return (ret_model, ret_clip, report, tuner_data, ret_lora_data)
+        result = (ret_model, ret_clip, report, tuner_data, ret_lora_data)
+        if cache_patches == "enabled":
+            self._autotuner_cache = {at_cache_key: result}
+        else:
+            self._autotuner_cache = {}
+            logging.info("[LoRA AutoTuner] Patch cache disabled — RAM freed after merge")
+
+        return result
 
     def _save_tuner_dataset_entry(self, tuner_data, active_loras, prefix_stats,
                                   detected_arch):
