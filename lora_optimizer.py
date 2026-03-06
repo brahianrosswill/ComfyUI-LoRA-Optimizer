@@ -2180,26 +2180,36 @@ def _generate_param_grid():
     dampenings = [0.0, 0.3, 0.6]
     qualities = ["standard", "enhanced", "maximum"]
     auto_strengths = ["enabled", "disabled"]
-    opt_modes = ["per_prefix", "global"]
 
-    for mode in merge_modes:
-        for spars in sparsifications:
-            density_vals = densities if spars != "disabled" else [0.7]
-            for density in density_vals:
-                damp_vals = dampenings if spars in ("dare", "dare_conflict") else [0.0]
-                for dampening in damp_vals:
-                    for quality in qualities:
-                        for auto_str in auto_strengths:
-                            for opt_mode in opt_modes:
-                                grid.append({
-                                    "merge_mode": mode,
-                                    "sparsification": spars,
-                                    "sparsification_density": density,
-                                    "dare_dampening": dampening,
-                                    "merge_quality": quality,
-                                    "auto_strength": auto_str,
-                                    "optimization_mode": opt_mode,
-                                })
+    for spars in sparsifications:
+        density_vals = densities if spars != "disabled" else [0.7]
+        for density in density_vals:
+            damp_vals = dampenings if spars in ("dare", "dare_conflict") else [0.0]
+            for dampening in damp_vals:
+                for quality in qualities:
+                    for auto_str in auto_strengths:
+                        # per_prefix: optimizer auto-selects mode per prefix,
+                        # merge_mode is irrelevant — emit one entry only
+                        grid.append({
+                            "merge_mode": "per_prefix_auto",
+                            "sparsification": spars,
+                            "sparsification_density": density,
+                            "dare_dampening": dampening,
+                            "merge_quality": quality,
+                            "auto_strength": auto_str,
+                            "optimization_mode": "per_prefix",
+                        })
+                        # global: merge_mode matters — emit one per mode
+                        for mode in merge_modes:
+                            grid.append({
+                                "merge_mode": mode,
+                                "sparsification": spars,
+                                "sparsification_density": density,
+                                "dare_dampening": dampening,
+                                "merge_quality": quality,
+                                "auto_strength": auto_str,
+                                "optimization_mode": "global",
+                            })
     return grid
 
 
@@ -2230,7 +2240,19 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
     ideal_density = arch_preset["dare_ideal_density"]
 
     # --- Mode fit score (0-0.4) ---
-    if mode == "consensus":
+    if opt_mode == "per_prefix":
+        # Per-prefix auto-selects the best mode per layer — always a good fit.
+        # Score based on how much the data benefits from per-prefix decisions.
+        if prefix_stats:
+            conflict_ratios = [ps["conflict_ratio"] for ps in prefix_stats.values()
+                               if ps.get("n_loras", 0) > 1]
+            if conflict_ratios and max(conflict_ratios) - min(conflict_ratios) > 0.15:
+                score += 0.35  # high variance = per-prefix shines
+            else:
+                score += 0.25  # uniform conflict = per-prefix still fine
+        else:
+            score += 0.25
+    elif mode == "consensus":
         if avg_cos_sim > consensus_cos and avg_conflict_ratio < consensus_conf:
             score += 0.4
         elif avg_cos_sim > consensus_cos * 0.6 and avg_conflict_ratio < ties_thresh:
@@ -2296,20 +2318,9 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
             score += 0.03
 
     # --- Optimization mode fit (0-0.15) ---
+    # Per-prefix benefit already scored in mode fit section above.
     if opt_mode == "per_prefix":
-        if prefix_stats:
-            conflict_ratios = [ps["conflict_ratio"] for ps in prefix_stats.values()
-                               if ps.get("n_loras", 0) > 1]
-            if conflict_ratios:
-                conflict_variance = max(conflict_ratios) - min(conflict_ratios)
-                if conflict_variance > 0.2:
-                    score += 0.15
-                else:
-                    score += 0.10
-            else:
-                score += 0.10
-        else:
-            score += 0.10
+        score += 0.10
     else:
         score += 0.07
 
@@ -4928,7 +4939,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             star = " \u2605" if r["rank"] == 1 else ""
             lines.append(f"  #{r['rank']}{star}{marker}"
                          f"          Score: {r['score_measured']:.2f}")
-            lines.append(f"    Mode: {c['merge_mode']} | Quality: {c['merge_quality']}")
+            mode_display = "per-prefix (auto)" if c["optimization_mode"] == "per_prefix" else c["merge_mode"]
+            lines.append(f"    Mode: {mode_display} | Quality: {c['merge_quality']}")
             if c["sparsification"] != "disabled":
                 spars_info = f"{c['sparsification']} (density={c['sparsification_density']}"
                 if c["dare_dampening"] > 0:
@@ -5044,6 +5056,9 @@ class LoRAMergeSelector(LoRAOptimizer):
                      f"{config['merge_mode']}, {config['merge_quality']}")
 
         # Run merge with selected config
+        # In per_prefix mode, let the optimizer auto-select strategy per prefix.
+        strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
+
         merged_model, merged_clip, _report, _lora_data = super().optimize_merge(
             model, lora_stack, output_strength,
             clip=clip,
@@ -5054,7 +5069,7 @@ class LoRAMergeSelector(LoRAOptimizer):
             sparsification_density=config["sparsification_density"],
             dare_dampening=config["dare_dampening"],
             merge_quality=config["merge_quality"],
-            merge_strategy_override=config["merge_mode"],
+            merge_strategy_override=strategy_override,
             free_vram_between_passes="disabled",
             vram_budget=vram_budget,
             cache_patches="enabled",
@@ -5068,7 +5083,8 @@ class LoRAMergeSelector(LoRAOptimizer):
         # Build report for this selection
         lines = []
         lines.append(f"Merge Selector \u2014 Applied config #{selection}")
-        lines.append(f"  Mode: {config['merge_mode']} | Quality: {config['merge_quality']}")
+        mode_display = "per-prefix (auto)" if config["optimization_mode"] == "per_prefix" else config["merge_mode"]
+        lines.append(f"  Mode: {mode_display} | Quality: {config['merge_quality']}")
         if config["sparsification"] != "disabled":
             lines.append(f"  Sparsification: {config['sparsification']} "
                          f"(density={config['sparsification_density']})")
