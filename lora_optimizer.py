@@ -352,10 +352,10 @@ class _DiffCache:
             import hashlib
             name_hash = hashlib.sha256(f"{key[0]}_{key[1]}".encode()).hexdigest()[:16]
             path = os.path.join(self._cache_dir, f"{name_hash}.pt")
-            torch.save(tensor.detach().cpu(), path)
+            torch.save(tensor.detach().half().cpu(), path)
             self._store[key] = path
         else:
-            self._store[key] = tensor.detach().clone().cpu()
+            self._store[key] = tensor.detach().clone().half().cpu()
 
     def clear(self):
         self._store.clear()
@@ -4327,7 +4327,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": "disabled",
                     "tooltip": "Record analysis metrics and scored configs to a JSONL dataset file for threshold tuning research. Saved to lora_optimizer_reports/autotuner_dataset.jsonl."
                 }),
-                "diff_cache_mode": (["ram", "disk", "disabled"], {
+                "diff_cache_mode": (["disabled", "ram", "disk"], {
                     "default": "ram",
                     "tooltip": "Cache raw LoRA diffs across candidates to avoid redundant computation. 'ram' is fastest (uses ~3-12GB RAM). 'disk' uses temp files with memory-mapping (slower but low RAM). 'disabled' recomputes diffs each time."
                 }),
@@ -4352,7 +4352,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                   clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
                   scoring_svd="disabled", scoring_device="gpu",
                   architecture_preset="auto", record_dataset="disabled",
-                  diff_cache_mode="ram", vram_budget=0.0):
+                  diff_cache_mode="disabled", vram_budget=0.0):
         import hashlib, json
 
         # --- Normalize & validate stack ---
