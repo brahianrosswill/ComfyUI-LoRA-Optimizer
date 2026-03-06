@@ -3553,6 +3553,43 @@ class LoRAOptimizer(_LoRAMergeBase):
             pairs = [(i, j) for i in range(len(active_loras))
                              for j in range(i + 1, len(active_loras))]
             logging.info(f"[LoRA Optimizer] Using cached analysis ({prefix_count} prefixes, skipping Pass 1)")
+
+            # DEBUG: Verify cached all_key_targets matches fresh model_keys
+            _mismatches = 0
+            _checked = 0
+            for _dbg_prefix, (_dbg_cached_target, _dbg_cached_clip) in list(all_key_targets.items())[:5]:
+                _checked += 1
+                _dbg_fresh_target = model_keys.get(_dbg_prefix)
+                if _dbg_fresh_target != _dbg_cached_target:
+                    _mismatches += 1
+                    logging.info(f"[LoRA Optimizer] DEBUG MISMATCH prefix={_dbg_prefix}: "
+                                 f"cached_target={_dbg_cached_target}, fresh_target={_dbg_fresh_target}")
+                elif _checked <= 2:
+                    logging.info(f"[LoRA Optimizer] DEBUG MATCH prefix={_dbg_prefix}: target={_dbg_cached_target}")
+            # Check total key count differences
+            _cached_prefixes = set(all_key_targets.keys())
+            _fresh_model_prefixes = set(model_keys.keys())
+            _fresh_clip_prefixes = set(clip_keys.keys()) if clip_keys else set()
+            _fresh_all = _fresh_model_prefixes | _fresh_clip_prefixes
+            _only_in_cache = _cached_prefixes - _fresh_all
+            _only_in_fresh = (_fresh_all - _cached_prefixes)
+            logging.info(f"[LoRA Optimizer] DEBUG cache_keys={len(_cached_prefixes)}, "
+                         f"fresh_model_keys={len(_fresh_model_prefixes)}, "
+                         f"fresh_clip_keys={len(_fresh_clip_prefixes)}, "
+                         f"mismatches={_mismatches}/{_checked}, "
+                         f"only_in_cache={len(_only_in_cache)}, "
+                         f"only_in_fresh={len(_only_in_fresh)}")
+            if _only_in_cache:
+                logging.info(f"[LoRA Optimizer] DEBUG only_in_cache (first 3): {list(_only_in_cache)[:3]}")
+            # Check active_loras consistency
+            logging.info(f"[LoRA Optimizer] DEBUG active_loras: {[(a['name'], a['strength']) for a in active_loras]}")
+            # Check first LoRA mat dtype
+            for _la in active_loras[:1]:
+                for _lk, _lv in list(_la['lora'].items())[:3]:
+                    if hasattr(_lv, 'dtype'):
+                        logging.info(f"[LoRA Optimizer] DEBUG lora_weight_dtype: key={_lk}, dtype={_lv.dtype}")
+                        break
+
         else:
             # =====================================================================
             # Pass 1 — Analysis (streaming: diffs computed, sampled, and discarded)
@@ -3661,6 +3698,20 @@ class LoRAOptimizer(_LoRAMergeBase):
                 logging.info(f"[LoRA Optimizer]   {stat['name']} ({i+1}/{len(active_loras)}): "
                              f"{stat['key_count']} keys, avg rank {avg_r:.0f}")
             logging.info(f"[LoRA Optimizer]   Total: {prefix_count} prefixes ({time.time() - t_pass1:.1f}s)")
+
+            # DEBUG: Log fresh all_key_targets info for comparison
+            _checked = 0
+            for _dbg_prefix, (_dbg_target, _dbg_clip) in list(all_key_targets.items())[:2]:
+                _checked += 1
+                logging.info(f"[LoRA Optimizer] DEBUG FRESH prefix={_dbg_prefix}: target={_dbg_target}")
+            logging.info(f"[LoRA Optimizer] DEBUG fresh_keys={len(all_key_targets)}, "
+                         f"model_keys={len(model_keys)}")
+            logging.info(f"[LoRA Optimizer] DEBUG active_loras: {[(a['name'], a['strength']) for a in active_loras]}")
+            for _la in active_loras[:1]:
+                for _lk, _lv in list(_la['lora'].items())[:3]:
+                    if hasattr(_lv, 'dtype'):
+                        logging.info(f"[LoRA Optimizer] DEBUG lora_weight_dtype: key={_lk}, dtype={_lv.dtype}")
+                        break
 
         # =====================================================================
         # Decision — finalize stats, auto-select params (scalars only)
@@ -3901,6 +3952,16 @@ class LoRAOptimizer(_LoRAMergeBase):
             if (merge_strategy_override and optimization_mode != "weighted_sum_only"
                     and merge_strategy_override in ("ties", "weighted_average", "weighted_sum", "consensus", "slerp")):
                 pf_mode = merge_strategy_override
+
+            # DEBUG: log path decision for first 3 prefixes
+            if processed_keys < 3:
+                _pf_raw_n = prefix_stats.get(lora_prefix, {}).get("n_loras", 0)
+                logging.info(f"[LoRA Optimizer] DEBUG PATH prefix={lora_prefix}: "
+                             f"opt_mode={optimization_mode}, pf_mode={pf_mode}, "
+                             f"pf_n_loras={pf_n_loras}, raw_n={_pf_raw_n}, "
+                             f"low_rank={pf_mode == 'weighted_sum' and pf_n_loras <= 1}, "
+                             f"target_key={target_key}, offset={offset}, "
+                             f"cached={'yes' if _analysis_cache is not None else 'no'}")
 
             # LOW-RANK PATH: single-LoRA weighted_sum — keep low-rank matrices
             # instead of expanding to full-rank diff. Saves ~128x memory per key.
