@@ -4679,6 +4679,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                          f" (heuristic={h_score:.3f})...")
             t_merge = time.time()
 
+            # In per_prefix mode, let the optimizer auto-select strategy per prefix.
+            # merge_strategy_override would force one mode everywhere, defeating per-prefix logic.
+            strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
+
             merged_model, merged_clip, _report, lora_data = super().optimize_merge(
                 model, lora_stack, output_strength,
                 clip=clip,
@@ -4689,7 +4693,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 sparsification_density=config["sparsification_density"],
                 dare_dampening=config["dare_dampening"],
                 merge_quality=config["merge_quality"],
-                merge_strategy_override=config["merge_mode"],
+                merge_strategy_override=strategy_override,
                 free_vram_between_passes="disabled",
                 vram_budget=vram_budget,
                 cache_patches="disabled",
