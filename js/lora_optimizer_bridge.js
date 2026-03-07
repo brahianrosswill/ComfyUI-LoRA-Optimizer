@@ -119,14 +119,19 @@ function isTunerDataOutputConnected(autotunerNode) {
     return false;
 }
 
+function resizeNode(node) {
+    const computed = node.computeSize();
+    node.setSize([Math.max(node.size[0], computed[0]), computed[1]]);
+    app.canvas?.setDirty?.(true, true);
+}
+
 function updateOptimizerVisibility(node) {
     const w = findWidget(node, "settings_source");
     if (!w) return;
     const connected = isTunerDataInputConnected(node);
     toggleWidget(node, w, connected);
     if (!connected) w.value = "manual";
-    node.setSize(node.computeSize());
-    app.canvas?.setDirty?.(true, true);
+    resizeNode(node);
 }
 
 function updateAutoTunerVisibility(node) {
@@ -135,8 +140,7 @@ function updateAutoTunerVisibility(node) {
     const connected = isTunerDataOutputConnected(node);
     toggleWidget(node, w, connected);
     if (!connected) w.value = "merge";
-    node.setSize(node.computeSize());
-    app.canvas?.setDirty?.(true, true);
+    resizeNode(node);
 }
 
 // Guard against infinite recursion during sync
@@ -208,14 +212,12 @@ app.registerExtension({
         }
 
         // Hide settings_source until tuner_data is connected
-        updateOptimizerVisibility(node);
+        // Defer initial hide so node layout is finalized first
+        setTimeout(() => updateOptimizerVisibility(node), 0);
         const origOnConnChange = node.onConnectionsChange;
         node.onConnectionsChange = function (side, slot, connected, linkInfo, ioSlot) {
             if (origOnConnChange) origOnConnChange.apply(this, arguments);
-            // side 1 = input; check if it's the tuner_data slot
-            if (side === 1 && this.inputs?.[slot]?.name === "tuner_data") {
-                updateOptimizerVisibility(this);
-            }
+            if (side === 1) updateOptimizerVisibility(this);
         };
     },
 });
@@ -237,14 +239,11 @@ app.registerExtension({
         }
 
         // Hide output_mode until tuner_data output is connected
-        updateAutoTunerVisibility(node);
+        setTimeout(() => updateAutoTunerVisibility(node), 0);
         const origOnConnChange = node.onConnectionsChange;
         node.onConnectionsChange = function (side, slot, connected, linkInfo, ioSlot) {
             if (origOnConnChange) origOnConnChange.apply(this, arguments);
-            // side 2 = output; check if it's the tuner_data slot
-            if (side === 2 && this.outputs?.[slot]?.name === "tuner_data") {
-                updateAutoTunerVisibility(this);
-            }
+            if (side === 2) updateAutoTunerVisibility(this);
         };
     },
 });
