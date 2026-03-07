@@ -5809,12 +5809,54 @@ class SaveMergedLoRA:
                     strength = clip_strength if is_clip else output_strength
                     alpha *= strength
 
-                state_dict[f"{lora_prefix}.lora_up.weight"] = mat_up.to(save_dtype).contiguous()
-                state_dict[f"{lora_prefix}.lora_down.weight"] = mat_down.to(save_dtype).contiguous()
+                state_dict[f"{lora_prefix}.lora_up.weight"] = mat_up.to(save_dtype).cpu().contiguous()
+                state_dict[f"{lora_prefix}.lora_down.weight"] = mat_down.to(save_dtype).cpu().contiguous()
                 state_dict[f"{lora_prefix}.alpha"] = torch.tensor(alpha)
 
+        # Validate saved data before writing
+        n_keys = len(state_dict) // 3
+        unmapped_keys = []
+        nan_keys = []
+        zero_keys = []
+        shape_info = []
+        for is_clip, patches in [(False, model_patches), (True, clip_patches)]:
+            for target_key, patch in patches.items():
+                direct = key_map.get(target_key)
+                if direct is None:
+                    tkey = target_key[0] if isinstance(target_key, tuple) else target_key
+                    fallback = key_map.get(tkey)
+                    label = f"{'CLIP' if is_clip else 'MODEL'} {tkey}"
+                    if fallback is None:
+                        unmapped_keys.append(f"{label} (using raw key as prefix)")
+                    else:
+                        unmapped_keys.append(f"{label} (fallback to base key)")
+
+        for skey, tensor in state_dict.items():
+            if skey.endswith('.alpha'):
+                continue
+            if torch.isnan(tensor).any():
+                nan_keys.append(skey)
+            if tensor.abs().max().item() == 0:
+                zero_keys.append(skey)
+
+        if unmapped_keys:
+            logging.warning(f"[Save Merged LoRA] {len(unmapped_keys)} keys fell through to fallback mapping:")
+            for k in unmapped_keys[:5]:
+                logging.warning(f"  {k}")
+        if nan_keys:
+            logging.error(f"[Save Merged LoRA] {len(nan_keys)} tensors contain NaN!")
+            for k in nan_keys[:5]:
+                logging.error(f"  {k}")
+        if zero_keys:
+            logging.warning(f"[Save Merged LoRA] {len(zero_keys)} tensors are all zeros")
+
+        # Log first few saved key prefixes for debugging
+        prefixes = sorted(set(k.rsplit('.lora_', 1)[0] for k in state_dict if '.lora_' in k))
+        if prefixes:
+            logging.info(f"[Save Merged LoRA] Sample prefixes: {prefixes[:3]} ... ({len(prefixes)} total)")
+
         save_file(state_dict, save_path)
-        logging.info(f"[Save Merged LoRA] Saved {len(state_dict) // 3} LoRA keys to {save_path}")
+        logging.info(f"[Save Merged LoRA] Saved {n_keys} LoRA keys to {save_path}")
 
         return (save_path,)
 
