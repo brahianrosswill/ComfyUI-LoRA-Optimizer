@@ -6424,7 +6424,7 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
 
         def _dn(name):
             """Display name: strip .safetensors extension."""
-            return name.removesuffix(".safetensors")
+            return name.replace(".safetensors", "")
 
         lines.append("=" * 55)
         lines.append("  LoRA Compatibility Analysis")
