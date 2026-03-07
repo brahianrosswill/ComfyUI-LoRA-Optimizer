@@ -741,7 +741,6 @@ class _LoRAMergeBase:
         Canonical format: diffusion_model.blocks.N.{self_attn,cross_attn,ffn}.*
 
         Handles LyCORIS, diffusers, Fun LoRA, finetrainer formats.
-        Also applies RS-LoRA alpha compensation if detected.
         """
         normalized = {}
         for k, v in lora_sd.items():
@@ -854,23 +853,12 @@ class _LoRAMergeBase:
 
             normalized[new_k] = v
 
-        # RS-LoRA compensation: detect and fix alpha scaling.
-        # RS-LoRA files omit ALL alpha keys and rely on sqrt(rank) scaling.
-        # Only apply compensation if the file has zero alpha keys (reliable
-        # heuristic — standard LoRAs either include explicit alphas or use
-        # rank as default alpha, which _get_lora_key_info handles).
-        has_any_alpha = any(nk.endswith('.alpha') for nk in normalized)
-        has_any_lora = any(nk.endswith('.lora_A.weight') for nk in normalized)
-        if not has_any_alpha and has_any_lora:
-            # Find rank from any lora_A weight
-            sample_key = next(nk for nk in normalized if nk.endswith('.lora_A.weight'))
-            rank = normalized[sample_key].shape[0]
-            # alpha/rank = rank^1.5/rank = sqrt(rank), matching RS-LoRA scaling
-            corrected_alpha = torch.tensor(rank * (rank ** 0.5))
-            for nk in list(normalized.keys()):
-                if nk.endswith('.lora_A.weight'):
-                    alpha_key = nk.replace('.lora_A.weight', '.alpha')
-                    normalized[alpha_key] = corrected_alpha
+        # Note: RS-LoRA compensation removed. RS-LoRA files omit alpha and
+        # rely on sqrt(rank) scaling, but we can't distinguish them from
+        # standard PEFT LoRAs that also omit alpha. False positives cause
+        # ~5.66x weight amplification (rank 32). When alpha is missing,
+        # _get_lora_key_info defaults alpha=rank (scale=1.0), which is
+        # correct for standard LoRAs and only slightly weak for RS-LoRA.
 
         return normalized
 
@@ -5463,7 +5451,7 @@ class WanVideoLoRAOptimizer(LoRAOptimizer):
 
     All merging algorithms (TIES, DARE/DELLA, SVD compression, auto-strength,
     conflict analysis) are inherited from LoRAOptimizer. Wan LoRA key
-    normalization (LyCORIS, diffusers, Fun LoRA, finetrainer, RS-LoRA) is
+    normalization (LyCORIS, diffusers, Fun LoRA, finetrainer) is
     already handled by the parent's _normalize_keys_wan.
     """
 
