@@ -1761,8 +1761,15 @@ class _LoRAMergeBase:
         # Move to requested device for SVD (GPU is much faster for matmul-heavy randomized SVD)
         if svd_device is not None and mat.device != svd_device:
             mat = mat.to(svd_device)
-        U, S, V = torch.svd_lowrank(mat, q=rank)
+        # Oversample by 20% for better randomized SVD accuracy, then truncate.
+        # Without oversampling, svd_lowrank struggles when effective rank ≈ q.
+        q_oversample = min(rank + max(20, rank // 5), min(mat.shape))
+        U, S, V = torch.svd_lowrank(mat, q=q_oversample, niter=4)
         del mat
+        # Truncate to target rank (oversampled columns improve accuracy but aren't kept)
+        U = U[:, :rank]
+        S = S[:rank]
+        V = V[:, :rank]
         # U: [out, rank], S: [rank], V: [in, rank]
         # Reconstruct as: mat_up = U * sqrt(S), mat_down = sqrt(S) * V^T
         # Return on CPU for storage (ComfyUI moves to device when applying)
@@ -1772,6 +1779,52 @@ class _LoRAMergeBase:
         del U, S, V, sqrt_S
         # alpha=rank so ComfyUI computes: up @ down * (rank/rank) = up @ down
         return LoRAAdapter(set(), (mat_up, mat_down, float(rank), None, None, None))
+
+    @staticmethod
+    @torch.no_grad()
+    def _estimate_save_rank(initial_rank, model_patches, clip_patches,
+                            max_error=0.05, max_rank_cap=1024, n_samples=3):
+        """
+        Adaptively estimate the SVD rank needed to reconstruct merged diffs
+        within `max_error` relative error.  Samples a few diffs, tests at
+        initial_rank, and doubles until error is acceptable or cap is reached.
+        """
+        # Collect sample full-rank diffs
+        samples = []
+        for patch in list(model_patches.values()) + list(clip_patches.values()):
+            if isinstance(patch, tuple) and patch[0] == "diff":
+                samples.append(patch[1][0])
+                if len(samples) >= n_samples:
+                    break
+        if not samples:
+            return max(initial_rank, 64)
+
+        rank = max(initial_rank, 64)
+        for sample in samples:
+            mat = sample.reshape(sample.shape[0], -1).float()
+            dim_cap = min(mat.shape)
+            test_rank = rank
+            while test_rank < min(dim_cap, max_rank_cap):
+                q_over = min(test_rank + max(20, test_rank // 5), dim_cap)
+                U, S, V = torch.svd_lowrank(mat, q=q_over, niter=4)
+                reconstructed = (U[:, :test_rank] * S[:test_rank].unsqueeze(0)) @ V[:, :test_rank].T
+                orig_norm = mat.norm().item()
+                if orig_norm > 0:
+                    error = (reconstructed - mat).norm().item() / orig_norm
+                else:
+                    error = 0.0
+                del U, S, V, reconstructed
+                if error <= max_error:
+                    break
+                old = test_rank
+                test_rank = min(int(test_rank * 1.5), dim_cap, max_rank_cap)
+                if test_rank == old:
+                    break
+                logging.info(f"[Save Merged LoRA] Rank {old} → {test_rank} "
+                             f"(sample error {error:.4f} > {max_error})")
+            rank = max(rank, test_rank)
+            del mat
+        return rank
 
     @torch.no_grad()
     def _merge_diffs(self, diffs_with_weights, mode, density=0.5, majority_sign_method="frequency",
@@ -5698,8 +5751,8 @@ class SaveMergedLoRA:
                 "save_folder": (folder_choices, {"tooltip": "Which loras folder to save into. Lists all configured lora paths (from extra_model_paths.yaml and defaults)."}),
                 "filename": ("STRING", {"default": "merged_lora", "tooltip": "Name for the saved file. Subdirectories allowed (e.g. 'merged/my_lora'). Extension .safetensors is added automatically."}),
                 "save_rank": ("INT", {
-                    "default": 0, "min": 0, "max": 1024, "step": 4,
-                    "tooltip": "0 = auto (uses each layer's existing rank from the merge — recommended). Non-zero = force this rank for any layers that need compression. Higher values = more accurate but larger file."
+                    "default": 0, "min": 0, "max": 2048, "step": 4,
+                    "tooltip": "0 = auto (adaptively finds the rank needed for <5%% reconstruction error — recommended). Non-zero = force this rank for any layers that need compression. Higher values = more accurate but larger file."
                 }),
                 "bake_strength": ("BOOLEAN", {
                     "default": True,
@@ -5737,7 +5790,7 @@ class SaveMergedLoRA:
         auto_rank = save_rank == 0
 
         # Auto mode: determine rank for compressing full-rank diffs.
-        # Priority: 1) existing LoRAAdapter ranks, 2) sum_rank from optimizer, 3) fallback 128
+        # Priority: 1) existing LoRAAdapter ranks, 2) adaptive from sample diffs, 3) sum_rank, 4) fallback 128
         if auto_rank:
             existing_ranks = []
             for patch in list(model_patches.values()) + list(clip_patches.values()):
@@ -5747,14 +5800,14 @@ class SaveMergedLoRA:
                 # skip them so the fallback kicks in instead
             if existing_ranks:
                 fallback_rank = max(set(existing_ranks), key=existing_ranks.count)
-            elif lora_data.get("sum_rank", 0) > 0:
-                # Use sum of input LoRA ranks from the optimizer (e.g., QKV refusion
-                # may have expanded all LoRAAdapters to full-rank diffs)
-                fallback_rank = lora_data["sum_rank"]
+                logging.info(f"[Save Merged LoRA] Auto rank: {fallback_rank} from {len(existing_ranks)} low-rank patches")
             else:
-                fallback_rank = 128
-            logging.info(f"[Save Merged LoRA] Auto rank: using rank {fallback_rank} for full-rank patches "
-                         f"(from {len(existing_ranks)} low-rank patches)")
+                # No low-rank patches — all diffs are full-rank (from merge).
+                # Estimate needed rank adaptively: sample a diff, compress, check error.
+                initial_rank = lora_data.get("sum_rank", 128)
+                fallback_rank = LoRAOptimizer._estimate_save_rank(initial_rank, model_patches, clip_patches)
+                logging.info(f"[Save Merged LoRA] Auto rank: {fallback_rank} "
+                             f"(initial estimate {initial_rank}, adapted from sample diffs)")
 
         # Detect native storage dtype (fp16/bf16) from patches for output.
         # SVD compression produces float32 internally, but saved LoRAs should
