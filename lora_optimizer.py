@@ -6496,9 +6496,9 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
         # Sort by compat score descending
         sorted_pairs = sorted(pairwise_conflicts, key=lambda p: p["cosine_sim"] * (1.0 - p["ratio"]), reverse=True)
         for pc in sorted_pairs:
-            cos = pc["cosine_sim"] + 0.0  # avoid -0.0
             conflict = pc["ratio"]
-            compat = cos * (1.0 - conflict) + 0.0  # avoid -0.0
+            cos = round(pc["cosine_sim"], 2) + 0.0  # avoid -0.00
+            compat = round(pc["cosine_sim"] * (1.0 - conflict), 2) + 0.0  # avoid -0.00
             indicator = ""
             if compat > 0.2:
                 indicator = " [OK]"
