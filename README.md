@@ -104,7 +104,7 @@ Instead of picking one global strategy (which either wastes TIES trimming on non
 | Condition | Strategy |
 |-----------|----------|
 | Only 1 LoRA touches this prefix | `weighted_sum` — full strength, no dilution |
-| 2+ LoRAs, sign conflict <= 25% | `weighted_average` — compatible, simple merge |
+| 2+ LoRAs, sign conflict <= 25% | `slerp` — magnitude-preserving interpolation (`weighted_average` fallback for opposing LoRAs) |
 | 2+ LoRAs, sign conflict > 25% | `ties` — resolve conflicts with trim/elect/merge |
 | Magnitude ratio > 2x at prefix | `total` sign method (stronger LoRA dominates) |
 | Magnitude ratio <= 2x at prefix | `frequency` sign method (equal votes) |
@@ -222,13 +222,23 @@ When `auto_strength` is set to `enabled`, the optimizer automatically reduces pe
 The algorithm uses **interference-aware energy normalization**: it measures pairwise cosine similarity between LoRAs during analysis to account for directional alignment, then computes the exact vector-sum energy using the formula `||sum(v_i)||^2 = sum(||v_i||^2) + 2 * sum(||v_i|| * ||v_j|| * cos(v_i, v_j))`. All strengths are scaled so the total combined energy matches what the strongest single LoRA would contribute alone.
 
 - **Aligned LoRAs** (cos~1) — stronger reduction (they reinforce each other, so combined energy is high)
-- **Orthogonal LoRAs** (cos~0) — moderate reduction (independent contributions add in quadrature)
+- **Orthogonal LoRAs** (cos~0) — floor-clamped reduction (independent contributions add in quadrature, but a per-architecture floor prevents over-reduction)
 - **Opposing LoRAs** (cos~-1) — minimal reduction (they cancel out, so combined energy is low)
+
+**Orthogonal floor:** When LoRAs are independent (|cos| near 0), the scale factor is clamped to a minimum floor to preserve each LoRA's full contribution. The floor varies by architecture:
+
+| Architecture | Floor | Rationale |
+|-------------|-------|-----------|
+| Video (Wan, LTX) | 1.0 | No reduction — orthogonal video LoRAs teach independent motions |
+| Image (SDXL, Flux, Z-Image) | 0.85 | Modest reduction while preserving most energy |
+| LLM (Qwen, LLaMA) | 0.9 | Conservative reduction for sparse LLM weights |
+
+The `auto_strength_floor` widget overrides this: -1 = auto (use architecture default), 0–1 = manual floor.
 
 | Scenario | Result |
 |----------|--------|
 | 2 aligned LoRAs (cos~1) at strength 1.0 | Each reduced to ~0.50 |
-| 2 orthogonal LoRAs (cos~0) at strength 1.0 | Each reduced to ~0.71 |
+| 2 orthogonal LoRAs (cos~0) at strength 1.0 | Clamped by floor (e.g. ~0.85 for image models, ~1.0 for video) |
 | 2 opposing LoRAs (cos~-1) at strength 1.0 | ~1.0 each (they cancel) |
 | 1 strong + 1 weak LoRA | Proportional reduction |
 | Single LoRA | No change |
@@ -270,11 +280,11 @@ Key normalization auto-detects the model architecture from LoRA key patterns and
 
 All numeric thresholds in the optimizer (density estimation, conflict detection, auto-strength scaling, scoring heuristics) are tuned per architecture family. The `architecture_preset` setting selects the appropriate thresholds — `auto` detects from LoRA key patterns.
 
-| Preset | Architectures | Key Differences |
-|--------|--------------|-----------------|
-| `sd_unet` | SD 1.5, SDXL | Density range [0.1, 0.9], noise floor 10%, max strength cap 3.0 |
-| `dit` | Flux, WAN, Z-Image, LTX, HunyuanVideo | Density range [0.4, 0.95], noise floor 5%, max strength cap 5.0 |
-| `llm` | Qwen-Image, LLaMA-based | Density range [0.1, 0.8], noise floor 15%, max strength cap 3.0 |
+| Preset | Architectures | Key Differences | Orthogonal Floor |
+|--------|--------------|-----------------|-----------------|
+| `sd_unet` | SD 1.5, SDXL | Density range [0.1, 0.9], noise floor 10%, max strength cap 3.0 | 0.85 |
+| `dit` | Flux, WAN, Z-Image, LTX, HunyuanVideo | Density range [0.4, 0.95], noise floor 5%, max strength cap 5.0 | 0.85 (1.0 for Wan/LTX) |
+| `llm` | Qwen-Image, LLaMA-based | Density range [0.1, 0.8], noise floor 15%, max strength cap 3.0 | 0.9 |
 
 **Why it matters:** DiT architectures have denser weight distributions than UNet — with UNet thresholds, the optimizer underestimates density and clips suggested strength too aggressively. LLM-based models are sparser and benefit from lower density ceilings.
 
@@ -345,7 +355,7 @@ The analysis report includes a visual block-by-block map showing what strategy w
 
 #### Inputs / Outputs
 
-**Inputs (Advanced):** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, optimization mode, merge quality, behavior profile, architecture preset, cache patches, compress patches, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density, DARE dampening, `TUNER_DATA` (optional — for bridge workflow), settings_source.
+**Inputs (Advanced):** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, auto strength floor, optimization mode, merge quality, behavior profile, architecture preset, cache patches, compress patches, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density, DARE dampening, `TUNER_DATA` (optional — for bridge workflow), settings_source.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (analysis report), `LORA_DATA` (for Save Merged LoRA / Merged LoRA to Hook)
 
@@ -451,7 +461,7 @@ Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI
 
 Automatically sweeps all merge parameters (mode, sparsification, density, dampening, quality level) and finds the best configuration for your LoRA stack. Runs Pass 1 analysis once, scores all parameter combinations via heuristic, then merges the top-N candidates and measures output quality. Outputs the best merge directly as `MODEL`/`CLIP`, plus a ranked report and `TUNER_DATA` for exploring alternatives via a **Merge Selector** node or fine-tuning via the **AutoTuner → Optimizer Bridge**.
 
-**Inputs:** `MODEL`, `LORA_STACK`, output strength, optional `CLIP`, top_n, normalize_keys, scoring_svd, scoring_speed, architecture_preset, diff_cache_mode, vram_budget, output_mode.
+**Inputs:** `MODEL`, `LORA_STACK`, output strength, optional `CLIP`, top_n, normalize_keys, scoring_svd, scoring_speed, architecture_preset, auto_strength_floor, diff_cache_mode, vram_budget, output_mode.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (ranked report), `STRING` (analysis report), `TUNER_DATA` (for Merge Selector / Optimizer Bridge / Save Tuner Data), `LORA_DATA` (for Save Merged LoRA)
 
@@ -533,7 +543,7 @@ LoRA AutoTuner → TUNER_DATA → Merge Selector (selection=2) → try the 2nd-b
 Chain the AutoTuner and Optimizer in a **single model line** for a "find best, then tweak" workflow. Only one node merges at a time — the other passes the model through. A single switch controls which is active, and the two nodes stay in sync automatically.
 
 <p align="center">
-  <img src="assets/bridge-workflow.svg" alt="AutoTuner ↔ Optimizer Bridge workflow" width="700">
+  <a href="assets/bridge-workflow.png"><img src="assets/bridge-workflow.svg" alt="AutoTuner ↔ Optimizer Bridge workflow" width="700"></a>
 </p>
 
 ```
