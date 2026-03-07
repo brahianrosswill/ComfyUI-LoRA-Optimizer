@@ -4560,9 +4560,14 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
                     "tooltip": "Fraction of free VRAM to use for storing merged patches. 0 = all CPU (default), 1.0 = use all free VRAM. Reduces RAM usage on GPU systems."
                 }),
-                "scoring_speed": (["full", "fast", "turbo"], {
+                "scoring_speed": (["full", "fast", "turbo", "turbo+"], {
                     "default": "full",
-                    "tooltip": "Phase 2 scoring speed. 'full' scores all prefixes (most accurate). 'fast' scores every 2nd high-conflict prefix (~50% faster). 'turbo' scores every 3rd (~67% faster). All candidates are scored on the same subset so ranking stays fair."
+                    "tooltip": "Controls how many prefixes Phase 2 scores per candidate. "
+                               "All candidates are scored on the same subset so ranking stays fair.\n\n"
+                               "• full — Score every prefix. Best accuracy, slowest. Use when merging very different LoRAs (e.g. style + character + concept) where block behavior varies a lot.\n"
+                               "• fast — Every 2nd prefix (~50%% faster). Good default for most merges.\n"
+                               "• turbo — Every 3rd prefix (~67%% faster). Works well when your LoRAs have similar conflict across blocks (e.g. multiple characters from the same trainer).\n"
+                               "• turbo+ — Every 4th prefix (~75%% faster). Best for large models (DiT/Flux/WAN) or when iterating quickly. May miss subtle block-level differences on SD/SDXL."
                 }),
             },
         }
@@ -4804,7 +4809,7 @@ class LoRAAutoTuner(LoRAOptimizer):
         use_subsampling = scoring_speed != "full" and top_n > 1
         scoring_cache = _analysis_cache  # default: use full cache
         if use_subsampling:
-            step = 2 if scoring_speed == "fast" else 3
+            step = {"fast": 2, "turbo": 3, "turbo+": 4}[scoring_speed]
             # Separate single-LoRA prefixes (always included, identical across candidates)
             # from multi-LoRA prefixes (where merge strategy matters)
             single_lora_targets = {}
