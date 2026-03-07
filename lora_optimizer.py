@@ -1761,15 +1761,23 @@ class _LoRAMergeBase:
         # Move to requested device for SVD (GPU is much faster for matmul-heavy randomized SVD)
         if svd_device is not None and mat.device != svd_device:
             mat = mat.to(svd_device)
-        # Oversample by 20% for better randomized SVD accuracy, then truncate.
-        # Without oversampling, svd_lowrank struggles when effective rank ≈ q.
-        q_oversample = min(rank + max(20, rank // 5), min(mat.shape))
-        U, S, V = torch.svd_lowrank(mat, q=q_oversample, niter=4)
-        del mat
-        # Truncate to target rank (oversampled columns improve accuracy but aren't kept)
-        U = U[:, :rank]
-        S = S[:rank]
-        V = V[:, :rank]
+        # When rank > dim/2, full SVD + truncate is both faster and more accurate
+        # than randomized SVD (which would oversample beyond dim anyway).
+        if rank > min(mat.shape) // 2:
+            U, S, Vh = torch.linalg.svd(mat, full_matrices=False)
+            del mat
+            U = U[:, :rank]
+            S = S[:rank]
+            V = Vh[:rank, :].T  # Vh is [min(dim), n], transpose slice to [n, rank]
+            del Vh
+        else:
+            # Oversample by 20% for better randomized SVD accuracy, then truncate.
+            q_oversample = min(rank + max(20, rank // 5), min(mat.shape))
+            U, S, V = torch.svd_lowrank(mat, q=q_oversample, niter=4)
+            del mat
+            U = U[:, :rank]
+            S = S[:rank]
+            V = V[:, :rank]
         # U: [out, rank], S: [rank], V: [in, rank]
         # Reconstruct as: mat_up = U * sqrt(S), mat_down = sqrt(S) * V^T
         # Return on CPU for storage (ComfyUI moves to device when applying)
@@ -1783,13 +1791,14 @@ class _LoRAMergeBase:
     @staticmethod
     @torch.no_grad()
     def _estimate_save_rank(initial_rank, model_patches, clip_patches,
-                            max_error=0.05, max_rank_cap=1024, n_samples=3):
+                            max_error=0.05, n_samples=3):
         """
-        Adaptively estimate the SVD rank needed to reconstruct merged diffs
-        within `max_error` relative error.  Samples a few diffs, tests at
-        initial_rank, and doubles until error is acceptable or cap is reached.
+        Determine the exact SVD rank needed to reconstruct merged diffs within
+        `max_error` relative Frobenius error.  Uses exact SVD on a few sample
+        diffs to find the minimum rank where the truncation error drops below
+        the threshold.  No arbitrary cap — rank is bounded only by min(dim).
         """
-        # Collect sample full-rank diffs
+        # Collect sample full-rank diffs (prefer larger ones for conservative estimate)
         samples = []
         for patch in list(model_patches.values()) + list(clip_patches.values()):
             if isinstance(patch, tuple) and patch[0] == "diff":
@@ -1802,28 +1811,28 @@ class _LoRAMergeBase:
         rank = max(initial_rank, 64)
         for sample in samples:
             mat = sample.reshape(sample.shape[0], -1).float()
-            dim_cap = min(mat.shape)
-            test_rank = rank
-            while test_rank < min(dim_cap, max_rank_cap):
-                q_over = min(test_rank + max(20, test_rank // 5), dim_cap)
-                U, S, V = torch.svd_lowrank(mat, q=q_over, niter=4)
-                reconstructed = (U[:, :test_rank] * S[:test_rank].unsqueeze(0)) @ V[:, :test_rank].T
-                orig_norm = mat.norm().item()
-                if orig_norm > 0:
-                    error = (reconstructed - mat).norm().item() / orig_norm
-                else:
-                    error = 0.0
-                del U, S, V, reconstructed
-                if error <= max_error:
+            # Exact SVD gives precise singular values — no randomized noise
+            S = torch.linalg.svdvals(mat)
+            total_sq = (S ** 2).sum().item()
+            if total_sq == 0:
+                continue
+            # Find minimum rank where residual/total < max_error
+            # ||A - A_k||_F / ||A||_F < max_error  ⟺  residual_sq/total_sq < max_error^2
+            threshold_sq = max_error * max_error * total_sq
+            cumulative_sq = 0.0
+            needed = len(S)
+            for r in range(len(S)):
+                cumulative_sq += S[r].item() ** 2
+                if total_sq - cumulative_sq <= threshold_sq:
+                    needed = r + 1
                     break
-                old = test_rank
-                test_rank = min(int(test_rank * 1.5), dim_cap, max_rank_cap)
-                if test_rank == old:
-                    break
-                logging.info(f"[Save Merged LoRA] Rank {old} → {test_rank} "
-                             f"(sample error {error:.4f} > {max_error})")
-            rank = max(rank, test_rank)
-            del mat
+            if needed > rank:
+                error_at_initial = math.sqrt(max(0, total_sq - sum(s.item()**2 for s in S[:rank])) / total_sq)
+                logging.info(f"[Save Merged LoRA] Sample diff ({mat.shape[0]}x{mat.shape[1]}): "
+                             f"need rank {needed} for <{max_error:.0%} error "
+                             f"(rank {rank} has {error_at_initial:.1%} error)")
+                rank = needed
+            del S, mat
         return rank
 
     @torch.no_grad()
