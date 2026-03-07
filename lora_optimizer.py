@@ -4525,7 +4525,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "tooltip": "Number of top configurations to evaluate via actual merge. Higher = slower but explores more options."
                 }),
                 "normalize_keys": (["disabled", "enabled"], {
-                    "default": "disabled",
+                    "default": "enabled",
                     "tooltip": "Makes LoRAs from different training tools compatible."
                 }),
                 "scoring_svd": (["disabled", "enabled"], {
@@ -4549,7 +4549,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "tooltip": "Cache the AutoTuner result in RAM so re-execution with the same inputs skips the full sweep. Disable to free RAM after merge (recommended for video models)."
                 }),
                 "diff_cache_mode": (["disabled", "auto", "ram", "disk"], {
-                    "default": "disabled",
+                    "default": "auto",
                     "tooltip": "Cache LoRA diffs across candidates to skip redundant computation. 'disabled' recomputes each time (slowest, no extra memory). 'auto' uses RAM up to diff_cache_ram_pct of free memory then spills to disk (recommended). 'ram' caches entirely in memory (~1.5GB SDXL, ~6GB Flux — fastest). 'disk' caches entirely to temp files (~1-10ms per diff vs 5-50ms to recompute). WARNING: ram/disk can use significant memory/storage on large models."
                 }),
                 "diff_cache_ram_pct": ("FLOAT", {
