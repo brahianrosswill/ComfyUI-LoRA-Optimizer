@@ -3917,6 +3917,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             pf_mode = mode
             pf_density = density
             pf_sign = sign_method
+            pf_orthogonal = False
             if optimization_mode == "weighted_sum_only":
                 pf_mode = "weighted_sum"
                 pf_n_loras = prefix_stats.get(lora_prefix, {}).get("n_loras", 0)
@@ -3945,9 +3946,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     # for 3 orthogonal vectors.  That extra energy causes a "burned" look.
                     # weighted_average divides by N, naturally reducing per-LoRA influence.
                     pf_cos = abs(pf.get("avg_cos_sim", 0.0))
+                    pf_orthogonal = pf_cos < arch_preset["orthogonal_cos_sim_max"]
                     if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
                             and behavior_profile == "v1.2"
-                            and pf_cos >= arch_preset["orthogonal_cos_sim_max"]):
+                            and not pf_orthogonal):
                         pf_mode = "slerp"
 
             # Apply merge strategy override from Conflict Editor (takes priority over auto-selection)
@@ -4134,6 +4136,15 @@ class LoRAOptimizer(_LoRAMergeBase):
             input_norms_mean = (sum(d.float().norm().item() * abs(w) for d, w in diffs_list)
                                 / len(diffs_list)) if diffs_list else 0.0
 
+            # For orthogonal weighted_average, force standard quality.
+            # TALL-masks classifies most positions as "selfish" for orthogonal
+            # LoRAs (each dominates independent positions) and adds them back at
+            # full strength AFTER the merge, bypassing weighted_average's /N
+            # normalization.  This converts weighted_average → weighted_sum (~Nx energy).
+            pf_quality = merge_quality
+            if (pf_mode == "weighted_average" and pf_orthogonal):
+                pf_quality = "standard"
+
             merged_diff = self._merge_diffs(
                 diffs_list, pf_mode,
                 density=pf_density, majority_sign_method=pf_sign,
@@ -4141,7 +4152,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 sparsification=sparsification,
                 sparsification_density=sparsification_density,
                 sparsification_generator=sp_gen,
-                merge_quality=merge_quality,
+                merge_quality=pf_quality,
                 dare_dampening=dare_dampening,
                 keep_on_gpu=should_keep,
             )
