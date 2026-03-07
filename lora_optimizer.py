@@ -5803,8 +5803,8 @@ class SaveMergedLoRA:
                     strength = clip_strength if is_clip else output_strength
                     alpha *= strength
 
-                state_dict[f"{lora_prefix}.lora_up.weight"] = mat_up.contiguous()
-                state_dict[f"{lora_prefix}.lora_down.weight"] = mat_down.contiguous()
+                state_dict[f"{lora_prefix}.lora_up.weight"] = mat_up.to(save_dtype).contiguous()
+                state_dict[f"{lora_prefix}.lora_down.weight"] = mat_down.to(save_dtype).contiguous()
                 state_dict[f"{lora_prefix}.alpha"] = torch.tensor(alpha)
 
         save_file(state_dict, save_path)
@@ -6041,16 +6041,16 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
 
     def analyze(self, enabled, model, lora_stack, clip=None):
         if not enabled:
-            return ("Analysis disabled. Toggle 'enabled' to run.", self._empty_image())
+            return {"ui": {"groups": []}, "result": ("Analysis disabled. Toggle 'enabled' to run.", self._empty_image())}
 
         if not lora_stack or len(lora_stack) == 0:
-            return ("No LoRAs in stack.", self._empty_image())
+            return {"ui": {"groups": []}, "result": ("No LoRAs in stack.", self._empty_image())}
 
         normalized_stack = self._normalize_stack(lora_stack)
         active_loras = [item for item in normalized_stack if item["strength"] != 0]
 
         if len(active_loras) == 0:
-            return ("No active LoRAs in stack (all zero strength).", self._empty_image())
+            return {"ui": {"groups": []}, "result": ("No active LoRAs in stack (all zero strength).", self._empty_image())}
 
         n_loras = len(active_loras)
         detected_arch = getattr(self, '_detected_arch', None) or 'unknown'
@@ -6066,7 +6066,7 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
                 "Nothing to compare — add more LoRAs to analyze compatibility.\n"
                 "\n" + "=" * 55
             )
-            return (report, self._empty_image())
+            return {"ui": {"groups": []}, "result": (report, self._empty_image())}
 
         # --- Setup ---
         logging.info(f"[Compatibility Analyzer] Analyzing {n_loras} LoRAs...")
@@ -6096,9 +6096,10 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
         prefix_count = analysis["prefix_count"]
 
         if prefix_count == 0:
-            return ("No compatible LoRA keys found. "
-                    "LoRAs may be incompatible with this model architecture.",
-                    self._empty_image())
+            return {"ui": {"groups": []}, "result": (
+                "No compatible LoRA keys found. "
+                "LoRAs may be incompatible with this model architecture.",
+                self._empty_image())}
 
         # --- Finalize stats ---
         per_lora_stats = analysis["per_lora_stats"]
@@ -6308,7 +6309,21 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
         display_names = [os.path.splitext(os.path.basename(item["name"]))[0] for item in active_loras]
         heatmap = self._generate_heatmap(raw_matrix, display_names, groups)
 
-        return (report, heatmap)
+        # --- Build group data for UI (auto-create LoRA Stack nodes) ---
+        groups_for_ui = []
+        for gi in group_info:
+            if gi["type"] != "merge":
+                continue
+            groups_for_ui.append({
+                "loras": [
+                    {"name": active_loras[idx]["name"], "strength": round(gi["strengths"][idx], 4)}
+                    for idx in gi["indices"]
+                ],
+                "suggested_merge": gi.get("suggested_merge", "weighted_average"),
+                "confidence": gi.get("confidence", "Low"),
+            })
+
+        return {"ui": {"groups": groups_for_ui}, "result": (report, heatmap)}
 
     @staticmethod
     def _empty_image():
