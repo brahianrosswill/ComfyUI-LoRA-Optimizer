@@ -2216,6 +2216,112 @@ class _LoRAMergeBase:
 
         return normalized
 
+    def _run_pass1_analysis(self, active_loras, all_lora_prefixes, model_keys, clip_keys, model, clip, compute_device, progress_callback=None):
+        """
+        Run Pass 1 streaming analysis over all LoRA prefixes.
+
+        Args:
+            progress_callback: Optional callable invoked after each prefix is analyzed.
+
+        Returns a dict with:
+          all_key_targets, per_lora_stats, pair_accum, all_magnitude_samples,
+          prefix_count, prefix_stats, skipped_keys, pairs
+        """
+        use_gpu = compute_device.type != "cpu"
+
+        all_key_targets = {}
+        skipped_keys = 0
+        per_lora_stats = [{
+            "name": item["name"],
+            "strength": item["strength"],
+            "ranks": [],
+            "key_count": 0,
+            "l2_norms": [],
+        } for item in active_loras]
+
+        pairs = [(i, j) for i in range(len(active_loras))
+                         for j in range(i + 1, len(active_loras))]
+        pair_accum = {(i, j): [0, 0, 0.0, 0.0, 0.0] for i, j in pairs}
+        all_magnitude_samples = []
+        prefix_count = 0
+        prefix_stats = {}
+
+        def _collect_analysis_result(result):
+            nonlocal skipped_keys, prefix_count
+            if result is None:
+                return
+            prefix, partial_stats, pair_conflicts, mag_samples, target_info, skips = result
+            skipped_keys += skips
+            if len(partial_stats) > 0:
+                all_key_targets[prefix] = target_info
+                prefix_count += 1
+            for (idx, rank, l2) in partial_stats:
+                per_lora_stats[idx]["ranks"].append(rank)
+                per_lora_stats[idx]["key_count"] += 1
+                per_lora_stats[idx]["l2_norms"].append(l2)
+            for (i, j), (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.items():
+                pair_accum[(i, j)][0] += ov
+                pair_accum[(i, j)][1] += conf
+                pair_accum[(i, j)][2] += dot
+                pair_accum[(i, j)][3] += na_sq
+                pair_accum[(i, j)][4] += nb_sq
+            all_magnitude_samples.extend(mag_samples)
+
+            if len(partial_stats) > 0:
+                n_contributing = len(partial_stats)
+                pf_overlap = sum(ov for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
+                pf_conflict = sum(conf for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
+                pf_conflict_ratio = pf_conflict / pf_overlap if pf_overlap > 0 else 0.0
+                pf_l2s = [l2 for _, _, l2 in partial_stats if l2 > 0]
+                if len(pf_l2s) >= 2:
+                    pf_mag_ratio = max(pf_l2s) / min(pf_l2s)
+                else:
+                    pf_mag_ratio = 1.0
+                pf_cos_sims = []
+                for (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.values():
+                    denom = (na_sq ** 0.5) * (nb_sq ** 0.5)
+                    if denom > 0:
+                        pf_cos_sims.append(dot / denom)
+                avg_cos_sim = sum(pf_cos_sims) / len(pf_cos_sims) if pf_cos_sims else 0.0
+                prefix_stats[prefix] = {
+                    "n_loras": n_contributing,
+                    "conflict_ratio": pf_conflict_ratio,
+                    "magnitude_ratio": pf_mag_ratio,
+                    "magnitude_samples": list(mag_samples),
+                    "avg_cos_sim": avg_cos_sim,
+                }
+
+        if use_gpu:
+            for lora_prefix in all_lora_prefixes:
+                result = self._analyze_prefix(lora_prefix, active_loras,
+                                              model_keys, clip_keys, model, clip, compute_device)
+                _collect_analysis_result(result)
+                if progress_callback:
+                    progress_callback()
+        else:
+            max_workers = min(4, max(1, len(all_lora_prefixes)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(self._analyze_prefix, lora_prefix, active_loras,
+                                    model_keys, clip_keys, model, clip, compute_device): lora_prefix
+                    for lora_prefix in all_lora_prefixes
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    _collect_analysis_result(future.result())
+                    if progress_callback:
+                        progress_callback()
+
+        return {
+            "all_key_targets": all_key_targets,
+            "per_lora_stats": per_lora_stats,
+            "pair_accum": pair_accum,
+            "all_magnitude_samples": all_magnitude_samples,
+            "prefix_count": prefix_count,
+            "prefix_stats": prefix_stats,
+            "skipped_keys": skipped_keys,
+            "pairs": pairs,
+        }
+
     def _sample_conflict(self, diff_a, diff_b, device=None):
         """
         Compute sign conflict ratio and cosine similarity components between
@@ -3853,93 +3959,16 @@ class LoRAOptimizer(_LoRAMergeBase):
                          f" ({'sequential' if use_gpu else 'threaded'})")
             t_pass1 = time.time()
 
-            # Lightweight accumulators (no full-rank diff tensors stored)
-            all_key_targets = {}          # prefix -> (target_key, is_clip)
-            skipped_keys = 0
-            per_lora_stats = [{
-                "name": item["name"],
-                "strength": item["strength"],
-                "ranks": [],
-                "key_count": 0,
-                "l2_norms": [],
-            } for item in active_loras]
-
-            pairs = [(i, j) for i in range(len(active_loras))
-                             for j in range(i + 1, len(active_loras))]
-            pair_accum = {(i, j): [0, 0, 0.0, 0.0, 0.0] for i, j in pairs}  # [overlap, conflict, dot, norm_a_sq, norm_b_sq]
-            all_magnitude_samples = []    # list of small CPU tensors
-            prefix_count = 0              # number of prefixes with valid diffs
-            prefix_stats = {}             # prefix -> {conflict_ratio, n_loras, magnitude_samples, magnitude_ratio}
-
-            def _collect_analysis_result(result):
-                nonlocal skipped_keys, prefix_count
-                if result is None:
-                    return
-                prefix, partial_stats, pair_conflicts, mag_samples, target_info, skips = result
-                skipped_keys += skips
-                if len(partial_stats) > 0:
-                    all_key_targets[prefix] = target_info
-                    prefix_count += 1
-                for (idx, rank, l2) in partial_stats:
-                    per_lora_stats[idx]["ranks"].append(rank)
-                    per_lora_stats[idx]["key_count"] += 1
-                    per_lora_stats[idx]["l2_norms"].append(l2)
-                for (i, j), (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.items():
-                    pair_accum[(i, j)][0] += ov
-                    pair_accum[(i, j)][1] += conf
-                    pair_accum[(i, j)][2] += dot
-                    pair_accum[(i, j)][3] += na_sq
-                    pair_accum[(i, j)][4] += nb_sq
-                all_magnitude_samples.extend(mag_samples)
-
-                # Store per-prefix stats for per_prefix optimization mode
-                if len(partial_stats) > 0:
-                    # Number of LoRAs contributing to this prefix
-                    n_contributing = len(partial_stats)
-
-                    # Per-prefix conflict ratio
-                    pf_overlap = sum(ov for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
-                    pf_conflict = sum(conf for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
-                    pf_conflict_ratio = pf_conflict / pf_overlap if pf_overlap > 0 else 0.0
-
-                    # Per-prefix magnitude ratio (max/min L2 among contributing LoRAs)
-                    pf_l2s = [l2 for _, _, l2 in partial_stats if l2 > 0]
-                    if len(pf_l2s) >= 2:
-                        pf_mag_ratio = max(pf_l2s) / min(pf_l2s)
-                    else:
-                        pf_mag_ratio = 1.0
-
-                    # Per-prefix average cosine similarity
-                    pf_cos_sims = []
-                    for (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.values():
-                        denom = (na_sq ** 0.5) * (nb_sq ** 0.5)
-                        if denom > 0:
-                            pf_cos_sims.append(dot / denom)
-                    avg_cos_sim = sum(pf_cos_sims) / len(pf_cos_sims) if pf_cos_sims else 0.0
-
-                    prefix_stats[prefix] = {
-                        "n_loras": n_contributing,
-                        "conflict_ratio": pf_conflict_ratio,
-                        "magnitude_ratio": pf_mag_ratio,
-                        "magnitude_samples": list(mag_samples),  # copy, not reference
-                        "avg_cos_sim": avg_cos_sim,
-                    }
-
-            if use_gpu:
-                for lora_prefix in all_lora_prefixes:
-                    result = self._analyze_prefix(lora_prefix, active_loras,
-                                                  model_keys, clip_keys, model, clip, compute_device)
-                    _collect_analysis_result(result)
-            else:
-                max_workers = min(4, max(1, len(all_lora_prefixes)))
-                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = {
-                        executor.submit(self._analyze_prefix, lora_prefix, active_loras,
-                                        model_keys, clip_keys, model, clip, compute_device): lora_prefix
-                        for lora_prefix in all_lora_prefixes
-                    }
-                    for future in concurrent.futures.as_completed(futures):
-                        _collect_analysis_result(future.result())
+            analysis = self._run_pass1_analysis(active_loras, all_lora_prefixes,
+                                                model_keys, clip_keys, model, clip, compute_device)
+            all_key_targets = analysis["all_key_targets"]
+            per_lora_stats = analysis["per_lora_stats"]
+            pair_accum = analysis["pair_accum"]
+            all_magnitude_samples = analysis["all_magnitude_samples"]
+            prefix_count = analysis["prefix_count"]
+            prefix_stats = analysis["prefix_stats"]
+            skipped_keys = analysis["skipped_keys"]
+            pairs = analysis["pairs"]
 
             if prefix_count == 0:
                 return (model, clip, "No compatible LoRA keys found. "
@@ -4922,85 +4951,23 @@ class LoRAAutoTuner(LoRAOptimizer):
         use_gpu = compute_device.type != "cpu"
 
         # Run Pass 1 analysis
-        all_key_targets = {}
-        skipped_keys = 0
-        per_lora_stats = [{
-            "name": item["name"], "strength": item["strength"],
-            "ranks": [], "key_count": 0, "l2_norms": [],
-        } for item in active_loras]
-
-        pairs = [(i, j) for i in range(len(active_loras))
-                 for j in range(i + 1, len(active_loras))]
-        pair_accum = {(i, j): [0, 0, 0.0, 0.0, 0.0] for i, j in pairs}
-        all_magnitude_samples = []
-        prefix_count = 0
-        prefix_stats = {}
-
-        def _collect_analysis(result):
-            nonlocal skipped_keys, prefix_count
-            if result is None:
-                return
-            prefix, partial_stats, pair_conflicts, mag_samples, target_info, skips = result
-            skipped_keys += skips
-            if len(partial_stats) > 0:
-                all_key_targets[prefix] = target_info
-                prefix_count += 1
-            for (idx, rank, l2) in partial_stats:
-                per_lora_stats[idx]["ranks"].append(rank)
-                per_lora_stats[idx]["key_count"] += 1
-                per_lora_stats[idx]["l2_norms"].append(l2)
-            for (i, j), (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.items():
-                pair_accum[(i, j)][0] += ov
-                pair_accum[(i, j)][1] += conf
-                pair_accum[(i, j)][2] += dot
-                pair_accum[(i, j)][3] += na_sq
-                pair_accum[(i, j)][4] += nb_sq
-            all_magnitude_samples.extend(mag_samples)
-            if len(partial_stats) > 0:
-                n_contributing = len(partial_stats)
-                pf_overlap = sum(ov for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
-                pf_conflict = sum(conf for ov, conf, dot, na_sq, nb_sq in pair_conflicts.values())
-                pf_conflict_ratio = pf_conflict / pf_overlap if pf_overlap > 0 else 0.0
-                pf_l2s = [l2 for _, _, l2 in partial_stats if l2 > 0]
-                pf_mag_ratio = max(pf_l2s) / min(pf_l2s) if len(pf_l2s) >= 2 else 1.0
-                pf_cos_sims = []
-                for (ov, conf, dot, na_sq, nb_sq) in pair_conflicts.values():
-                    denom = (na_sq ** 0.5) * (nb_sq ** 0.5)
-                    if denom > 0:
-                        pf_cos_sims.append(dot / denom)
-                avg_cs = sum(pf_cos_sims) / len(pf_cos_sims) if pf_cos_sims else 0.0
-                prefix_stats[prefix] = {
-                    "n_loras": n_contributing,
-                    "conflict_ratio": pf_conflict_ratio,
-                    "magnitude_ratio": pf_mag_ratio,
-                    "magnitude_samples": list(mag_samples),
-                    "avg_cos_sim": avg_cs,
-                }
-
         logging.info(f"[LoRA AutoTuner] Pass 1: Analyzing {len(all_lora_prefixes)} prefixes...")
         t_start = time.time()
         # Progress bar: analysis prefixes + top_n merges (+ 1 final merge when subsampling)
         n_pbar_merges = top_n + (1 if scoring_speed != "full" and top_n > 1 and output_mode != "tuning_only" else 0)
         pbar = comfy.utils.ProgressBar(len(all_lora_prefixes) + n_pbar_merges)
-        if use_gpu:
-            for lora_prefix in all_lora_prefixes:
-                result = self._analyze_prefix(lora_prefix, active_loras,
-                                              model_keys, clip_keys, model, clip, compute_device)
-                _collect_analysis(result)
-                pbar.update(1)
-        else:
-            max_workers = min(4, max(1, len(all_lora_prefixes)))
-            analyzed = 0
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(self._analyze_prefix, lora_prefix, active_loras,
-                                    model_keys, clip_keys, model, clip, compute_device): lora_prefix
-                    for lora_prefix in all_lora_prefixes
-                }
-                for future in concurrent.futures.as_completed(futures):
-                    _collect_analysis(future.result())
-                    analyzed += 1
-                    pbar.update(1)
+
+        analysis = self._run_pass1_analysis(active_loras, all_lora_prefixes,
+                                            model_keys, clip_keys, model, clip, compute_device,
+                                            progress_callback=lambda: pbar.update(1))
+        all_key_targets = analysis["all_key_targets"]
+        per_lora_stats = analysis["per_lora_stats"]
+        pair_accum = analysis["pair_accum"]
+        all_magnitude_samples = analysis["all_magnitude_samples"]
+        prefix_count = analysis["prefix_count"]
+        prefix_stats = analysis["prefix_stats"]
+        skipped_keys = analysis["skipped_keys"]
+        pairs = analysis["pairs"]
 
         if prefix_count == 0:
             return (model, clip, "No compatible LoRA keys found.", "", None, None)
@@ -5993,6 +5960,523 @@ class MergedLoRAToWanVideo:
         return (new_model,)
 
 
+class LoRACompatibilityAnalyzer(LoRAOptimizer):
+    """
+    Standalone pre-merge planning tool. Analyzes pairwise LoRA interactions
+    (cosine similarity, sign conflicts, magnitude ratios) and recommends
+    which LoRAs to merge together vs. use independently.
+
+    No merge happens — analysis only. Inherits from LoRAOptimizer to reuse
+    _analyze_prefix, _compute_auto_strengths, and _auto_select_params.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL", {"tooltip": "Base model for key mapping and target shapes."}),
+                "lora_stack": ("LORA_STACK", {"tooltip": "The LoRA stack to analyze for compatibility."}),
+            },
+            "optional": {
+                "clip": ("CLIP", {"tooltip": "Text encoder. Connect for CLIP key analysis."}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "IMAGE")
+    RETURN_NAMES = ("report", "compatibility_map")
+    FUNCTION = "analyze"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = "Analyzes pairwise LoRA compatibility and recommends merge groups. No merge is performed — use this to plan which LoRAs to combine before merging."
+
+    def analyze(self, model, lora_stack, clip=None):
+        if not lora_stack or len(lora_stack) == 0:
+            return ("No LoRAs in stack.", self._empty_image())
+
+        normalized_stack = self._normalize_stack(lora_stack)
+        active_loras = [item for item in normalized_stack if item["strength"] != 0]
+
+        if len(active_loras) == 0:
+            return ("No active LoRAs in stack (all zero strength).", self._empty_image())
+
+        n_loras = len(active_loras)
+        detected_arch = getattr(self, '_detected_arch', None) or 'unknown'
+        preset_key, arch_preset = _resolve_arch_preset("auto", detected_arch)
+
+        if n_loras == 1:
+            name = active_loras[0]["name"]
+            report = (
+                "=" * 55 + "\n"
+                "  LoRA Compatibility Analysis\n"
+                "=" * 55 + "\n\n"
+                f"Single LoRA: {name}\n"
+                "Nothing to compare — add more LoRAs to analyze compatibility.\n"
+                "\n" + "=" * 55
+            )
+            return (report, self._empty_image())
+
+        # --- Setup ---
+        logging.info(f"[Compatibility Analyzer] Analyzing {n_loras} LoRAs...")
+        t_start = time.time()
+
+        model_keys = self._get_model_keys(model)
+        clip_keys = {}
+        if clip is not None:
+            clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
+
+        all_lora_prefixes = set()
+        for item in active_loras:
+            for key in item["lora"].keys():
+                for suffix in [".lora_up.weight", ".lora_down.weight", "_lora.up.weight",
+                              "_lora.down.weight", ".lora_B.weight", ".lora_A.weight",
+                              ".lora.up.weight", ".lora.down.weight", ".alpha"]:
+                    if key.endswith(suffix):
+                        prefix = key[:-len(suffix)]
+                        all_lora_prefixes.add(prefix)
+                        break
+        all_lora_prefixes = sorted(all_lora_prefixes)
+        compute_device = self._get_compute_device()
+
+        # --- Pass 1 Analysis ---
+        analysis = self._run_pass1_analysis(active_loras, all_lora_prefixes,
+                                            model_keys, clip_keys, model, clip, compute_device)
+        prefix_count = analysis["prefix_count"]
+
+        if prefix_count == 0:
+            return ("No compatible LoRA keys found. "
+                    "LoRAs may be incompatible with this model architecture.",
+                    self._empty_image())
+
+        # --- Finalize stats ---
+        per_lora_stats = analysis["per_lora_stats"]
+        pair_accum = analysis["pair_accum"]
+        pairs = analysis["pairs"]
+
+        lora_stats = []
+        l2_means = []
+        for i, stat in enumerate(per_lora_stats):
+            avg_rank = sum(stat["ranks"]) / len(stat["ranks"]) if stat["ranks"] else 0
+            l2_mean = sum(stat["l2_norms"]) / len(stat["l2_norms"]) if stat["l2_norms"] else 0
+            l2_means.append(l2_mean)
+            lora_stats.append({
+                "name": stat["name"],
+                "strength": stat["strength"],
+                "key_count": stat["key_count"],
+                "avg_rank": avg_rank,
+                "l2_mean": l2_mean,
+            })
+
+        total_overlap = 0
+        total_conflict = 0
+        pairwise_conflicts = []
+        pairwise_similarities = {}
+        for i, j in pairs:
+            pair_overlap, pair_conflict, pair_dot, pair_na_sq, pair_nb_sq = pair_accum[(i, j)]
+            total_overlap += pair_overlap
+            total_conflict += pair_conflict
+            ratio = pair_conflict / pair_overlap if pair_overlap > 0 else 0
+            denom = math.sqrt(pair_na_sq) * math.sqrt(pair_nb_sq)
+            cos_sim = pair_dot / denom if denom > 0 else 0.0
+            pairwise_similarities[(i, j)] = cos_sim
+            name_i = active_loras[i]['name']
+            name_j = active_loras[j]['name']
+            if name_i == name_j:
+                pair_label = (f"{name_i} [#{i+1}, str={active_loras[i]['strength']}] vs "
+                              f"{name_j} [#{j+1}, str={active_loras[j]['strength']}]")
+            else:
+                pair_label = f"{name_i} vs {name_j}"
+            pairwise_conflicts.append({
+                "i": i, "j": j,
+                "pair": pair_label,
+                "overlap": pair_overlap,
+                "conflicts": pair_conflict,
+                "ratio": ratio,
+                "cosine_sim": cos_sim,
+            })
+
+        avg_conflict_ratio = total_conflict / total_overlap if total_overlap > 0 else 0
+        valid_l2 = [m for m in l2_means if m > 0]
+        magnitude_ratio = max(valid_l2) / min(valid_l2) if len(valid_l2) >= 2 else 1.0
+        avg_cos_sim = (sum(pairwise_similarities.values()) / len(pairwise_similarities)
+                       if pairwise_similarities else 0.0)
+
+        collection_stats = {
+            "n_loras": n_loras,
+            "total_keys": prefix_count,
+            "avg_conflict": avg_conflict_ratio,
+            "avg_cos_sim": avg_cos_sim,
+            "magnitude_ratio": magnitude_ratio,
+        }
+
+        # --- Compatibility matrix ---
+        compat_matrix = self._compute_compat_matrix(pairwise_similarities, pairwise_conflicts, n_loras)
+
+        # --- Clustering ---
+        groups = self._cluster_loras(compat_matrix, threshold=0.05)
+
+        # --- Per-group recommendations ---
+        group_info = []
+        for group in groups:
+            info = {"indices": group}
+            if len(group) == 1:
+                idx = group[0]
+                info["type"] = "solo"
+                info["strength"] = active_loras[idx]["strength"]
+                # Find opposing LoRAs
+                opposing = []
+                for other_idx in range(n_loras):
+                    if other_idx == idx:
+                        continue
+                    key = (min(idx, other_idx), max(idx, other_idx))
+                    cs = pairwise_similarities.get(key, 0.0)
+                    if cs < -0.05:
+                        opposing.append((active_loras[other_idx]["name"], cs))
+                opposing.sort(key=lambda x: x[1])
+                info["opposing"] = opposing
+            else:
+                info["type"] = "merge"
+                # Compute intra-group stats
+                conflict_by_pair = {(pc["i"], pc["j"]): pc["ratio"] for pc in pairwise_conflicts}
+                intra_cos = []
+                intra_conflict = []
+                for a_pos in range(len(group)):
+                    for b_pos in range(a_pos + 1, len(group)):
+                        key = (min(group[a_pos], group[b_pos]), max(group[a_pos], group[b_pos]))
+                        cs = pairwise_similarities.get(key, 0.0)
+                        cr = conflict_by_pair.get(key, 0.0)
+                        intra_cos.append(cs)
+                        intra_conflict.append(cr)
+                info["avg_cos_sim"] = sum(intra_cos) / len(intra_cos) if intra_cos else 0.0
+                info["avg_conflict"] = sum(intra_conflict) / len(intra_conflict) if intra_conflict else 0.0
+                avg_compat = sum(cs * (1.0 - cr) for cs, cr in zip(intra_cos, intra_conflict)) / len(intra_cos) if intra_cos else 0.0
+                if avg_compat > 0.2:
+                    info["confidence"] = "High"
+                elif avg_compat > 0.05:
+                    info["confidence"] = "Moderate"
+                else:
+                    info["confidence"] = "Low"
+
+                # Auto-strengths for group
+                group_loras = [active_loras[idx] for idx in group]
+                group_lora_stats = [lora_stats[idx] for idx in group]
+                group_pw_sim = {}
+                for a_pos in range(len(group)):
+                    for b_pos in range(a_pos + 1, len(group)):
+                        orig_key = (min(group[a_pos], group[b_pos]), max(group[a_pos], group[b_pos]))
+                        group_pw_sim[(a_pos, b_pos)] = pairwise_similarities.get(orig_key, 0.0)
+                new_strengths, _ = self._compute_auto_strengths(
+                    group_loras, group_lora_stats,
+                    pairwise_similarities=group_pw_sim,
+                    arch_preset=arch_preset, detected_arch=detected_arch)
+                info["strengths"] = {group[k]: new_strengths[k] for k in range(len(group))}
+
+                # Suggested merge strategy
+                group_avg_cos = info["avg_cos_sim"]
+                group_avg_conflict = info["avg_conflict"]
+                mag_samples = analysis["all_magnitude_samples"]
+                mode, _, _, _ = self._auto_select_params(
+                    group_avg_conflict,
+                    magnitude_ratio,
+                    magnitude_samples=mag_samples,
+                    avg_cos_sim=group_avg_cos,
+                    arch_preset=arch_preset)
+                info["suggested_merge"] = mode
+
+            group_info.append(info)
+
+        # --- Warnings ---
+        def _disambiguate(idx_a, idx_b):
+            """Return display names, adding [#N] suffix when names collide."""
+            na = active_loras[idx_a]["name"]
+            nb = active_loras[idx_b]["name"]
+            if na == nb:
+                na = f"{na} [#{idx_a+1}]"
+                nb = f"{nb} [#{idx_b+1}]"
+            return na, nb
+
+        warnings = []
+        for pc in pairwise_conflicts:
+            if pc["cosine_sim"] < -0.1:
+                na, nb = _disambiguate(pc["i"], pc["j"])
+                warnings.append({
+                    "type": "opposing",
+                    "name_i": na,
+                    "name_j": nb,
+                    "cos_sim": pc["cosine_sim"],
+                })
+        # Magnitude imbalance warnings
+        for pc in pairwise_conflicts:
+            i, j = pc["i"], pc["j"]
+            l2_i = l2_means[i]
+            l2_j = l2_means[j]
+            if l2_i > 0 and l2_j > 0:
+                ratio = max(l2_i, l2_j) / min(l2_i, l2_j)
+                if ratio > 3.0:
+                    na, nb = _disambiguate(i, j)
+                    stronger = na if l2_i > l2_j else nb
+                    weaker = nb if l2_i > l2_j else na
+                    warnings.append({
+                        "type": "magnitude",
+                        "stronger": stronger,
+                        "weaker": weaker,
+                        "ratio": ratio,
+                    })
+
+        elapsed = time.time() - t_start
+        logging.info(f"[Compatibility Analyzer] Analysis complete ({elapsed:.1f}s)")
+
+        # --- Build report ---
+        report = self._build_compatibility_report(
+            active_loras, groups, group_info, lora_stats, pairwise_conflicts,
+            collection_stats, warnings, detected_arch, prefix_count)
+
+        # --- Generate heatmap ---
+        lora_names = [item["name"] for item in active_loras]
+        heatmap = self._generate_heatmap(compat_matrix, lora_names, groups)
+
+        return (report, heatmap)
+
+    @staticmethod
+    def _empty_image():
+        """Return a minimal 1x1 black IMAGE tensor."""
+        return torch.zeros(1, 1, 1, 3, dtype=torch.float32)
+
+    @staticmethod
+    def _compute_compat_matrix(pairwise_similarities, pairwise_conflicts, n_loras):
+        """Compute N×N compatibility matrix: compat[i][j] = cos_sim * (1 - conflict_ratio)."""
+        conflict_by_pair = {}
+        for pc in pairwise_conflicts:
+            conflict_by_pair[(pc["i"], pc["j"])] = pc["ratio"]
+
+        matrix = [[0.0] * n_loras for _ in range(n_loras)]
+        for (i, j), cos_sim in pairwise_similarities.items():
+            conflict_ratio = conflict_by_pair.get((i, j), 0.0)
+            compat = cos_sim * (1.0 - conflict_ratio)
+            matrix[i][j] = compat
+            matrix[j][i] = compat
+        return matrix
+
+    @staticmethod
+    def _cluster_loras(compat_matrix, threshold=0.05):
+        """Greedy agglomerative clustering. Returns list of groups (lists of indices)."""
+        n = len(compat_matrix)
+        groups = [[i] for i in range(n)]
+
+        while len(groups) > 1:
+            best_score = -float('inf')
+            best_pair = None
+            for ga_idx in range(len(groups)):
+                for gb_idx in range(ga_idx + 1, len(groups)):
+                    ga, gb = groups[ga_idx], groups[gb_idx]
+                    total = 0.0
+                    count = 0
+                    for a in ga:
+                        for b in gb:
+                            total += compat_matrix[a][b]
+                            count += 1
+                    avg_compat = total / count if count > 0 else 0.0
+                    if avg_compat > best_score:
+                        best_score = avg_compat
+                        best_pair = (ga_idx, gb_idx)
+
+            if best_score < threshold:
+                break
+
+            # Merge the best pair
+            ga_idx, gb_idx = best_pair
+            merged = groups[ga_idx] + groups[gb_idx]
+            groups = [g for idx, g in enumerate(groups) if idx != ga_idx and idx != gb_idx]
+            groups.append(merged)
+
+        # Sort groups: multi-member first (by size desc), then singletons
+        groups.sort(key=lambda g: (-len(g), g[0]))
+        return groups
+
+    @staticmethod
+    def _generate_heatmap(compat_matrix, lora_names, groups):
+        """Generate N×N heatmap as torch IMAGE tensor using PIL."""
+        from PIL import Image, ImageDraw
+        import numpy as np
+
+        n = len(compat_matrix)
+        if n == 0:
+            return torch.zeros(1, 1, 1, 3, dtype=torch.float32)
+
+        # Reorder indices by group membership so group borders are contiguous
+        display_order = []
+        for g in groups:
+            display_order.extend(g)
+
+        cell_size = 80
+        margin = 150
+        img_size = margin + n * cell_size
+
+        img = Image.new("RGB", (img_size, img_size), (30, 30, 30))
+        draw = ImageDraw.Draw(img)
+
+        # Color mapping: continuous red (-0.4) → yellow (0.05) → green (+0.5)
+        def compat_to_color(val):
+            # Normalize to 0..1 range: -0.4 → 0, +0.5 → 1
+            t = max(0.0, min(1.0, (val + 0.4) / 0.9))
+            if t < 0.5:
+                # Red to yellow (t: 0→0.5)
+                s = t / 0.5  # 0..1
+                r = int(200 + 20 * s)
+                g = int(180 * s)
+                return (r, g, 0)
+            else:
+                # Yellow to green (t: 0.5→1)
+                s = (t - 0.5) / 0.5  # 0..1
+                r = int(220 * (1 - s))
+                g = int(180 + 20 * s)
+                return (r, g, 0)
+
+        # Draw cells (using reordered indices)
+        for row in range(n):
+            for col in range(n):
+                orig_i = display_order[row]
+                orig_j = display_order[col]
+                x = margin + col * cell_size
+                y = margin + row * cell_size
+                if orig_i == orig_j:
+                    color = (80, 80, 80)
+                    val_text = "-"
+                else:
+                    val = compat_matrix[orig_i][orig_j]
+                    color = compat_to_color(val)
+                    val_text = f"{val:.2f}"
+
+                draw.rectangle([x, y, x + cell_size - 1, y + cell_size - 1], fill=color)
+                # Center text in cell
+                bbox = draw.textbbox((0, 0), val_text)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+                tx = x + (cell_size - tw) // 2
+                ty = y + (cell_size - th) // 2
+                # Text color: white on dark, black on light
+                brightness = color[0] * 0.299 + color[1] * 0.587 + color[2] * 0.114
+                text_color = (0, 0, 0) if brightness > 128 else (255, 255, 255)
+                draw.text((tx, ty), val_text, fill=text_color)
+
+        # Draw labels (using reordered indices, truncated to 20 chars)
+        for pos in range(n):
+            label = lora_names[display_order[pos]][:20]
+            # Row labels (left)
+            y = margin + pos * cell_size + cell_size // 2 - 5
+            draw.text((5, y), label, fill=(220, 220, 220))
+            # Column labels (top, horizontal)
+            x = margin + pos * cell_size + 5
+            draw.text((x, margin - 15), label[:10], fill=(220, 220, 220))
+
+        # Draw group borders (contiguous after reordering)
+        pos = 0
+        for group in groups:
+            if len(group) > 1:
+                x0 = margin + pos * cell_size - 1
+                y0 = margin + pos * cell_size - 1
+                x1 = margin + (pos + len(group)) * cell_size
+                y1 = margin + (pos + len(group)) * cell_size
+                for offset in range(3):
+                    draw.rectangle([x0 - offset, y0 - offset, x1 + offset, y1 + offset],
+                                   outline=(255, 255, 255))
+            pos += len(group)
+
+        # Convert PIL → torch tensor [1, H, W, 3] float32
+        arr = np.array(img, dtype=np.float32) / 255.0
+        tensor = torch.from_numpy(arr).unsqueeze(0)  # [1, H, W, 3]
+        return tensor
+
+    def _build_compatibility_report(self, active_loras, groups, group_info,
+                                     lora_stats, pairwise_conflicts,
+                                     collection_stats, warnings,
+                                     detected_arch, prefix_count):
+        """Build human-readable compatibility report."""
+        n_loras = len(active_loras)
+        lines = []
+
+        lines.append("=" * 55)
+        lines.append("  LoRA Compatibility Analysis")
+        lines.append("=" * 55)
+        lines.append("")
+        lines.append(f"Analyzed: {n_loras} LoRAs across {prefix_count} prefixes")
+        arch_display = detected_arch.upper() if detected_arch and detected_arch != 'unknown' else "Unknown"
+        lines.append(f"Architecture: {arch_display}")
+        lines.append(f"Avg conflict: {collection_stats['avg_conflict']:.0%} | "
+                     f"Avg cosine similarity: {collection_stats['avg_cos_sim']:.2f}")
+        lines.append("")
+
+        # --- Recommended Groups ---
+        lines.append("-" * 30 + " Recommended Groups " + "-" * 30)
+        lines.append("")
+
+        group_num = 0
+        solo_entries = []
+        for gi in group_info:
+            indices = gi["indices"]
+            if gi["type"] == "solo":
+                solo_entries.append(gi)
+                continue
+
+            group_num += 1
+            confidence = gi["confidence"]
+            lines.append(f"Group {group_num} -- Merge together (compatibility: {confidence})")
+            for idx in indices:
+                strength = gi["strengths"].get(idx, active_loras[idx]["strength"])
+                name = active_loras[idx]["name"]
+                lines.append(f"  * {name:<28s} strength {strength:.2f}")
+            lines.append(f"  Avg cosine sim: {gi['avg_cos_sim']:.2f} | "
+                        f"Avg conflict: {gi['avg_conflict']:.0%}")
+            lines.append(f"  Suggested merge: {gi['suggested_merge']}")
+            lines.append("")
+
+        if solo_entries:
+            lines.append("Solo -- Use independently")
+            for gi in solo_entries:
+                idx = gi["indices"][0]
+                name = active_loras[idx]["name"]
+                strength = gi["strength"]
+                lines.append(f"  * {name:<28s} strength {strength:.2f}")
+                if gi["opposing"]:
+                    opp_strs = [f"{oname} (cos: {cs:.2f})" for oname, cs in gi["opposing"][:3]]
+                    lines.append(f"    Opposes: {', '.join(opp_strs)}")
+            lines.append("")
+
+        # --- Warnings ---
+        if warnings:
+            lines.append("-" * 30 + " Warnings " + "-" * 30)
+            lines.append("")
+            for w in warnings:
+                if w["type"] == "opposing":
+                    lines.append(f"! {w['name_i']} vs {w['name_j']}: Opposing (cos_sim: {w['cos_sim']:.2f})")
+                    lines.append(f"  These cancel each other out -- using both will degrade quality.")
+                    lines.append("")
+                elif w["type"] == "magnitude":
+                    lines.append(f"! {w['stronger']} is {w['ratio']:.1f}x stronger than {w['weaker']}")
+                    lines.append(f"  {w['weaker']} may be overshadowed at equal strengths.")
+                    lines.append("")
+
+        # --- Pairwise Compatibility Table ---
+        lines.append("-" * 30 + " Pairwise Compatibility " + "-" * 30)
+        lines.append("")
+
+        # Sort by compat score descending
+        sorted_pairs = sorted(pairwise_conflicts, key=lambda p: p["cosine_sim"] * (1.0 - p["ratio"]), reverse=True)
+        for pc in sorted_pairs:
+            cos = pc["cosine_sim"]
+            conflict = pc["ratio"]
+            compat = cos * (1.0 - conflict)
+            indicator = ""
+            if compat > 0.2:
+                indicator = " [OK]"
+            elif compat < -0.05:
+                indicator = " [!!]"
+            lines.append(f"  {pc['pair']:<45s}  "
+                        f"cos:{cos:6.2f}  conflict:{conflict:5.0%}  compat:{compat:6.2f}{indicator}")
+        lines.append("")
+        lines.append("=" * 55)
+
+        return "\n".join(lines)
+
+
 class LoRAConflictEditor(_LoRAMergeBase):
     """
     Analyzes pairwise sign conflicts between LoRAs in a stack and enriches
@@ -6410,6 +6894,7 @@ NODE_CLASS_MAPPINGS = {
     "LoRAMergeSelector": LoRAMergeSelector,
     "SaveTunerData": SaveTunerData,
     "LoadTunerData": LoadTunerData,
+    "LoRACompatibilityAnalyzer": LoRACompatibilityAnalyzer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -6426,4 +6911,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAMergeSelector": "Merge Selector",
     "SaveTunerData": "Save Tuner Data",
     "LoadTunerData": "Load Tuner Data",
+    "LoRACompatibilityAnalyzer": "LoRA Compatibility Analyzer",
 }
