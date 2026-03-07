@@ -5790,24 +5790,26 @@ class SaveMergedLoRA:
         auto_rank = save_rank == 0
 
         # Auto mode: determine rank for compressing full-rank diffs.
-        # Priority: 1) existing LoRAAdapter ranks, 2) adaptive from sample diffs, 3) sum_rank, 4) fallback 128
+        # LoRAAdapter patches keep their existing rank (already compressed during merge).
+        # Full-rank diff patches (e.g. TIES) need adaptive estimation — element-wise
+        # operations like TIES trim/elect destroy low-rank structure, so sum_rank
+        # is not a reliable estimate of the effective rank.
         if auto_rank:
-            existing_ranks = []
-            for patch in list(model_patches.values()) + list(clip_patches.values()):
-                if isinstance(patch, LoRAAdapter):
-                    existing_ranks.append(patch.weights[1].shape[0])  # mat_down rows = rank
-                # LoKr/LoHa factor ranks (1-8) are not comparable to LoRA ranks —
-                # skip them so the fallback kicks in instead
-            if existing_ranks:
-                fallback_rank = max(set(existing_ranks), key=existing_ranks.count)
-                logging.info(f"[Save Merged LoRA] Auto rank: {fallback_rank} from {len(existing_ranks)} low-rank patches")
-            else:
-                # No low-rank patches — all diffs are full-rank (from merge).
-                # Estimate needed rank adaptively: sample a diff, compress, check error.
+            # Check if there are any full-rank diffs that need compression
+            has_diffs = any(
+                isinstance(patch, tuple) and patch[0] == "diff"
+                for patch in list(model_patches.values()) + list(clip_patches.values())
+            )
+            if has_diffs:
                 initial_rank = lora_data.get("sum_rank", 128)
                 fallback_rank = LoRAOptimizer._estimate_save_rank(initial_rank, model_patches, clip_patches)
-                logging.info(f"[Save Merged LoRA] Auto rank: {fallback_rank} "
+                logging.info(f"[Save Merged LoRA] Auto rank for diffs: {fallback_rank} "
                              f"(initial estimate {initial_rank}, adapted from sample diffs)")
+            else:
+                # All patches are already low-rank (LoRAAdapter) — fallback_rank
+                # is only used for LoKr/LoHa expansion, use sum_rank or 128
+                fallback_rank = lora_data.get("sum_rank", 128)
+                logging.info(f"[Save Merged LoRA] Auto rank: {fallback_rank} (no full-rank diffs to compress)")
 
         # Detect native storage dtype (fp16/bf16) from patches for output.
         # SVD compression produces float32 internally, but saved LoRAs should
