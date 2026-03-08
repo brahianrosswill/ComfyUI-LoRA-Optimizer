@@ -279,9 +279,7 @@ class LoRAOptimizerTests(unittest.TestCase):
                 "avg_cos_sim": 0.20,
                 "avg_subspace_overlap": 0.30,
                 "magnitude_ratio": 1.0,
-                "activation_ratio": 1.5,
                 "per_lora_norm_sq": {0: 1.0, 1: 1.0},
-                "per_lora_activation_sq": {0: 1.0, 1: 1.0},
             },
             "block_0.attn.k": {
                 "n_loras": 2,
@@ -290,9 +288,7 @@ class LoRAOptimizerTests(unittest.TestCase):
                 "avg_cos_sim": 0.20,
                 "avg_subspace_overlap": 0.30,
                 "magnitude_ratio": 1.0,
-                "activation_ratio": 1.5,
                 "per_lora_norm_sq": {0: 1.0, 1: 1.0},
-                "per_lora_activation_sq": {0: 1.0, 1: 1.0},
             },
         }
 

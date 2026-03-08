@@ -3568,8 +3568,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                                           merge_strategy_override, merge_refinement,
                                           strategy_set, architecture_preset,
                                           auto_strength_floor,
-                                          decision_smoothing,
-"")
+                                          decision_smoothing)
         cache_key = f"{base_key}|mid={id(model)}|ss={settings_source}"
         if settings_source == "from_autotuner" and tuner_data is not None:
             return f"{cache_key}|at={id(tuner_data)}"
@@ -4695,8 +4694,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             lines.append(f"  Avg excess conflict: {collection_stats['avg_excess_conflict']:.1%}")
         if "avg_subspace_overlap" in collection_stats:
             lines.append(f"  Avg subspace overlap: {collection_stats['avg_subspace_overlap']:.2f}")
-        importance_mode = collection_stats.get("importance_mode", "frobenius")
-        lines.append(f"  Importance ratio (max/min {importance_mode}): {collection_stats['magnitude_ratio']:.2f}x")
+        lines.append(f"  Importance ratio (max/min frobenius): {collection_stats['magnitude_ratio']:.2f}x")
         if collection_stats.get("decision_smoothing", 0.0) > 0:
             lines.append(f"  Decision smoothing: {collection_stats['decision_smoothing']:.2f}")
 
@@ -5013,8 +5011,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                                             merge_strategy_override, merge_refinement,
                                             strategy_set, architecture_preset,
                                             auto_strength_floor,
-                                            decision_smoothing,
-"")
+                                            decision_smoothing)
         cache_key = f"{cache_key}|mid={id(model)}"
         if cache_patches == "enabled" and cache_key in self._merge_cache:
             model_patches, clip_patches, report, clip_strength_out, lora_data = self._merge_cache[cache_key]
@@ -6566,7 +6563,7 @@ class LoRAAutoTuner(LoRAOptimizer):
         lines.append(f"    Excess conflict: {s.get('avg_excess_conflict', 0.0):.1%} "
                      f"| Subspace overlap: {s.get('avg_subspace_overlap', 0.0):.2f}")
         lines.append(f"    Avg cosine similarity: {s['avg_cosine_sim']:.2f} "
-                     f"| Importance ratio: {s['magnitude_ratio']:.1f}x ({s.get('importance_mode', 'frobenius')})")
+                     f"| Importance ratio: {s['magnitude_ratio']:.1f}x")
         lines.append(f"    Output strength: {output_strength}")
         if suggested_max_strength is not None:
             lines.append(f"    Suggested max output_strength: {suggested_max_strength:.2f}")
