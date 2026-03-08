@@ -42,7 +42,7 @@ This is the main correctness change. It fixes the case where two different alias
 
 **Where to review**
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+- `lora_optimizer.py`
   - `_collect_lora_prefixes`
   - `_resolve_target_key`
   - `_build_target_groups`
@@ -64,7 +64,7 @@ For linear merge modes, dense expansion + SVD is unnecessary when the merged res
 
 **Where to review**
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+- `lora_optimizer.py`
   - `_build_exact_linear_patch`
   - `_merge_one_group` inside `LoRAOptimizer.optimize_merge`
 
@@ -84,7 +84,7 @@ The old path used norm proxies. This change makes auto-strength use streamed qua
 
 **Where to review**
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+- `lora_optimizer.py`
   - `_compute_branch_auto_scale`
   - `_compute_auto_strengths`
 
@@ -104,7 +104,7 @@ Raw sign conflict alone is noisy. This PR keeps the refactor’s improved decisi
 
 **Where to review**
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+- `lora_optimizer.py`
   - `_compute_pair_metrics`
   - `_smooth_group_decisions`
   - `_auto_select_params`
@@ -128,7 +128,7 @@ These are concrete defects or cleanup items that fall directly out of the reques
 
 **Where to review**
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+- `lora_optimizer.py`
   - `LoRAConflictEditor`
   - `SaveMergedLoRA`
   - `SaveTunerData`
@@ -148,8 +148,8 @@ These are not “new ideas” in this PR. They are things this branch intentiona
 
 **Where to review**
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/js/lora_optimizer_bridge.js`
+- `lora_optimizer.py`
+- `js/lora_optimizer_bridge.js`
 
 ---
 
@@ -163,12 +163,12 @@ Docs were updated only to match the actual code in this branch:
 
 Primary files:
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/README.md`
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Nodes.md`
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Home.md`
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/How-It-Works.md`
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Tips-and-Troubleshooting.md`
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Workflows.md`
+- `README.md`
+- `docs/wiki/Nodes.md`
+- `docs/wiki/Home.md`
+- `docs/wiki/How-It-Works.md`
+- `docs/wiki/Tips-and-Troubleshooting.md`
+- `docs/wiki/Workflows.md`
 
 ---
 
@@ -191,7 +191,7 @@ Covered areas:
 
 **Where to review**
 
-- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/tests/test_lora_optimizer.py`
+- `tests/test_lora_optimizer.py`
 
 ---
 
