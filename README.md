@@ -259,27 +259,9 @@ Your original strength ratios are always preserved — the algorithm only scales
 </details>
 
 <details>
-<summary><b>Calibration & Smoothing</b></summary>
+<summary><b>Decision Smoothing</b></summary>
 
-Two optional advanced inputs push the optimizer beyond raw weight-space heuristics:
-
-- **`decision_smoothing`** — blends each group's decision metrics toward the average of its surrounding block. This reduces jagged layer-to-layer mode flips when the stack is noisy.
-- **`calibration_data`** — supplies per-target input statistics so importance can be measured with activation-aware energy, not just Frobenius norm. The expected JSON schema is:
-
-```json
-{
-  "targets": {
-    "target.key": {
-      "input_diag": [1.0, 0.8, 0.2]
-    }
-  },
-  "default": {
-    "scale": 1.0
-  }
-}
-```
-
-`input_diag` is the preferred form. `channel_diag` and scalar `scale`/`input_trace` fallbacks are also supported.
+**`decision_smoothing`** — blends each group's decision metrics toward the average of its surrounding block. This reduces jagged layer-to-layer mode flips when the stack is noisy.
 
 </details>
 
@@ -494,9 +476,9 @@ Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI
 
 ### LoRA AutoTuner
 
-Automatically sweeps all merge parameters (mode, sparsification, density, dampening, quality level) and ranks configurations for your LoRA stack. Runs Pass 1 analysis once, scores all parameter combinations via heuristic proxies, then merges the top-N candidates and measures output quality. When `calibration_data` is connected, measured scoring becomes activation-aware. When an `AUTOTUNER_EVALUATOR` is connected, the built-in score can be blended with external prompt/reference evaluation logic. Outputs the highest-ranked merge directly as `MODEL`/`CLIP`, plus a ranked report and `TUNER_DATA` for exploring alternatives via a **Merge Selector** node.
+Automatically sweeps all merge parameters (mode, sparsification, density, dampening, quality level) and ranks configurations for your LoRA stack. Runs Pass 1 analysis once, scores all parameter combinations via heuristic proxies, then merges the top-N candidates and measures output quality. When an `AUTOTUNER_EVALUATOR` is connected, the built-in score can be blended with external prompt/reference evaluation logic. Outputs the highest-ranked merge directly as `MODEL`/`CLIP`, plus a ranked report and `TUNER_DATA` for exploring alternatives via a **Merge Selector** node.
 
-**Inputs:** `MODEL`, `LORA_STACK`, output strength, optional `CLIP`, top_n, normalize_keys, scoring_svd, scoring_device, scoring_speed, architecture_preset, auto strength floor, output mode, `decision_smoothing`, optional `calibration_data`, optional `evaluator`, diff_cache_mode, diff_cache_ram_pct, cache_patches, record_dataset, vram_budget.
+**Inputs:** `MODEL`, `LORA_STACK`, output strength, optional `CLIP`, top_n, normalize_keys, scoring_svd, scoring_device, scoring_speed, architecture_preset, auto strength floor, output mode, `decision_smoothing`, optional `evaluator`, diff_cache_mode, diff_cache_ram_pct, cache_patches, record_dataset, vram_budget.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (ranked report), `STRING` (analysis report), `TUNER_DATA` (for Merge Selector / Save Tuner Data), `LORA_DATA` (for Save Merged LoRA)
 
@@ -546,7 +528,7 @@ The `vram_budget` slider (0.0–1.0) controls what fraction of free VRAM to use 
 
 Applies a specific configuration from AutoTuner results without re-running the sweep. Connect `TUNER_DATA` from a LoRA AutoTuner (or Load Tuner Data) node and set the `selection` index to choose which ranked configuration to apply (1 = top-ranked, 2 = next-ranked, etc.).
 
-**Inputs:** `MODEL`, `LORA_STACK`, `TUNER_DATA`, selection (1–10), output strength, optional `CLIP`, optional clip strength multiplier, optional auto strength floor, optional `decision_smoothing`, optional `calibration_data`, vram_budget.
+**Inputs:** `MODEL`, `LORA_STACK`, `TUNER_DATA`, selection (1–10), output strength, optional `CLIP`, optional clip strength multiplier, optional auto strength floor, optional `decision_smoothing`, vram_budget.
 
 **Outputs:** `MODEL`, `CLIP`, `STRING` (report), `LORA_DATA`
 
@@ -601,13 +583,9 @@ Two utility nodes for persisting AutoTuner results to disk:
 </details>
 
 <details>
-<summary><b>Calibration / Evaluator Utilities</b></summary>
+<summary><b>Evaluator Utilities</b></summary>
 
-Three utility nodes support the new activation-aware and prompt/reference-aware paths:
-
-- **Build AutoTuner Python Evaluator** — packages a Python module path + callable name into an `AUTOTUNER_EVALUATOR` object. The callable can run prompts, compare references, and return a score in `[0, 1]`.
-- **Save Calibration Data** — writes `CALIBRATION_DATA` JSON under `models/lora_calibration_data/`. Subdirectories are allowed; traversal outside that folder is blocked.
-- **Load Calibration Data** — loads that JSON back into `CALIBRATION_DATA`.
+**Build AutoTuner Python Evaluator** — packages a Python module path + callable name into an `AUTOTUNER_EVALUATOR` object. The callable can run prompts, compare references, and return a score in `[0, 1]`.
 
 The evaluator callable receives keyword arguments: `model`, `clip`, `lora_data`, `config`, `context`, and `analysis_summary`.
 

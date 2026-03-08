@@ -118,7 +118,6 @@ All inputs from the simple variant, plus:
 | `architecture_preset` | COMBO | auto | `auto`, `sd_unet`, `dit`, `llm` — numeric threshold tuning |
 | `auto_strength_floor` | FLOAT | -1.0 | Minimum auto-strength scale factor for orthogonal LoRAs (`-1` = architecture default) |
 | `decision_smoothing` | FLOAT | 0.25 | Smooth per-prefix decision metrics toward the surrounding block average (0 disables smoothing) |
-| `calibration_data` | CALIBRATION_DATA | — | Optional activation statistics for activation-aware importance |
 | `vram_budget` | FLOAT | 0.0 | Fraction of free VRAM for keeping patches on GPU (0.0–1.0) |
 
 ### Optional Inputs
@@ -152,7 +151,6 @@ All inputs from the Advanced optimizer, plus:
 | `auto_strength_floor` | FLOAT | -1.0 | Minimum auto-strength scale factor for orthogonal LoRAs |
 | `output_mode` | COMBO | merge | `merge` = return top-ranked merge, `tuning_only` = pass base model through |
 | `decision_smoothing` | FLOAT | 0.25 | Same smoothing control as the optimizer; affects both ranking and final merge |
-| `calibration_data` | CALIBRATION_DATA | — | Optional activation statistics for activation-aware scoring |
 | `evaluator` | AUTOTUNER_EVALUATOR | — | Optional external evaluator hook for prompt/reference scoring |
 | `record_dataset` | COMBO | disabled | `enabled`, `disabled` — save metrics to JSONL for research |
 | `cache_patches` | COMBO | enabled | Cache the final AutoTuner result in RAM for fast re-execution |
@@ -192,7 +190,6 @@ Applies a specific ranked configuration from AutoTuner results.
 | `clip_strength_multiplier` | FLOAT | No | 1.0 | CLIP strength multiplier when replaying the selected config |
 | `auto_strength_floor` | FLOAT | No | -1.0 | Manual override for orthogonal auto-strength floor; `-1` reuses tuner setting |
 | `decision_smoothing` | FLOAT | No | 0.25 | Smoothing used when replaying the selected config |
-| `calibration_data` | CALIBRATION_DATA | No | — | Optional activation statistics; connect the same object used during AutoTuner |
 
 Validates that the LoRA stack hasn't changed since the AutoTuner ran (via hash comparison).
 
@@ -285,25 +282,6 @@ Builds an `AUTOTUNER_EVALUATOR` object from a Python module path + callable name
 | Output | Type | Description |
 |--------|------|-------------|
 | `evaluator` | AUTOTUNER_EVALUATOR | External evaluator spec for LoRA AutoTuner |
-
----
-
-## Save / Load Calibration Data
-
-Persist activation calibration statistics for reuse across optimizer runs.
-
-### Save Calibration Data Inputs
-
-| Input | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `calibration_data` | CALIBRATION_DATA | Yes | — | Calibration payload |
-| `filename` | STRING | Yes | `calibration_data` | File name under `models/lora_calibration_data/`. Subdirectories allowed; traversal blocked |
-
-### Load Calibration Data Outputs
-
-| Output | Type | Description |
-|--------|------|-------------|
-| `calibration_data` | CALIBRATION_DATA | Loaded activation statistics |
 
 ---
 

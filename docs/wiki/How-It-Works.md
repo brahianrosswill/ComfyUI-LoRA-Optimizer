@@ -750,13 +750,12 @@ Generates a full parameter grid across all configurable dimensions:
 | Auto-strength | `enabled`, `disabled` |
 | Optimization mode | `per_prefix`, `global` |
 
-This produces **2,000+ combinations**. Each is scored heuristically in ~2-5 seconds total using the analysis data from Pass 1 — no actual merges are performed. Scoring considers conflict, excess conflict, cosine similarity, subspace overlap, and magnitude/activation-importance distribution.
+This produces **2,000+ combinations**. Each is scored heuristically in ~2-5 seconds total using the analysis data from Pass 1 — no actual merges are performed. Scoring considers conflict, excess conflict, cosine similarity, subspace overlap, and magnitude distribution.
 
 ### Phase 2 — Merge & Measure Top-N
 
 The top-N configs from Phase 1 are actually merged and scored by measuring:
 - **Norm consistency** across patches
-- **Activation-aware importance consistency** — when `calibration_data` is connected
 - **Effective rank** (SVD-based entropy) — when `scoring_svd=enabled`
 - **Sparsity distribution** (estimated via column-sampling for efficiency)
 - **Composite score** combining all metrics, optionally blended with an external evaluator
@@ -782,7 +781,6 @@ Phase 2 is designed to avoid RAM exhaustion:
 | `auto_strength_floor` | -1.0 | Minimum auto-strength floor for orthogonal LoRAs (`-1` = architecture default) |
 | `output_mode` | merge | `merge` = output top-ranked merge, `tuning_only` = pass base model through |
 | `decision_smoothing` | 0.25 | Smooth per-prefix decision metrics toward block averages |
-| `calibration_data` | — | Activation statistics for activation-aware scoring |
 | `evaluator` | — | External evaluator hook for prompt/reference scoring |
 | `diff_cache_mode` | auto | Reuse raw LoRA diffs across candidates (`disabled`, `auto`, `ram`, `disk`) |
 | `diff_cache_ram_pct` | 0.5 | RAM budget for `auto` diff caching before spilling to disk |

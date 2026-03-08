@@ -99,7 +99,7 @@ Raw sign conflict alone is noisy. This PR keeps the refactor’s improved decisi
 **What changed**
 
 - carries forward weighted conflict, expected conflict baseline, excess conflict, and subspace overlap
-- keeps optional decision smoothing and optional activation-aware importance inputs
+- keeps optional decision smoothing
 - uses those values in per-group decision metrics
 
 **Where to review**
