@@ -3502,10 +3502,6 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
                     "tooltip": "Smooth per-group strategy metrics toward each block's average before Pass 2 decisions. 0 disables smoothing; 0.2-0.4 usually removes noisy mode flips without washing out real differences."
                 }),
-                "smooth_slerp_gate": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "When enabled, uses smoothed cosine (decision_cosine) for SLERP gate instead of raw avg_cos_sim. Can affect SLERP/weighted_average ratio."
-                }),
                 "tuner_data": ("TUNER_DATA", {
                     "tooltip": "Connect from the LoRA AutoTuner's tuner_data output. Used when settings_source is 'from_autotuner'."
                 }),
@@ -4869,7 +4865,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                      sparsification_density=0.7, dare_dampening=0.0,
                      merge_strategy_override="", merge_refinement="none",
                      strategy_set="full", architecture_preset="auto",
-                     decision_smoothing=0.25, smooth_slerp_gate=False,
+                     decision_smoothing=0.25,
                      tuner_data=None, settings_source="manual"):
         """
         ComfyUI entry point. Supports an AutoTuner bridge mode:
@@ -4936,7 +4932,6 @@ class LoRAOptimizer(_LoRAMergeBase):
             strategy_set=strategy_set,
             architecture_preset=architecture_preset,
             decision_smoothing=decision_smoothing,
-            smooth_slerp_gate=smooth_slerp_gate,
         )
 
     def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False):
@@ -5952,6 +5947,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
                     "tooltip": "Smooth per-group decision metrics toward each block average before candidate ranking and final merge. 0 disables smoothing."
                 }),
+                "smooth_slerp_gate": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "When enabled, uses smoothed cosine (decision_cosine) for SLERP gate instead of raw avg_cos_sim. Can affect SLERP/weighted_average ratio."
+                }),
             },
         }
 
@@ -5973,7 +5972,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                   cache_patches="enabled",
                   diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0,
                   scoring_speed="full", output_mode="merge",
-                  decision_smoothing=0.25):
+                  decision_smoothing=0.25, smooth_slerp_gate=False):
         import hashlib, json
 
         # Free stale cached models when the input model changes
@@ -6004,6 +6003,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 architecture_preset=architecture_preset, vram_budget=vram_budget,
                 auto_strength_floor=auto_strength_floor,
                 decision_smoothing=decision_smoothing,
+                smooth_slerp_gate=smooth_slerp_gate,
             )
             return (merged_model, merged_clip,
                     "Single LoRA detected -- no parameters to tune.\n\n" + report, report, None, lora_data)
@@ -6261,6 +6261,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 strategy_set="full",
                 architecture_preset=architecture_preset,
                 decision_smoothing=decision_smoothing,
+                smooth_slerp_gate=smooth_slerp_gate,
                 _analysis_cache=scoring_cache,
                 _diff_cache=_diff_cache,
                 _skip_report=True,
@@ -6367,6 +6368,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 strategy_set="full",
                 architecture_preset=architecture_preset,
                 decision_smoothing=decision_smoothing,
+                smooth_slerp_gate=smooth_slerp_gate,
                 _analysis_cache=_analysis_cache,
                 _diff_cache=_diff_cache,
                 _skip_report=True,
