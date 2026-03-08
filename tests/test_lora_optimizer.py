@@ -316,14 +316,6 @@ class LoRAOptimizerTests(unittest.TestCase):
         )
         self.assertEqual(mode, "ties")
 
-    def test_activation_importance_uses_calibration_diag(self):
-        diff = torch.tensor([[1.0, 2.0]], dtype=torch.float32)
-        calibration_entry = {"input_diag": [4.0, 0.0]}
-
-        importance = self.optimizer._compute_activation_importance(diff, calibration_entry)
-
-        self.assertAlmostEqual(importance, 4.0)
-
     def test_python_evaluator_spec_and_runner(self):
         builder = lora_optimizer.BuildAutoTunerPythonEvaluator()
         evaluator, = builder.build(
@@ -352,25 +344,6 @@ class LoRAOptimizerTests(unittest.TestCase):
 
         self.assertAlmostEqual(result["score"], 0.75)
         self.assertEqual(result["details"]["ok"], True)
-
-    def test_score_merge_result_uses_activation_importance(self):
-        patch_a = ("diff", (torch.tensor([[1.0, 0.0]], dtype=torch.float32),))
-        patch_b = ("diff", (torch.tensor([[0.0, 1.0]], dtype=torch.float32),))
-
-        metrics = lora_optimizer._score_merge_result(
-            {"layer.weight": patch_a, "layer2.weight": patch_b},
-            {},
-            compute_svd=False,
-            calibration_data={
-                "targets": {
-                    "layer.weight": {"input_diag": [10.0, 0.0]},
-                    "layer2.weight": {"input_diag": [0.0, 1.0]},
-                }
-            },
-        )
-
-        self.assertIn("importance_cv", metrics)
-        self.assertGreater(metrics["importance_mean"], 0.0)
 
     def test_conflict_editor_preserves_key_filter_for_tuple_stacks(self):
         editor = lora_optimizer.LoRAConflictEditor()
@@ -422,7 +395,6 @@ class LoRAOptimizerTests(unittest.TestCase):
     def test_save_nodes_block_directory_traversal(self):
         merged_saver = lora_optimizer.SaveMergedLoRA()
         tuner_saver = lora_optimizer.SaveTunerData()
-        calibration_saver = lora_optimizer.SaveCalibrationData()
         patch = lora_optimizer.LoRAAdapter(
             set(),
             (torch.tensor([[1.0]]), torch.tensor([[1.0]]), 1.0, None, None, None),
@@ -445,26 +417,6 @@ class LoRAOptimizerTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             tuner_saver.save_tuner_data({"top_n": []}, tempfile.gettempdir(), "../escape")
-
-        with self.assertRaises(ValueError):
-            calibration_saver.save_calibration_data({"targets": {}}, "../escape")
-
-    def test_save_and_load_calibration_data(self):
-        saver = lora_optimizer.SaveCalibrationData()
-        loader = lora_optimizer.LoadCalibrationData()
-        payload = {"targets": {"layer.weight": {"input_diag": [1.0, 2.0]}}}
-
-        path, = saver.save_calibration_data(payload, "tests/calibration_test")
-        self.assertTrue(path.endswith(".json"))
-
-        with mock.patch.object(
-            lora_optimizer.folder_paths,
-            "get_full_path_or_raise",
-            return_value=path,
-        ):
-            loaded, = loader.load_calibration_data("ignored.json")
-
-        self.assertEqual(loaded, payload)
 
     def test_bridge_passthrough_returns_ui_payload(self):
         tuner_data = {
