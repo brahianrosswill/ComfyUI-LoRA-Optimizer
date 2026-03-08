@@ -6431,19 +6431,39 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
                 info["type"] = "merge"
                 # Compute intra-group stats
                 conflict_by_pair = {(pc["i"], pc["j"]): pc["ratio"] for pc in pairwise_conflicts}
+                shared_prefixes_by_pair = {(pc["i"], pc["j"]): pc.get("shared_prefixes", 1) for pc in pairwise_conflicts}
                 intra_cos = []
                 intra_conflict = []
+                intra_independent = 0
+                n_pairs = 0
                 for a_pos in range(len(group)):
                     for b_pos in range(a_pos + 1, len(group)):
                         key = (min(group[a_pos], group[b_pos]), max(group[a_pos], group[b_pos]))
-                        cs = pairwise_similarities.get(key, 0.0)
-                        cr = conflict_by_pair.get(key, 0.0)
-                        intra_cos.append(cs)
-                        intra_conflict.append(cr)
+                        n_pairs += 1
+                        sp = shared_prefixes_by_pair.get(key, 1)
+                        if sp == 0:
+                            # No shared keys = perfectly independent
+                            intra_cos.append(0.0)
+                            intra_conflict.append(0.0)
+                            intra_independent += 1
+                        else:
+                            cs = pairwise_similarities.get(key, 0.0)
+                            cr = conflict_by_pair.get(key, 0.0)
+                            intra_cos.append(cs)
+                            intra_conflict.append(cr)
                 info["avg_cos_sim"] = sum(intra_cos) / len(intra_cos) if intra_cos else 0.0
                 info["avg_conflict"] = sum(intra_conflict) / len(intra_conflict) if intra_conflict else 0.0
-                avg_compat = sum(cs * (1.0 - cr) for cs, cr in zip(intra_cos, intra_conflict)) / len(intra_cos) if intra_cos else 0.0
-                if avg_compat > 0.2:
+                info["all_independent"] = intra_independent == n_pairs and n_pairs > 0
+                # For avg_compat, treat independent pairs as 1.0 (fully compatible)
+                # The loop stored 0.0 cos / 0.0 conflict for independent pairs,
+                # so their cos*(1-conflict) = 0.0. Add back 1.0 for each.
+                if n_pairs > 0:
+                    compat_sum = sum(cs * (1.0 - cr) for cs, cr in zip(intra_cos, intra_conflict))
+                    compat_sum += intra_independent * 1.0
+                    avg_compat = compat_sum / n_pairs
+                else:
+                    avg_compat = 0.0
+                if info["all_independent"] or avg_compat > 0.2:
                     info["confidence"] = "High"
                 elif avg_compat > 0.05:
                     info["confidence"] = "Moderate"
@@ -6790,7 +6810,12 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
 
             group_num += 1
             confidence = gi["confidence"]
-            label = "Safe to combine" if confidence == "Low" else "Merge together"
+            if gi.get("all_independent"):
+                label = "Independent — no overlapping keys, safe to stack"
+            elif confidence == "Low":
+                label = "Safe to combine"
+            else:
+                label = "Merge together"
             lines.append(f"Group {group_num} -- {label} (compatibility: {confidence})")
             for idx in indices:
                 strength = gi["strengths"].get(idx, active_loras[idx]["strength"])
@@ -6836,12 +6861,15 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
         lines.append("-" * 30 + " Pairwise Compatibility " + "-" * 30)
         lines.append("")
 
-        # Sort by compat score descending
-        sorted_pairs = sorted(pairwise_conflicts, key=lambda p: p["cosine_sim"] * (1.0 - p["ratio"]), reverse=True)
+        # Sort by compat score descending; independent (no shared keys) pairs sort first
+        sorted_pairs = sorted(pairwise_conflicts, key=lambda p: 1.0 if p.get("shared_prefixes", 1) == 0 else p["cosine_sim"] * (1.0 - p["ratio"]), reverse=True)
         # Compute max pair label width for right-aligned columns
         pair_labels = [_dn(pc["pair"]) for pc in sorted_pairs]
         max_pair_w = max((len(p) for p in pair_labels), default=45)
         for pc, pair_label in zip(sorted_pairs, pair_labels):
+            if pc.get("shared_prefixes", 1) == 0:
+                lines.append(f"  {pair_label:<{max_pair_w}s}  Independent (no shared keys)")
+                continue
             conflict = pc["ratio"]
             cos = round(pc["cosine_sim"], 2) + 0.0  # avoid -0.00
             compat = round(pc["cosine_sim"] * (1.0 - conflict), 2) + 0.0  # avoid -0.00
@@ -6850,8 +6878,6 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
                 indicator = " [OK]"
             elif compat < -0.05:
                 indicator = " [!!]"
-            if pc.get("shared_prefixes", 1) == 0:
-                indicator += " (no shared keys)"
             lines.append(f"  {pair_label:<{max_pair_w}s}  "
                         f"cos:{cos:6.2f}  conflict:{conflict:5.0%}  compat:{compat:6.2f}{indicator}")
         lines.append("")
