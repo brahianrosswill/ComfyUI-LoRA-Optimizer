@@ -3498,16 +3498,20 @@ class LoRAOptimizer(_LoRAMergeBase):
                     "forceInput": True,
                     "tooltip": "Connect the merge_strategy output from a LoRA Conflict Editor to override the optimizer's auto-detected strategy."
                 }),
+                "decision_smoothing": ("FLOAT", {
+                    "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Smooth per-group strategy metrics toward each block's average before Pass 2 decisions. 0 disables smoothing; 0.2-0.4 usually removes noisy mode flips without washing out real differences."
+                }),
+                "smooth_slerp_gate": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "When enabled, uses smoothed cosine (decision_cosine) for SLERP gate instead of raw avg_cos_sim. Can affect SLERP/weighted_average ratio."
+                }),
                 "tuner_data": ("TUNER_DATA", {
                     "tooltip": "Connect from the LoRA AutoTuner's tuner_data output. Used when settings_source is 'from_autotuner'."
                 }),
                 "settings_source": (["manual", "from_autotuner"], {
                     "default": "manual",
                     "tooltip": "manual: use widget settings. from_autotuner: use the AutoTuner's top-ranked config as the source of truth and treat this node as a passthrough."
-                }),
-                "decision_smoothing": ("FLOAT", {
-                    "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Smooth per-group strategy metrics toward each block's average before Pass 2 decisions. 0 disables smoothing; 0.2-0.4 usually removes noisy mode flips without washing out real differences."
                 }),
             }
         }
@@ -4865,7 +4869,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                      sparsification_density=0.7, dare_dampening=0.0,
                      merge_strategy_override="", merge_refinement="none",
                      strategy_set="full", architecture_preset="auto",
-                     decision_smoothing=0.25,
+                     decision_smoothing=0.25, smooth_slerp_gate=False,
                      tuner_data=None, settings_source="manual"):
         """
         ComfyUI entry point. Supports an AutoTuner bridge mode:
@@ -4932,9 +4936,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             strategy_set=strategy_set,
             architecture_preset=architecture_preset,
             decision_smoothing=decision_smoothing,
+            smooth_slerp_gate=smooth_slerp_gate,
         )
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, _analysis_cache=None, _diff_cache=None, _skip_report=False):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Resolve aliases to target groups, compute diffs, sample metrics, discard diffs
@@ -5394,7 +5399,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     # which is critical for video LoRAs where motion energy matters.
                     # Skip for opposing LoRAs (cos < 0): SLERP interpolates between opposing
                     # directions while preserving magnitude, amplifying artifacts.
-                    pf_raw_cos = pf.get("avg_cos_sim", 0.0)
+                    pf_raw_cos = pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)) if smooth_slerp_gate else pf.get("avg_cos_sim", 0.0)
                     pf_orthogonal = abs(pf_raw_cos) < arch_preset["orthogonal_cos_sim_max"]
                     pf_opposing = pf_raw_cos < 0
                     # Full-rank gate: skip SLERP upgrade — for full-rank patches the
