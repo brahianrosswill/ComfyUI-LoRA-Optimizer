@@ -1,244 +1,209 @@
-# Maintainer Summary: upstream sync + merge correctness pass
+# Reviewer Summary
 
-## Short version
+This note is only about the changes in this PR and why they exist.
 
-This PR does two jobs at once:
+## What this PR is trying to fix
 
-1. it keeps the newer upstream behavior that landed through `dfd3920`, and
-2. it carries forward the local merge-correctness refactor that was built from a long external review of the optimizer.
+The requested changes, reduced to what actually matters in code review, were:
 
-The practical goal is simple: keep the current node/workflow surface intact, but make the merge logic operate on the right unit of work and stop losing accuracy in places where the code was using avoidable heuristics.
+1. **Analyze and merge by resolved target weight, not raw LoRA prefix.**
+   Different trainer formats can produce different prefixes that still map to the same model weight. Late accumulation avoids overwrite loss, but Pass 1 / AutoTuner still misreads true overlap if analysis stays prefix-based.
 
----
+2. **Keep linear merges exact in low-rank form when possible.**
+   `weighted_sum`, `weighted_average`, and `normalize` do not need dense expansion + recompression if the result can still be represented exactly by concatenating low-rank factors.
 
-## The original brief, reduced to the actionable parts
+3. **Use exact streamed energy for auto-strength.**
+   Auto-strength should be based on accumulated Frobenius norms and pairwise dots, not mean-per-key proxy norms.
 
-The review we worked from made a few concrete points:
+4. **Fix concrete implementation bugs.**
+   - `LoRAConflictEditor` dropped `key_filter`
+   - alias/canonical save naming was not deterministic
+   - save logic needed better rank selection and safer prefix handling
 
-- the old overwrite bug was not the main remaining problem; current upstream already fixed late overwrite-by-collision,
-- the deeper issue was that analysis was still organized by raw LoRA prefix instead of the resolved target model weight,
-- linear LoRA merges were being expanded to dense diffs and recompressed, even when they can stay exact in low-rank form,
-- auto-strength was described as exact but was using proxy norms rather than exact streamed energy,
-- some small implementation bugs were real:
-  - `LoRAConflictEditor` dropped `key_filter`,
-  - some key-normalization claims were stronger than the code,
-  - saved alias selection was not deterministic,
-  - analysis and final merge could disagree about what actually overlapped.
-
-The review also pushed on documentation quality:
-
-- the README sometimes overstated what the code was actually doing,
-- paper references were sometimes closer to “inspired by” than faithful implementations,
-- AutoTuner should be described as proxy-ranked unless a real evaluator is connected.
-
-That was the base brief. Then upstream moved and added more behavior that also had to be preserved.
+5. **Keep current upstream behavior intact while making those changes.**
+   The branch must stay compatible with current upstream nodes/workflows: bridge inputs, full-rank behavior, compatibility analyzer, current saver behavior.
 
 ---
 
-## What upstream changed while this work was in flight
+## What changed in code
 
-Upstream added several behavior changes after the earlier local branch point:
+### 1. Target-key-aware analysis and merge
 
-- the AutoTuner ↔ Optimizer bridge (`tuner_data`, `settings_source`, `output_mode`),
-- full-rank aware merge safeguards,
-- `LoRACompatibilityAnalyzer`,
-- Z-Image fused-QKV save fixes,
-- folder-aware `SaveTunerData`,
-- newer workflow / UI expectations around those nodes.
+**Why**
 
-So the correct job was not “replace upstream with the refactor.”
-It was “merge the refactor onto current upstream without regressing either side.”
+This is the main correctness change. It fixes the case where two different aliases map to the same real target weight but were previously analyzed as separate prefixes.
 
----
+**What changed**
 
-## What actually changed in code
+- aliases are collected and grouped by resolved `(is_clip, target_key)`
+- Pass 1 metrics are computed per resolved group
+- Pass 2 merges per resolved group
+- late collision accumulation stays in place as a fallback, not as the primary correctness path
 
-### 1. Analysis and merge now use resolved target groups
-
-This is the main correctness change.
-
-Before:
-
-- Pass 1 analyzed raw prefixes,
-- Pass 2 merged raw prefixes,
-- only at collection time were collisions accumulated if two aliases resolved to the same target weight.
-
-That prevented outright overwrite loss, but it still meant analysis and AutoTuner could misread real overlap.
-
-Now:
-
-- aliases are grouped by resolved `(is_clip, target_key)` before analysis,
-- per-LoRA contributions inside a group are aggregated before conflict/compatibility logic runs,
-- Pass 1 and Pass 2 operate on the same real merge unit,
-- late collision accumulation remains only as a safety guard.
-
-This is the change that addresses the “mixed trainer aliases still blind Pass 1” problem.
-
-Relevant area:
+**Where to review**
 
 - `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
-
-### 2. Linear merge paths stay exact when they can
-
-For linear merge modes (`weighted_sum`, `weighted_average`, `normalize`), the code now tries to keep the result in exact low-rank form by concatenating factors rather than:
-
-- expanding to dense diff,
-- merging dense tensors,
-- recompressing with SVD.
-
-The dense path still exists as a fallback when exact low-rank composition is not valid for a given patch shape or parameterization.
-
-This is both cleaner mathematically and cheaper operationally.
-
-### 3. Auto-strength uses exact streamed branch energy
-
-The earlier path used norm proxies that were not exact for the whole merged object.
-
-Now the optimizer accumulates streamed branch-level quantities and computes model and CLIP scaling from:
-
-- per-LoRA Frobenius norm squares,
-- pairwise dot products.
-
-This keeps the logic streaming-friendly while making the math consistent with the reported behavior.
-
-### 4. Conflict metrics are less naive
-
-The refactor already moved conflict handling beyond raw sign counts by adding:
-
-- weighted conflict,
-- expected conflict baseline,
-- excess conflict,
-- subspace overlap,
-- optional activation-aware importance,
-- optional decision smoothing.
-
-Those changes remain in place on top of upstream.
-
-This does not turn the optimizer into a paper-faithful research implementation, but it does remove some avoidable noise from the older decision logic.
-
-### 5. Save behavior is more deterministic and more defensive
-
-`SaveMergedLoRA` keeps the earlier local fixes:
-
-- canonical prefix selection for alias-collapsed targets,
-- adaptive rank estimation for diff compression,
-- exact-low-rank-aware save handling,
-- deterministic mapping when multiple aliases resolve to one target.
-
-At the same time it keeps newer upstream save-side behavior:
-
-- Z-Image fused-QKV handling,
-- dtype preservation during re-fusion,
-- current upstream save diagnostics and output layout.
-
-### 6. Small real bugs are fixed
-
-The branch also keeps/fixes the smaller concrete defects from the review:
-
-- `LoRAConflictEditor` preserves `key_filter`,
-- canonical alias selection is deterministic,
-- bridge return contracts remain consistent with current upstream expectations,
-- the compatibility analyzer node is present and registered,
-- `SaveTunerData` matches the newer folder-aware upstream flow.
+  - `_collect_lora_prefixes`
+  - `_resolve_target_key`
+  - `_build_target_groups`
+  - `_run_group_analysis`
+  - `optimize_merge`
 
 ---
 
-## What was intentionally preserved from upstream
+### 2. Exact low-rank path for linear merges
 
-This PR does **not** roll back the newer upstream UX/runtime work.
+**Why**
 
-It keeps:
+For linear merge modes, dense expansion + SVD is unnecessary when the merged result is still exactly representable in low-rank form.
 
-- `LoRAOptimizer` `tuner_data` / `settings_source`,
-- `LoRAAutoTuner` `output_mode`,
-- the bridge JS behavior,
-- full-rank gating logic,
-- `LoRACompatibilityAnalyzer`,
-- current save-folder behavior for tuner data,
-- current workflow compatibility.
+**What changed**
 
-That was a deliberate constraint the whole time.
+- added an exact linear path that builds merged patches by concatenating low-rank factors
+- falls back to the dense path when exact composition is not valid for the patch form
 
----
+**Where to review**
 
-## What was intentionally *not* claimed
-
-The original review was right to call out overclaiming, so the docs were adjusted accordingly.
-
-This branch does **not** claim that:
-
-- every cited paper is implemented faithfully,
-- AutoTuner finds the objective best merge in a strong sense,
-- all merge decisions are mathematically optimal,
-- memory is constant regardless of LoRA count or active layer size.
-
-The code is still a practical optimizer with heuristics. The difference is that some of the biggest avoidable inaccuracies are removed.
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+  - `_build_exact_linear_patch`
+  - `_merge_one_group` inside `LoRAOptimizer.optimize_merge`
 
 ---
 
-## Why these choices were made
+### 3. Exact streamed auto-strength
 
-The rule used for this branch was:
+**Why**
 
-- fix correctness first where the merge unit was wrong,
-- keep exact math where the representation allows it,
-- preserve current upstream UX contracts,
-- do not make the PR bigger than necessary by trying to replace the entire optimizer philosophy.
+The old path used norm proxies. This change makes auto-strength use streamed quantities that actually correspond to the merged branch energy.
 
-That is why the branch focuses on:
+**What changed**
 
-- target-group correctness,
-- exact linear merge handling,
-- exact streamed auto-strength,
-- deterministic saving,
-- preserving upstream node and workflow behavior.
+- accumulate per-LoRA norm squares and pairwise dot products
+- compute model and CLIP scaling from those accumulated values
+- keep separate model/CLIP handling
 
----
+**Where to review**
 
-## Validation that was actually run
-
-The branch was validated with:
-
-- `python3 -m py_compile lora_optimizer.py tests/test_lora_optimizer.py`
-- `.venv-tests/bin/python -m py_compile lora_optimizer.py tests/test_lora_optimizer.py`
-- `.venv-tests/bin/python -m unittest discover -s tests -v`
-- `git diff --check`
-
-Current result:
-
-- full test suite passed: `19 passed`
-
-The test coverage added here is targeted, not decorative. It covers:
-
-- target-group alias behavior,
-- exact low-rank linear merges,
-- exact auto-strength math,
-- excess-conflict / subspace metrics,
-- bridge/workflow compatibility,
-- deterministic save prefixes,
-- save-path safety,
-- tuner-data output exposure,
-- compatibility-analyzer node registration.
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+  - `_compute_branch_auto_scale`
+  - `_compute_auto_strengths`
 
 ---
 
-## How to review this PR efficiently
+### 4. Decision metrics and smoothing
 
-Recommended order:
+**Why**
+
+Raw sign conflict alone is noisy. This PR keeps the refactor’s improved decision inputs and smoothing in the upstream-based branch.
+
+**What changed**
+
+- carries forward weighted conflict, expected conflict baseline, excess conflict, and subspace overlap
+- keeps optional decision smoothing and optional activation-aware importance inputs
+- uses those values in per-group decision metrics
+
+**Where to review**
+
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+  - `_compute_pair_metrics`
+  - `_smooth_group_decisions`
+  - `_auto_select_params`
+  - `LoRAOptimizer.optimize_merge`
+
+---
+
+### 5. Saver and small bug fixes
+
+**Why**
+
+These are concrete defects or cleanup items that fall directly out of the requested review.
+
+**What changed**
+
+- `LoRAConflictEditor` now preserves `key_filter`
+- `SaveMergedLoRA` uses deterministic canonical prefixes
+- adaptive save-rank estimation is kept
+- save-path handling remains safe
+- canonical prefix lookup handles alias-collapsed targets correctly
+
+**Where to review**
+
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+  - `LoRAConflictEditor`
+  - `SaveMergedLoRA`
+  - `SaveTunerData`
+
+---
+
+### 6. Upstream behavior deliberately kept
+
+These are not “new ideas” in this PR. They are things this branch intentionally keeps compatible with current upstream while applying the correctness changes above.
+
+- `LoRAOptimizer` `tuner_data` / `settings_source`
+- `LoRAAutoTuner` `output_mode`
+- current bridge JS behavior
+- current full-rank handling
+- `LoRACompatibilityAnalyzer`
+- current folder-aware tuner-data saving flow
+
+**Where to review**
+
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/lora_optimizer.py`
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/js/lora_optimizer_bridge.js`
+
+---
+
+## Docs changes
+
+Docs were updated only to match the actual code in this branch:
+
+- describe target-group behavior instead of pure prefix language
+- describe AutoTuner as ranked/proxy-based, not objectively best
+- describe saver behavior and current node surfaces accurately
+
+Primary files:
+
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/README.md`
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Nodes.md`
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Home.md`
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/How-It-Works.md`
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Tips-and-Troubleshooting.md`
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/docs/wiki/Workflows.md`
+
+---
+
+## Tests added or updated
+
+The tests are targeted at the behavior this PR changes.
+
+Covered areas:
+
+- alias-group analysis/merge correctness
+- exact linear merge reconstruction
+- exact auto-strength math
+- excess-conflict / subspace metrics
+- `key_filter` preservation
+- canonical save prefixes
+- safe save-path handling
+- bridge/workflow compatibility
+- optimizer `TUNER_DATA` output exposure
+- compatibility analyzer registration
+
+**Where to review**
+
+- `/Users/sarav/Downloads/play/ComfyUI-LoRA-Optimizer/tests/test_lora_optimizer.py`
+
+---
+
+## Review order
 
 1. `lora_optimizer.py`
-   - target-group build and Pass 1 / Pass 2 flow
-   - exact linear merge path
-   - auto-strength branch-energy logic
-   - full-rank gates
-   - saver behavior
-   - bridge return contract
 2. `tests/test_lora_optimizer.py`
 3. `js/lora_optimizer_bridge.js`
-4. `README.md` and `docs/wiki/Nodes.md`
+4. README/wiki updates
 
-If a maintainer wants only the highest-value behavior changes, the key question is:
+If reviewing for substance only, the key question is:
 
-> Does the optimizer now analyze and merge the same real target weight when multiple aliases map to that weight?
+> Does this PR make Pass 1 / AutoTuner / Pass 2 operate on the same resolved target weight when aliases collide?
 
-If that answer is yes, most of the important correctness work in this branch is already in the right place.
+That is the main behavior change.
