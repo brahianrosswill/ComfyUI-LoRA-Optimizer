@@ -3134,7 +3134,7 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
 
 
 def _score_merge_result(model_patches, clip_patches, compute_svd=True,
-                        score_device=None):
+                        score_device=None, arch_preset=None):
     """
     Score an actual merge result by measuring output quality metrics.
     Returns dict with individual metrics and composite score in [0, 1].
@@ -3143,6 +3143,8 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
     computation and scores using norm consistency + sparsity only.
     When score_device is set (e.g. "cuda"), tensors are moved there for
     faster norm/SVD/sparsity computation.
+    When arch_preset is provided, uses arch-aware ideal sparsity from
+    dare_ideal_density instead of hardcoded 40%.
     """
     norms = []
     importance_values = []
@@ -3292,10 +3294,18 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
     if sparsities:
         avg_sparsity = sum(sparsities) / len(sparsities)
         metrics["sparsity_mean"] = avg_sparsity
-        metrics["sparsity_fit"] = max(0.0, 1.0 - abs(avg_sparsity - 0.4) * 2.0)
+        # Arch-aware ideal sparsity: derive from dare_ideal_density
+        if arch_preset is not None:
+            ideal_sparsity = 1.0 - arch_preset.get("dare_ideal_density", 0.7)
+        else:
+            ideal_sparsity = 0.4  # legacy default
+        metrics["sparsity_fit"] = max(0.0, 1.0 - abs(avg_sparsity - ideal_sparsity) * 2.0)
     else:
         metrics["sparsity_mean"] = 0.0
         metrics["sparsity_fit"] = 0.5
+
+    # Total squared energy of merged output (sum of squared norms)
+    metrics["norm_energy_sq"] = sum(n ** 2 for n in norms)
 
     # Composite score — rebalance weights when SVD is skipped
     score = 0.0
@@ -6680,22 +6690,76 @@ class LoRAAutoTuner(LoRAOptimizer):
             t_score = time.time()
             measured = _score_merge_result(
                 m_patches, c_patches, compute_svd=compute_svd,
-                score_device=score_dev
+                score_device=score_dev, arch_preset=tuner_arch_preset
             )
             t_score_elapsed = time.time() - t_score
             # --- Post-scoring adjustments ---
+            # Compute energy_preservation from branch_energy (model + clip)
+            measured_energy_sq = measured.get("norm_energy_sq", 0.0)
+            measured_energy = math.sqrt(max(measured_energy_sq, 0.0))
+            model_strengths = [item["strength"] for item in active_loras]
+            clip_strengths = [
+                item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
+                for item in active_loras
+            ]
+            if config["auto_strength"] == "enabled":
+                # With auto-strength, expected energy = reference (max single LoRA)
+                # across both branches
+                ref_model = [
+                    abs(model_strengths[i]) * math.sqrt(max(branch_energy["model"]["norm_sq"][i], 0.0))
+                    for i in range(len(active_loras))
+                ]
+                ref_clip = [
+                    abs(clip_strengths[i]) * math.sqrt(max(branch_energy["clip"]["norm_sq"][i], 0.0))
+                    for i in range(len(active_loras))
+                ]
+                ref_model_max = max(ref_model) if ref_model else 0.0
+                ref_clip_max = max(ref_clip) if ref_clip else 0.0
+                expected_energy = math.sqrt(ref_model_max ** 2 + ref_clip_max ** 2)
+            elif is_ortho_score:
+                # Orthogonal: Pythagorean — no cross-terms
+                expected_energy_sq = sum(
+                    model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
+                    + clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                    for i in range(len(active_loras))
+                )
+                expected_energy = math.sqrt(max(expected_energy_sq, 0.0))
+            else:
+                # Non-orthogonal: include cross-terms
+                expected_energy_sq = sum(
+                    model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
+                    + clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                    for i in range(len(active_loras))
+                )
+                for (i, j), dot in branch_energy["model"]["dot"].items():
+                    expected_energy_sq += 2.0 * model_strengths[i] * model_strengths[j] * dot
+                for (i, j), dot in branch_energy["clip"]["dot"].items():
+                    expected_energy_sq += 2.0 * clip_strengths[i] * clip_strengths[j] * dot
+                expected_energy = math.sqrt(max(expected_energy_sq, 0.0))
+            # Scale expected energy by prefix fraction when subsampling
+            if use_subsampling and prefix_count > 0:
+                prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
+                expected_energy *= math.sqrt(prefix_fraction)
+            energy_ratio = measured_energy / expected_energy if expected_energy > 0 else 1.0
+            energy_preservation = max(0.0, 1.0 - abs(energy_ratio - 1.0) * 2.0)
+            measured["energy_ratio"] = energy_ratio
+            measured["energy_preservation"] = energy_preservation
             # Discount sparsity_fit when sparsification artificially inflates it
             if config["sparsification"] != "disabled":
                 measured["sparsity_fit"] *= 0.5
-                if measured.get("effective_rank_mean", 0) > 0:
-                    cv_s = max(0.0, 1.0 - measured["norm_cv"])
-                    measured["composite_score"] = (
-                        min(measured["effective_rank_mean"] / 40.0, 1.0) * 0.4
-                        + cv_s * 0.3 + measured["sparsity_fit"] * 0.3
-                    )
-                else:
-                    cv_s = max(0.0, 1.0 - measured["norm_cv"])
-                    measured["composite_score"] = cv_s * 0.5 + measured["sparsity_fit"] * 0.5
+            # Recompute composite with energy-aware weights
+            cv_s = max(0.0, 1.0 - measured["norm_cv"])
+            if measured.get("effective_rank_mean", 0) > 0:
+                rank_s = min(measured["effective_rank_mean"] / 40.0, 1.0)
+                measured["composite_score"] = (
+                    rank_s * 0.30 + cv_s * 0.25
+                    + energy_preservation * 0.25 + measured["sparsity_fit"] * 0.20
+                )
+            else:
+                measured["composite_score"] = (
+                    cv_s * 0.30 + energy_preservation * 0.45
+                    + measured["sparsity_fit"] * 0.25
+                )
             external_eval = _run_autotuner_evaluator(
                 evaluator, merged_model, merged_clip, lora_data, config, analysis_summary
             ) if evaluator else None
@@ -6714,6 +6778,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             t_elapsed = time.time() - t_merge
             logging.info(f"[LoRA AutoTuner]   Candidate #{rank_idx + 1}: "
                          f"measured={measured['composite_score']:.3f}"
+                         f", energy={energy_ratio:.2f}x"
                          f"{f', external={external_score:.3f}' if external_score is not None else ''}"
                          f", final={final_score:.3f} "
                          f"(merge {t_elapsed - t_score_elapsed:.1f}s + score {t_score_elapsed:.1f}s)")
@@ -6753,7 +6818,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "effective_rank_mean": measured.get("effective_rank_mean", 0.0),
                     "sparsity_mean": measured.get("sparsity_mean", 0.0),
                     "norm_cv": measured.get("norm_cv", 0.0),
-                    "importance_cv": measured.get("importance_cv", measured.get("norm_cv", 0.0)),
+                    "energy_ratio": measured.get("energy_ratio", 1.0),
+                    "energy_preservation": measured.get("energy_preservation", 0.5),
                 },
                 "external_details": external_eval.get("details") if external_eval else None,
             })
@@ -7024,9 +7090,12 @@ class LoRAAutoTuner(LoRAOptimizer):
             strat_label = f" | Strategy: {strat_set}" if c['optimization_mode'] == 'per_prefix' else ""
             lines.append(f"    Auto-strength: {c['auto_strength']} "
                          f"| Optimization: {c['optimization_mode']}{strat_label}")
+            energy_label = f" | Energy: {m['energy_ratio']:.2f}x" if "energy_ratio" in m else ""
             if m.get("effective_rank_mean", 0) > 0:
                 lines.append(f"    Effective rank: {m['effective_rank_mean']:.1f} "
-                             f"| Sparsity: {m.get('sparsity_mean', 0):.1%}")
+                             f"| Sparsity: {m.get('sparsity_mean', 0):.1%}{energy_label}")
+            elif energy_label:
+                lines.append(f"    Sparsity: {m.get('sparsity_mean', 0):.1%}{energy_label}")
 
         lines.append("")
         lines.append("  To use a different config: connect TUNER_DATA")
