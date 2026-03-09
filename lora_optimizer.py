@@ -5834,6 +5834,241 @@ class LoRAOptimizer(_LoRAMergeBase):
         return (new_model, new_clip, report, None, lora_data)
 
 
+class LoRAOptimizerSettings:
+    """
+    Pure data node that outputs Advanced-mode settings for the Simple optimizer.
+    Connect to the 'settings' input of LoRA Optimizer to unlock all Advanced
+    knobs without switching node types.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "auto_strength": (["enabled", "disabled"], {
+                    "default": "enabled",
+                    "tooltip": "Automatically scale per-LoRA strengths to preserve energy balance."
+                }),
+                "optimization_mode": (["per_prefix", "global", "additive"], {
+                    "default": "per_prefix",
+                    "tooltip": "How merge strategies are chosen: per-prefix (best per block), global (single strategy), additive (simple sum)."
+                }),
+                "merge_refinement": (["none", "refine", "full"], {
+                    "default": "none",
+                    "tooltip": "Post-merge refinement pass. 'refine' does a light cleanup, 'full' reruns analysis on the merged result."
+                }),
+                "sparsification": (["disabled", "dare", "della", "dare_conflict", "della_conflict"], {
+                    "default": "disabled",
+                    "tooltip": "Sparsification method to apply before merging."
+                }),
+                "sparsification_density": ("FLOAT", {
+                    "default": 0.7, "min": 0.01, "max": 1.0, "step": 0.05,
+                    "tooltip": "Fraction of weights to keep when sparsification is enabled."
+                }),
+                "dare_dampening": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "DARE dampening factor. Higher values reduce the magnitude of surviving weights."
+                }),
+                "patch_compression": (["smart", "aggressive", "disabled"], {
+                    "default": "smart",
+                    "tooltip": "SVD compression for merged patches. 'smart' compresses only when beneficial."
+                }),
+                "svd_device": (["gpu", "cpu"], {
+                    "default": "gpu",
+                    "tooltip": "Device for SVD computations during patch compression."
+                }),
+                "cache_patches": (["enabled", "disabled"], {
+                    "default": "enabled",
+                    "tooltip": "Cache merged patches in RAM for faster re-execution."
+                }),
+                "free_vram_between_passes": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Free VRAM between merge passes. Enable for very large models."
+                }),
+                "normalize_keys": (["disabled", "enabled"], {
+                    "default": "enabled",
+                    "tooltip": "Makes LoRAs from different training tools compatible."
+                }),
+                "strategy_set": (["full", "no_slerp", "basic"], {
+                    "default": "full",
+                    "tooltip": "Which merge strategies to consider. 'full' includes SLERP, 'basic' uses only weighted average/sum."
+                }),
+                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                    "default": "auto",
+                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys."
+                }),
+                "auto_strength_floor": ("FLOAT", {
+                    "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Minimum auto-strength scale factor. -1 = architecture-aware default."
+                }),
+                "decision_smoothing": ("FLOAT", {
+                    "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Smooth per-group decision metrics toward block average before strategy selection."
+                }),
+                "vram_budget": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Fraction of free VRAM to use for storing merged patches."
+                }),
+            },
+            "optional": {
+                "merge_strategy_override": ("STRING", {
+                    "forceInput": True,
+                    "tooltip": "Force a specific merge strategy for all prefixes (advanced)."
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("OPTIMIZER_SETTINGS",)
+    RETURN_NAMES = ("settings",)
+    FUNCTION = "build_settings"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = (
+        "Advanced-mode settings for the LoRA Optimizer. Connect to the "
+        "'settings' input of the Simple optimizer to unlock all Advanced knobs."
+    )
+
+    def build_settings(self, auto_strength, optimization_mode, merge_refinement,
+                       sparsification, sparsification_density, dare_dampening,
+                       patch_compression, svd_device, cache_patches,
+                       free_vram_between_passes, normalize_keys, strategy_set,
+                       architecture_preset, auto_strength_floor, decision_smoothing,
+                       vram_budget, merge_strategy_override=""):
+        return ({
+            "mode": "advanced",
+            "auto_strength": auto_strength,
+            "optimization_mode": optimization_mode,
+            "merge_refinement": merge_refinement,
+            "sparsification": sparsification,
+            "sparsification_density": sparsification_density,
+            "dare_dampening": dare_dampening,
+            "patch_compression": patch_compression,
+            "svd_device": svd_device,
+            "cache_patches": cache_patches,
+            "free_vram_between_passes": free_vram_between_passes,
+            "normalize_keys": normalize_keys,
+            "strategy_set": strategy_set,
+            "architecture_preset": architecture_preset,
+            "auto_strength_floor": auto_strength_floor,
+            "decision_smoothing": decision_smoothing,
+            "vram_budget": vram_budget,
+            "merge_strategy_override": merge_strategy_override,
+        },)
+
+
+class LoRAAutoTunerSettings:
+    """
+    Pure data node that outputs AutoTuner-mode settings for the Simple optimizer.
+    Connect to the 'settings' input of LoRA Optimizer to run a full AutoTuner
+    sweep without switching node types.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "top_n": ("INT", {
+                    "default": 3, "min": 1, "max": 10, "step": 1,
+                    "tooltip": "Number of top configurations to evaluate via actual merge."
+                }),
+                "scoring_svd": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Enable SVD-based effective rank scoring. More thorough but slower."
+                }),
+                "scoring_device": (["cpu", "gpu"], {
+                    "default": "gpu",
+                    "tooltip": "Device for scoring computations."
+                }),
+                "scoring_speed": (["full", "fast", "turbo", "turbo+"], {
+                    "default": "turbo",
+                    "tooltip": "Controls how many prefixes Phase 2 scores per candidate."
+                }),
+                "output_mode": (["merge", "tuning_only"], {
+                    "default": "merge",
+                    "tooltip": "merge: output merged model. tuning_only: skip final merge, pass base model through."
+                }),
+                "smooth_slerp_gate": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Use smoothed cosine for SLERP gate instead of raw avg_cos_sim."
+                }),
+                "normalize_keys": (["disabled", "enabled"], {
+                    "default": "enabled",
+                    "tooltip": "Makes LoRAs from different training tools compatible."
+                }),
+                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                    "default": "auto",
+                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys."
+                }),
+                "auto_strength_floor": ("FLOAT", {
+                    "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Minimum auto-strength scale factor. -1 = architecture-aware default."
+                }),
+                "decision_smoothing": ("FLOAT", {
+                    "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Smooth per-group decision metrics toward block average."
+                }),
+                "vram_budget": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Fraction of free VRAM to use for storing merged patches."
+                }),
+                "cache_patches": (["enabled", "disabled"], {
+                    "default": "enabled",
+                    "tooltip": "Cache AutoTuner result in RAM for faster re-execution."
+                }),
+                "diff_cache_mode": (["disabled", "auto", "ram", "disk"], {
+                    "default": "auto",
+                    "tooltip": "Cache LoRA diffs across candidates. 'auto' uses RAM then spills to disk."
+                }),
+                "diff_cache_ram_pct": ("FLOAT", {
+                    "default": 0.5, "min": 0.1, "max": 0.9, "step": 0.05,
+                    "tooltip": "Fraction of free RAM for diff cache in 'auto' mode."
+                }),
+                "record_dataset": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Record analysis metrics to JSONL dataset for threshold tuning research."
+                }),
+            },
+            "optional": {
+                "evaluator": ("AUTOTUNER_EVALUATOR", {
+                    "tooltip": "Optional external evaluator for blending custom scoring."
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("OPTIMIZER_SETTINGS",)
+    RETURN_NAMES = ("settings",)
+    FUNCTION = "build_settings"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = (
+        "AutoTuner-mode settings for the LoRA Optimizer. Connect to the "
+        "'settings' input of the Simple optimizer to run a full parameter sweep."
+    )
+
+    def build_settings(self, top_n, scoring_svd, scoring_device, scoring_speed,
+                       output_mode, smooth_slerp_gate, normalize_keys,
+                       architecture_preset, auto_strength_floor, decision_smoothing,
+                       vram_budget, cache_patches, diff_cache_mode,
+                       diff_cache_ram_pct, record_dataset, evaluator=None):
+        return ({
+            "mode": "autotuner",
+            "top_n": top_n,
+            "scoring_svd": scoring_svd,
+            "scoring_device": scoring_device,
+            "scoring_speed": scoring_speed,
+            "output_mode": output_mode,
+            "smooth_slerp_gate": smooth_slerp_gate,
+            "normalize_keys": normalize_keys,
+            "architecture_preset": architecture_preset,
+            "auto_strength_floor": auto_strength_floor,
+            "decision_smoothing": decision_smoothing,
+            "vram_budget": vram_budget,
+            "cache_patches": cache_patches,
+            "diff_cache_mode": diff_cache_mode,
+            "diff_cache_ram_pct": diff_cache_ram_pct,
+            "record_dataset": record_dataset,
+            "evaluator": evaluator,
+        },)
+
+
 class LoRAOptimizerSimple(LoRAOptimizer):
     """
     Simplified LoRA Optimizer with sensible defaults.  Exposes only model,
@@ -5867,15 +6102,17 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                 "tuner_data": ("TUNER_DATA", {
                     "tooltip": "Optional AutoTuner results (from LoRA AutoTuner or Load Tuner Data). When connected, applies the top-ranked config instead of defaults."
                 }),
+                "settings": ("OPTIMIZER_SETTINGS", {
+                    "tooltip": "Optional settings from LoRA Optimizer Settings or LoRA AutoTuner Settings. Overrides defaults and tuner_data when connected."
+                }),
             },
         }
 
     FUNCTION = "execute_simple"
     DESCRIPTION = (
         "Simplified LoRA Optimizer — merges a LoRA stack with good defaults. "
-        "Connect tuner_data to apply AutoTuner results. "
-        "Use LoRA Optimizer (Advanced) for sparsification, merge refinement, "
-        "SVD device, and other fine-tuning options."
+        "Connect tuner_data to apply AutoTuner results, or connect settings "
+        "from an Optimizer/AutoTuner Settings node for full control."
     )
 
     _SIMPLE_DEFAULTS = dict(
@@ -5898,7 +6135,71 @@ class LoRAOptimizerSimple(LoRAOptimizer):
     )
 
     def execute_simple(self, model, lora_stack, output_strength,
-                       clip=None, clip_strength_multiplier=1.0, tuner_data=None):
+                       clip=None, clip_strength_multiplier=1.0, tuner_data=None,
+                       settings=None):
+        # Priority 1: settings node connected
+        if settings is not None:
+            mode = settings.get("mode")
+            if mode == "advanced":
+                return super().optimize_merge(
+                    model, lora_stack, output_strength,
+                    clip=clip, clip_strength_multiplier=clip_strength_multiplier,
+                    auto_strength=settings["auto_strength"],
+                    auto_strength_floor=settings["auto_strength_floor"],
+                    optimization_mode=settings["optimization_mode"],
+                    sparsification=settings["sparsification"],
+                    sparsification_density=settings["sparsification_density"],
+                    dare_dampening=settings["dare_dampening"],
+                    merge_strategy_override=settings.get("merge_strategy_override", ""),
+                    merge_refinement=settings["merge_refinement"],
+                    strategy_set=settings["strategy_set"],
+                    normalize_keys=settings["normalize_keys"],
+                    architecture_preset=settings["architecture_preset"],
+                    decision_smoothing=settings["decision_smoothing"],
+                    cache_patches=settings["cache_patches"],
+                    patch_compression=settings["patch_compression"],
+                    svd_device=settings["svd_device"],
+                    free_vram_between_passes=settings["free_vram_between_passes"],
+                    vram_budget=settings["vram_budget"],
+                )
+            elif mode == "autotuner":
+                if not hasattr(self, '_autotuner_delegate'):
+                    self._autotuner_delegate = LoRAAutoTuner()
+                result = self._autotuner_delegate.auto_tune(
+                    model, lora_stack, output_strength,
+                    clip=clip, clip_strength_multiplier=clip_strength_multiplier,
+                    top_n=settings["top_n"],
+                    scoring_svd=settings["scoring_svd"],
+                    scoring_device=settings["scoring_device"],
+                    scoring_speed=settings["scoring_speed"],
+                    output_mode=settings["output_mode"],
+                    smooth_slerp_gate=settings["smooth_slerp_gate"],
+                    normalize_keys=settings["normalize_keys"],
+                    architecture_preset=settings["architecture_preset"],
+                    auto_strength_floor=settings["auto_strength_floor"],
+                    decision_smoothing=settings["decision_smoothing"],
+                    vram_budget=settings["vram_budget"],
+                    cache_patches=settings["cache_patches"],
+                    diff_cache_mode=settings["diff_cache_mode"],
+                    diff_cache_ram_pct=settings["diff_cache_ram_pct"],
+                    record_dataset=settings["record_dataset"],
+                    evaluator=settings.get("evaluator"),
+                )
+                # Map 6-value AutoTuner return to 5-value Simple return
+                # (model, clip, report, analysis_report, tuner_data, lora_data)
+                # → (model, clip, combined_report, tuner_data, lora_data)
+                at_model, at_clip, report, analysis_report, at_tuner_data, at_lora_data = result
+                combined_report = report
+                if analysis_report:
+                    combined_report = f"{report}\n\n{'=' * 50}\nANALYSIS REPORT\n{'=' * 50}\n{analysis_report}"
+                return (at_model, at_clip, combined_report, at_tuner_data, at_lora_data)
+            else:
+                raise ValueError(
+                    f"[LoRA Optimizer] Unknown settings mode: {mode!r}. "
+                    f"Expected 'advanced' or 'autotuner'."
+                )
+
+        # Priority 2: tuner_data connected (no settings)
         if tuner_data is not None and "top_n" in tuner_data and len(tuner_data["top_n"]) > 0:
             entry = tuner_data["top_n"][0]
             config = entry["config"]
@@ -5923,6 +6224,8 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                 svd_device="gpu",
                 vram_budget=0.0,
             )
+
+        # Priority 3: simple defaults
         return super().optimize_merge(
             model, lora_stack, output_strength,
             clip=clip, clip_strength_multiplier=clip_strength_multiplier,
@@ -5931,12 +6234,19 @@ class LoRAOptimizerSimple(LoRAOptimizer):
 
     @classmethod
     def IS_CHANGED(cls, model, lora_stack, output_strength,
-                   clip=None, clip_strength_multiplier=1.0, tuner_data=None):
+                   clip=None, clip_strength_multiplier=1.0, tuner_data=None,
+                   settings=None):
         base = LoRAOptimizer.IS_CHANGED(
             model, lora_stack, output_strength,
             clip=clip, clip_strength_multiplier=clip_strength_multiplier,
             **cls._SIMPLE_DEFAULTS,
         )
+        if settings is not None:
+            import hashlib, json
+            settings_hash = hashlib.md5(
+                json.dumps(settings, sort_keys=True, default=str).encode()
+            ).hexdigest()[:12]
+            return f"{base}|settings={settings_hash}"
         if tuner_data is not None:
             return f"{base}|td={id(tuner_data)}"
         return base
@@ -8388,6 +8698,8 @@ NODE_CLASS_MAPPINGS = {
     "SaveTunerData": SaveTunerData,
     "LoadTunerData": LoadTunerData,
     "LoRACompatibilityAnalyzer": LoRACompatibilityAnalyzer,
+    "LoRAOptimizerSettings": LoRAOptimizerSettings,
+    "LoRAAutoTunerSettings": LoRAAutoTunerSettings,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -8406,4 +8718,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SaveTunerData": "Save Tuner Data",
     "LoadTunerData": "Load Tuner Data",
     "LoRACompatibilityAnalyzer": "LoRA Compatibility Analyzer",
+    "LoRAOptimizerSettings": "LoRA Optimizer Settings",
+    "LoRAAutoTunerSettings": "LoRA AutoTuner Settings",
 }

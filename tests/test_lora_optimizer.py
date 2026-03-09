@@ -463,5 +463,141 @@ class LoRAOptimizerTests(unittest.TestCase):
         self.assertIn("LoRACompatibilityAnalyzer", lora_optimizer.NODE_CLASS_MAPPINGS)
 
 
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class LoRASettingsNodeTests(unittest.TestCase):
+    """Tests for LoRAOptimizerSettings and LoRAAutoTunerSettings nodes."""
+
+    def test_optimizer_settings_build_returns_advanced_mode(self):
+        node = lora_optimizer.LoRAOptimizerSettings()
+        inputs = lora_optimizer.LoRAOptimizerSettings.INPUT_TYPES()
+        # Build with all defaults from INPUT_TYPES
+        defaults = {}
+        for key, spec in inputs["required"].items():
+            if isinstance(spec[0], list):
+                defaults[key] = spec[1].get("default", spec[0][0])
+            elif spec[0] == "FLOAT":
+                defaults[key] = spec[1]["default"]
+        result = node.build_settings(**defaults)
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 1)
+        settings = result[0]
+        self.assertEqual(settings["mode"], "advanced")
+        self.assertEqual(settings["auto_strength"], "enabled")
+        self.assertEqual(settings["optimization_mode"], "per_prefix")
+        self.assertEqual(settings["sparsification"], "disabled")
+        self.assertAlmostEqual(settings["sparsification_density"], 0.7)
+        self.assertEqual(settings["merge_strategy_override"], "")
+
+    def test_optimizer_settings_with_strategy_override(self):
+        node = lora_optimizer.LoRAOptimizerSettings()
+        inputs = lora_optimizer.LoRAOptimizerSettings.INPUT_TYPES()
+        defaults = {}
+        for key, spec in inputs["required"].items():
+            if isinstance(spec[0], list):
+                defaults[key] = spec[1].get("default", spec[0][0])
+            elif spec[0] == "FLOAT":
+                defaults[key] = spec[1]["default"]
+        defaults["merge_strategy_override"] = "slerp"
+        result = node.build_settings(**defaults)
+        self.assertEqual(result[0]["merge_strategy_override"], "slerp")
+
+    def test_autotuner_settings_build_returns_autotuner_mode(self):
+        node = lora_optimizer.LoRAAutoTunerSettings()
+        inputs = lora_optimizer.LoRAAutoTunerSettings.INPUT_TYPES()
+        defaults = {}
+        for key, spec in inputs["required"].items():
+            if isinstance(spec[0], list):
+                defaults[key] = spec[1].get("default", spec[0][0])
+            elif spec[0] == "FLOAT":
+                defaults[key] = spec[1]["default"]
+            elif spec[0] == "INT":
+                defaults[key] = spec[1]["default"]
+            elif spec[0] == "BOOLEAN":
+                defaults[key] = spec[1]["default"]
+        result = node.build_settings(**defaults)
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 1)
+        settings = result[0]
+        self.assertEqual(settings["mode"], "autotuner")
+        self.assertEqual(settings["top_n"], 3)
+        self.assertEqual(settings["scoring_speed"], "turbo")
+        self.assertEqual(settings["output_mode"], "merge")
+        self.assertFalse(settings["smooth_slerp_gate"])
+        self.assertIsNone(settings["evaluator"])
+
+    def test_autotuner_settings_with_evaluator(self):
+        node = lora_optimizer.LoRAAutoTunerSettings()
+        inputs = lora_optimizer.LoRAAutoTunerSettings.INPUT_TYPES()
+        defaults = {}
+        for key, spec in inputs["required"].items():
+            if isinstance(spec[0], list):
+                defaults[key] = spec[1].get("default", spec[0][0])
+            elif spec[0] == "FLOAT":
+                defaults[key] = spec[1]["default"]
+            elif spec[0] == "INT":
+                defaults[key] = spec[1]["default"]
+            elif spec[0] == "BOOLEAN":
+                defaults[key] = spec[1]["default"]
+        evaluator = {"type": "python", "code": "return 0.5"}
+        defaults["evaluator"] = evaluator
+        result = node.build_settings(**defaults)
+        self.assertEqual(result[0]["evaluator"], evaluator)
+
+    def test_settings_nodes_registered_in_mappings(self):
+        self.assertIn("LoRAOptimizerSettings", lora_optimizer.NODE_CLASS_MAPPINGS)
+        self.assertIn("LoRAAutoTunerSettings", lora_optimizer.NODE_CLASS_MAPPINGS)
+        self.assertEqual(
+            lora_optimizer.NODE_DISPLAY_NAME_MAPPINGS["LoRAOptimizerSettings"],
+            "LoRA Optimizer Settings",
+        )
+        self.assertEqual(
+            lora_optimizer.NODE_DISPLAY_NAME_MAPPINGS["LoRAAutoTunerSettings"],
+            "LoRA AutoTuner Settings",
+        )
+
+    def test_settings_nodes_return_types(self):
+        self.assertEqual(lora_optimizer.LoRAOptimizerSettings.RETURN_TYPES, ("OPTIMIZER_SETTINGS",))
+        self.assertEqual(lora_optimizer.LoRAAutoTunerSettings.RETURN_TYPES, ("OPTIMIZER_SETTINGS",))
+
+    def test_simple_node_accepts_settings_input(self):
+        inputs = lora_optimizer.LoRAOptimizerSimple.INPUT_TYPES()
+        self.assertIn("settings", inputs["optional"])
+        self.assertEqual(inputs["optional"]["settings"][0], "OPTIMIZER_SETTINGS")
+
+    def test_simple_is_changed_includes_settings_hash(self):
+        settings = {"mode": "advanced", "auto_strength": "enabled"}
+        result_with = lora_optimizer.LoRAOptimizerSimple.IS_CHANGED(
+            None, None, 1.0, settings=settings)
+        result_without = lora_optimizer.LoRAOptimizerSimple.IS_CHANGED(
+            None, None, 1.0)
+        self.assertIn("|settings=", result_with)
+        self.assertNotIn("|settings=", result_without)
+
+    def test_simple_is_changed_different_settings_produce_different_hashes(self):
+        settings_a = {"mode": "advanced", "auto_strength": "enabled"}
+        settings_b = {"mode": "advanced", "auto_strength": "disabled"}
+        result_a = lora_optimizer.LoRAOptimizerSimple.IS_CHANGED(
+            None, None, 1.0, settings=settings_a)
+        result_b = lora_optimizer.LoRAOptimizerSimple.IS_CHANGED(
+            None, None, 1.0, settings=settings_b)
+        self.assertNotEqual(result_a, result_b)
+
+    def test_optimizer_settings_defaults_match_simple_defaults(self):
+        """Verify LoRAOptimizerSettings defaults align with _SIMPLE_DEFAULTS."""
+        inputs = lora_optimizer.LoRAOptimizerSettings.INPUT_TYPES()
+        simple = lora_optimizer.LoRAOptimizerSimple._SIMPLE_DEFAULTS
+        for key in ["auto_strength", "optimization_mode", "sparsification",
+                     "merge_refinement", "normalize_keys", "strategy_set",
+                     "architecture_preset", "cache_patches", "patch_compression",
+                     "svd_device", "free_vram_between_passes"]:
+            spec = inputs["required"][key]
+            if isinstance(spec[0], list):
+                default = spec[1].get("default", spec[0][0])
+            else:
+                default = spec[1]["default"]
+            self.assertEqual(default, simple[key],
+                             f"Default mismatch for {key}: settings={default}, simple={simple[key]}")
+
+
 if __name__ == "__main__":
     unittest.main()
