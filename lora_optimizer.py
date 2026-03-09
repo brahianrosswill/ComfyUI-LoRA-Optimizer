@@ -36,6 +36,7 @@ except Exception:
         def __init__(self, loaded_keys, weights):
             self.loaded_keys = loaded_keys
             self.weights = weights
+from safetensors import safe_open
 from safetensors.torch import save_file
 
 TUNER_DATA_DIR = os.path.join(folder_paths.models_dir, "tuner_data")
@@ -43,6 +44,17 @@ os.makedirs(TUNER_DATA_DIR, exist_ok=True)
 folder_paths.add_model_folder_path("tuner_data", TUNER_DATA_DIR)
 
 
+
+
+def _read_safetensors_metadata(filepath):
+    """Read metadata header from a safetensors file without loading tensors."""
+    try:
+        if not filepath.endswith(".safetensors"):
+            return {}
+        with safe_open(filepath, framework="pt") as f:
+            return dict(f.metadata()) if f.metadata() else {}
+    except Exception:
+        return {}
 
 
 def _resolve_safe_output_path(base_dir, filename, suffix, label):
@@ -208,8 +220,9 @@ class LoRAStack:
             "strength": strength,
             "conflict_mode": conflict_mode,
             "key_filter": key_filter,
+            "metadata": _read_safetensors_metadata(lora_path),
         })
-        
+
         return (lora_list,)
 
 
@@ -2806,6 +2819,7 @@ class _LoRAMergeBase:
                 # Load LoRA with caching
                 if lora_name in self.loaded_loras:
                     lora_dict = self.loaded_loras[lora_name]
+                    lora_path = None
                 else:
                     try:
                         lora_path = folder_paths.get_full_path_or_raise("loras", lora_name)
@@ -2815,6 +2829,10 @@ class _LoRAMergeBase:
                         logging.warning(f"[LoRA Optimizer] Failed to load LoRA '{lora_name}': {e}")
                         continue
 
+                metadata = {}
+                if lora_path is not None:
+                    metadata = _read_safetensors_metadata(lora_path)
+
                 normalized.append({
                     "name": lora_name,
                     "lora": lora_dict,
@@ -2822,6 +2840,7 @@ class _LoRAMergeBase:
                     "clip_strength": clip_str,
                     "conflict_mode": conflict_mode,
                     "key_filter": key_filter,
+                    "metadata": metadata,
                 })
 
         elif isinstance(first, dict):
@@ -2837,6 +2856,7 @@ class _LoRAMergeBase:
                     "clip_strength": None,  # use global multiplier
                     "conflict_mode": item.get("conflict_mode", "all"),
                     "key_filter": item.get("key_filter", "all"),
+                    "metadata": item.get("metadata", {}),
                 })
 
         else:
@@ -5827,6 +5847,20 @@ class LoRAOptimizer(_LoRAMergeBase):
             "clip_strength": clip_strength_out,
             "suggested_max_strength": suggested_max_strength,
             "sum_rank": compress_rank if compress_rank > 0 else 128,
+            "merge_metadata": {
+                "source_loras": [{"name": item["name"], "strength": item["strength"]} for item in active_loras],
+                "mode": mode,
+                "optimization_mode": optimization_mode,
+                "architecture": getattr(self, '_detected_arch', None) or 'unknown',
+                "architecture_preset": preset_key,
+                "auto_strength": auto_strength,
+                "sparsification": sparsification,
+                "sparsification_density": sparsification_density,
+                "merge_refinement": merge_refinement,
+                "strategy_set": strategy_set,
+                "bake_strength_output": output_strength,
+                "bake_strength_clip": clip_strength_out,
+            },
         }
 
         # Cache patches for re-use (single entry to limit memory)
@@ -6969,6 +7003,7 @@ class LoRAAutoTuner(LoRAOptimizer):
         tuner_data = {
             "version": 1,
             "lora_hash": lora_hash,
+            "source_loras": [{"name": l["name"], "strength": l["strength"]} for l in active_loras],
             "normalize_keys": normalize_keys,
             "architecture_preset": architecture_preset,
             "auto_strength_floor": auto_strength_floor,
@@ -7460,6 +7495,18 @@ class SaveMergedLoRA:
                     "default": True,
                     "tooltip": "When enabled, the saved LoRA reproduces your exact merge when loaded at strength 1.0. When disabled, strengths are not baked in — you'll need to set the strength manually when loading."
                 }),
+            },
+            "optional": {
+                "prompt": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "tooltip": "Example prompt or trigger words to embed in the file metadata. Useful for sharing — some UIs display this automatically."
+                }),
+                "description": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "tooltip": "Optional description or notes about this merged LoRA. Stored in file metadata."
+                }),
             }
         }
 
@@ -7470,7 +7517,7 @@ class SaveMergedLoRA:
     OUTPUT_NODE = True
     DESCRIPTION = "Saves merged LoRA data as a standalone .safetensors file that can be loaded by any standard LoRA loader."
 
-    def save_lora(self, lora_data, save_folder, filename, save_rank=0, bake_strength=True):
+    def save_lora(self, lora_data, save_folder, filename, save_rank=0, bake_strength=True, prompt="", description=""):
         if lora_data is None:
             logging.warning("[Save Merged LoRA] No lora_data received (optimizer may have returned early). Nothing to save.")
             return ("",)
@@ -7632,7 +7679,31 @@ class SaveMergedLoRA:
                          f"avg={avg_error:.4f}, max={max_error:.4f} "
                          f"({len(svd_errors)} diffs checked)")
 
-        save_file(state_dict, save_path)
+        # Build safetensors metadata header
+        metadata = {"tool": "ComfyUI-ZImage-LoRA-Merger"}
+        merge_meta = lora_data.get("merge_metadata", {})
+        if merge_meta:
+            source_loras = merge_meta.get("source_loras", [])
+            if source_loras:
+                metadata["source_loras"] = ", ".join(
+                    f"{s['name']} @ {s['strength']}" for s in source_loras
+                )
+            for key in ("mode", "optimization_mode", "architecture", "architecture_preset",
+                        "auto_strength", "sparsification", "merge_refinement", "strategy_set"):
+                val = merge_meta.get(key)
+                if val is not None:
+                    metadata[f"merge_{key}"] = str(val)
+            if merge_meta.get("sparsification_density") is not None:
+                metadata["merge_sparsification_density"] = str(merge_meta["sparsification_density"])
+            metadata["merge_output_strength"] = str(merge_meta.get("bake_strength_output", output_strength))
+            metadata["merge_clip_strength"] = str(merge_meta.get("bake_strength_clip", clip_strength))
+            metadata["merge_bake_strength"] = str(bake_strength)
+        if prompt.strip():
+            metadata["prompt"] = prompt.strip()
+        if description.strip():
+            metadata["description"] = description.strip()
+
+        save_file(state_dict, save_path, metadata=metadata)
         logging.info(f"[Save Merged LoRA] Saved {len(state_dict) // 3} LoRA keys to {save_path}")
 
         return (save_path,)
@@ -7716,6 +7787,18 @@ class SaveTunerData:
                 "save_folder": (folder_choices, {"tooltip": "Which tuner_data folder to save into. Lists all configured paths (from extra_model_paths.yaml and defaults)."}),
                 "filename": ("STRING", {"default": "tuner_data", "tooltip": "Filename. Subdirectories allowed (e.g. 'results/experiment1'). Extension .tuner is added automatically (.json also accepted)."}),
                 "overwrite": ("BOOLEAN", {"default": True, "tooltip": "When enabled, overwrites existing files. When disabled, appends _001, _002, etc. to avoid overwriting."}),
+            },
+            "optional": {
+                "prompt": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "tooltip": "Example prompt or trigger words to embed in the tuner file. Shown when loading."
+                }),
+                "description": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "tooltip": "Optional description or notes about this tuner run. Stored in the file."
+                }),
             }
         }
 
@@ -7726,9 +7809,17 @@ class SaveTunerData:
     OUTPUT_NODE = True
     DESCRIPTION = "Saves AutoTuner results to a .tuner file so they can be reloaded later without re-running the tuner."
 
-    def save_tuner_data(self, tuner_data, save_folder, filename, overwrite=True):
+    def save_tuner_data(self, tuner_data, save_folder, filename, overwrite=True, prompt="", description=""):
         if tuner_data is None:
             return ("",)
+
+        # Embed user metadata into tuner_data before saving
+        save_data = dict(tuner_data)
+        if prompt.strip():
+            save_data["prompt"] = prompt.strip()
+        if description.strip():
+            save_data["description"] = description.strip()
+
         base_dir = os.path.realpath(save_folder)
         base_name = filename if filename.endswith((".json", ".tuner")) else f"{filename}.tuner"
         save_path = os.path.realpath(os.path.join(base_dir, base_name))
@@ -7745,7 +7836,7 @@ class SaveTunerData:
                 counter += 1
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, "w") as f:
-            json.dump(tuner_data, f, indent=2)
+            json.dump(save_data, f, indent=2)
         logging.info(f"[Save Tuner Data] Saved to: {save_path}")
         return (save_path,)
 
@@ -7761,8 +7852,8 @@ class LoadTunerData:
             }
         }
 
-    RETURN_TYPES = ("TUNER_DATA",)
-    RETURN_NAMES = ("tuner_data",)
+    RETURN_TYPES = ("TUNER_DATA", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("tuner_data", "prompt", "description", "metadata_info")
     FUNCTION = "load_tuner_data"
     CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Loads saved AutoTuner results from disk so they can be fed to Merge Selector without re-running the tuner."
@@ -7778,7 +7869,35 @@ class LoadTunerData:
             tuner_data = json.load(f)
         logging.info(f"[Load Tuner Data] Loaded from: {load_path} "
                      f"({len(tuner_data.get('top_n', []))} configs)")
-        return (tuner_data,)
+
+        prompt = tuner_data.get("prompt", "")
+        description = tuner_data.get("description", "")
+
+        # Build metadata info string
+        info_lines = []
+        for key in ("source_loras", "architecture_preset", "normalize_keys",
+                     "auto_strength_floor", "decision_smoothing", "lora_hash"):
+            val = tuner_data.get(key)
+            if val is not None:
+                info_lines.append(f"{key}: {val}")
+        top_n = tuner_data.get("top_n", [])
+        if top_n:
+            info_lines.append(f"configs: {len(top_n)}")
+            best = top_n[0]
+            cfg = best.get("config", {})
+            info_lines.append(f"best score: {best.get('score_final', 'N/A')}")
+            for k in ("mode", "optimization_mode", "auto_strength", "sparsification",
+                       "merge_refinement", "strategy_set"):
+                v = cfg.get(k)
+                if v is not None:
+                    info_lines.append(f"best {k}: {v}")
+        if prompt:
+            info_lines.append(f"prompt: {prompt}")
+        if description:
+            info_lines.append(f"description: {description}")
+        metadata_info = "\n".join(info_lines) if info_lines else "No metadata found."
+
+        return (tuner_data, prompt, description, metadata_info)
 
 
 class LoRACompatibilityAnalyzer(LoRAOptimizer):
@@ -8861,6 +8980,99 @@ class LoRAConflictEditor(_LoRAMergeBase):
         return "\n".join(lines)
 
 
+class LoRAMetadataReader:
+    """
+    Passthrough node that reads embedded metadata from LoRAs in a stack.
+    Outputs the stack unchanged plus extracted prompt and metadata strings.
+    Works with any safetensors LoRA — not limited to LoRAs saved by this pack.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "lora_stack": ("LORA_STACK", {"tooltip": "Connect a LoRA Stack here. The stack passes through unchanged."}),
+            },
+        }
+
+    RETURN_TYPES = ("LORA_STACK", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("lora_stack", "prompt", "description", "metadata_info")
+    FUNCTION = "read_metadata"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = "Reads embedded metadata (prompt, description, merge info) from LoRAs in the stack. The stack passes through unchanged."
+
+    def read_metadata(self, lora_stack):
+        if not lora_stack:
+            return (lora_stack, "", "", "No LoRAs in stack.")
+
+        all_prompts = []
+        all_descriptions = []
+        info_lines = []
+
+        for item in lora_stack:
+            # Get metadata — either already attached by LoRAStack or read from disk
+            if isinstance(item, dict):
+                name = item.get("name", "unknown")
+                meta = item.get("metadata", {})
+                if not meta:
+                    # Try reading from disk if not already attached
+                    try:
+                        lora_path = folder_paths.get_full_path_or_raise("loras", name)
+                        meta = _read_safetensors_metadata(lora_path)
+                    except Exception:
+                        meta = {}
+            elif isinstance(item, (tuple, list)):
+                name = item[0] if len(item) > 0 else "unknown"
+                try:
+                    lora_path = folder_paths.get_full_path_or_raise("loras", name)
+                    meta = _read_safetensors_metadata(lora_path)
+                except Exception:
+                    meta = {}
+            else:
+                continue
+
+            if not meta:
+                info_lines.append(f"[{name}] No metadata found")
+                continue
+
+            prompt = meta.get("prompt", "")
+            desc = meta.get("description", "")
+            if prompt:
+                all_prompts.append(f"# {name}\n{prompt}")
+            if desc:
+                all_descriptions.append(f"# {name}\n{desc}")
+
+            # Collect interesting metadata fields
+            entry_lines = [f"[{name}]"]
+            for key in ("prompt", "description", "source_loras", "tool",
+                         "merge_mode", "merge_optimization_mode", "merge_architecture",
+                         "merge_auto_strength", "merge_sparsification",
+                         "merge_merge_refinement", "merge_strategy_set",
+                         "merge_output_strength", "merge_clip_strength",
+                         "merge_bake_strength"):
+                val = meta.get(key)
+                if val:
+                    display_key = key.replace("merge_", "") if key.startswith("merge_") else key
+                    entry_lines.append(f"  {display_key}: {val}")
+            # Also show any other non-tensor metadata
+            shown = {"prompt", "description", "source_loras", "tool",
+                     "merge_mode", "merge_optimization_mode", "merge_architecture",
+                     "merge_auto_strength", "merge_sparsification",
+                     "merge_merge_refinement", "merge_strategy_set",
+                     "merge_output_strength", "merge_clip_strength",
+                     "merge_bake_strength"}
+            for key, val in sorted(meta.items()):
+                if key not in shown and not key.startswith("__"):
+                    entry_lines.append(f"  {key}: {val[:200]}")
+            info_lines.append("\n".join(entry_lines))
+
+        combined_prompt = "\n\n".join(all_prompts)
+        combined_desc = "\n\n".join(all_descriptions)
+        metadata_info = "\n\n".join(info_lines)
+
+        return (lora_stack, combined_prompt, combined_desc, metadata_info)
+
+
 # Node registration
 NODE_CLASS_MAPPINGS = {
     "LoRAStack": LoRAStack,
@@ -8881,6 +9093,7 @@ NODE_CLASS_MAPPINGS = {
     "LoRAMergeSettings": LoRAMergeSettings,
     "LoRAOptimizerSettings": LoRAOptimizerSettings,
     "LoRAAutoTunerSettings": LoRAAutoTunerSettings,
+    "LoRAMetadataReader": LoRAMetadataReader,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -8902,4 +9115,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAMergeSettings": "LoRA Merge Settings",
     "LoRAOptimizerSettings": "LoRA Optimizer Settings",
     "LoRAAutoTunerSettings": "LoRA AutoTuner Settings",
+    "LoRAMetadataReader": "LoRA Metadata Reader",
 }

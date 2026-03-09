@@ -96,8 +96,9 @@ def _install_stubs():
     sys.modules["comfy.weight_adapter.loha"] = weight_adapter_loha
 
     safetensors = types.ModuleType("safetensors")
+    safetensors.safe_open = mock.MagicMock()
     safetensors_torch = types.ModuleType("safetensors.torch")
-    safetensors_torch.save_file = lambda state_dict, path: None
+    safetensors_torch.save_file = lambda state_dict, path, metadata=None: None
     safetensors.torch = safetensors_torch
     sys.modules["safetensors"] = safetensors
     sys.modules["safetensors.torch"] = safetensors_torch
@@ -365,7 +366,7 @@ class LoRAOptimizerTests(unittest.TestCase):
         )
         captured = {}
 
-        with mock.patch.object(lora_optimizer, "save_file", side_effect=lambda state_dict, path: captured.update({"state_dict": state_dict, "path": path})):
+        with mock.patch.object(lora_optimizer, "save_file", side_effect=lambda state_dict, path, metadata=None: captured.update({"state_dict": state_dict, "path": path, "metadata": metadata})):
             save_path, = saver.save_lora(
                 {
                     "model_patches": {"layer.weight": patch},
