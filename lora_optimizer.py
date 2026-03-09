@@ -7006,7 +7006,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             else:
                 lines.append(f"    Sparsification: disabled")
             strat_set = c.get('strategy_set', 'full')
-            strat_label = f" | Strategy: {strat_set}" if c['optimization_mode'] == 'per_prefix' and strat_set != 'full' else ""
+            strat_label = f" | Strategy: {strat_set}" if c['optimization_mode'] == 'per_prefix' else ""
             lines.append(f"    Auto-strength: {c['auto_strength']} "
                          f"| Optimization: {c['optimization_mode']}{strat_label}")
             if m.get("effective_rank_mean", 0) > 0:
