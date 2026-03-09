@@ -3505,9 +3505,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                 "tuner_data": ("TUNER_DATA", {
                     "tooltip": "Connect from the LoRA AutoTuner's tuner_data output. Used when settings_source is 'from_autotuner'."
                 }),
-                "settings_source": (["manual", "from_autotuner"], {
+                "settings_source": (["manual", "from_autotuner", "from_tuner_data"], {
                     "default": "manual",
-                    "tooltip": "manual: use widget settings. from_autotuner: use the AutoTuner's top-ranked config as the source of truth and treat this node as a passthrough."
+                    "tooltip": "manual: use widget settings. from_autotuner: passthrough when chained with a live AutoTuner. from_tuner_data: apply the top-ranked config from loaded tuner data (use with Load Tuner Data)."
                 }),
             }
         }
@@ -3570,7 +3570,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                                           auto_strength_floor,
                                           decision_smoothing)
         cache_key = f"{base_key}|mid={id(model)}|ss={settings_source}"
-        if settings_source == "from_autotuner" and tuner_data is not None:
+        if settings_source in ("from_autotuner", "from_tuner_data") and tuner_data is not None:
             return f"{cache_key}|at={id(tuner_data)}"
         return cache_key
 
@@ -4910,6 +4910,39 @@ class LoRAOptimizer(_LoRAMergeBase):
                 logging.info("[AutoTuner Bridge] Passthrough mode — model already merged by AutoTuner")
                 return {"result": (model, clip, report, tuner_data, None),
                         "ui": {"applied_settings": [json.dumps(applied_config)]}}
+
+        if settings_source == "from_tuner_data":
+            if tuner_data is None or "top_n" not in tuner_data or len(tuner_data["top_n"]) == 0:
+                logging.warning("[Tuner Data] No valid tuner_data — falling back to manual merge")
+            else:
+                entry = tuner_data["top_n"][0]
+                config = entry["config"]
+                strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
+                resolved_smoothing = tuner_data.get("decision_smoothing", decision_smoothing)
+                result = self.optimize_merge(
+                    model, lora_stack, output_strength,
+                    clip=clip,
+                    clip_strength_multiplier=clip_strength_multiplier,
+                    auto_strength=config["auto_strength"],
+                    auto_strength_floor=tuner_data.get("auto_strength_floor", auto_strength_floor),
+                    free_vram_between_passes=free_vram_between_passes,
+                    vram_budget=vram_budget,
+                    optimization_mode=config["optimization_mode"],
+                    cache_patches=cache_patches,
+                    patch_compression=patch_compression,
+                    svd_device=svd_device,
+                    normalize_keys=tuner_data.get("normalize_keys", normalize_keys),
+                    sparsification=config["sparsification"],
+                    sparsification_density=config["sparsification_density"],
+                    dare_dampening=config["dare_dampening"],
+                    merge_strategy_override=strategy_override,
+                    merge_refinement=config["merge_refinement"],
+                    strategy_set=tuner_data.get("strategy_set", strategy_set),
+                    architecture_preset=tuner_data.get("architecture_preset", architecture_preset),
+                    decision_smoothing=resolved_smoothing,
+                )
+                applied_config = dict(config)
+                return {"result": result, "ui": {"applied_settings": [json.dumps(applied_config)]}}
 
         return self.optimize_merge(
             model, lora_stack, output_strength,
