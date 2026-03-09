@@ -5864,13 +5864,16 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                     "default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05,
                     "tooltip": "Multiplier for CLIP LoRA strengths (stacks with per-LoRA clip_strength when provided)."
                 }),
+                "tuner_data": ("TUNER_DATA", {
+                    "tooltip": "Optional AutoTuner results (from LoRA AutoTuner or Load Tuner Data). When connected, applies the top-ranked config instead of defaults."
+                }),
             },
         }
 
-    FUNCTION = "optimize_merge"
+    FUNCTION = "execute_simple"
     DESCRIPTION = (
         "Simplified LoRA Optimizer — merges a LoRA stack with good defaults. "
-        "Accepts optional tuner_data to use AutoTuner results. "
+        "Connect tuner_data to apply AutoTuner results. "
         "Use LoRA Optimizer (Advanced) for sparsification, merge refinement, "
         "SVD device, and other fine-tuning options."
     )
@@ -5894,8 +5897,32 @@ class LoRAOptimizerSimple(LoRAOptimizer):
         architecture_preset="auto",
     )
 
-    def optimize_merge(self, model, lora_stack, output_strength,
-                       clip=None, clip_strength_multiplier=1.0, **_kwargs):
+    def execute_simple(self, model, lora_stack, output_strength,
+                       clip=None, clip_strength_multiplier=1.0, tuner_data=None):
+        if tuner_data is not None and "top_n" in tuner_data and len(tuner_data["top_n"]) > 0:
+            entry = tuner_data["top_n"][0]
+            config = entry["config"]
+            strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
+            return super().optimize_merge(
+                model, lora_stack, output_strength,
+                clip=clip, clip_strength_multiplier=clip_strength_multiplier,
+                auto_strength=config["auto_strength"],
+                auto_strength_floor=tuner_data.get("auto_strength_floor", -1.0),
+                optimization_mode=config["optimization_mode"],
+                sparsification=config["sparsification"],
+                sparsification_density=config["sparsification_density"],
+                dare_dampening=config["dare_dampening"],
+                merge_strategy_override=strategy_override,
+                merge_refinement=config["merge_refinement"],
+                strategy_set=config.get("strategy_set", "full"),
+                normalize_keys=tuner_data.get("normalize_keys", "enabled"),
+                architecture_preset=tuner_data.get("architecture_preset", "auto"),
+                decision_smoothing=tuner_data.get("decision_smoothing", 0.25),
+                cache_patches="enabled",
+                patch_compression="smart",
+                svd_device="gpu",
+                vram_budget=0.0,
+            )
         return super().optimize_merge(
             model, lora_stack, output_strength,
             clip=clip, clip_strength_multiplier=clip_strength_multiplier,
@@ -5904,12 +5931,15 @@ class LoRAOptimizerSimple(LoRAOptimizer):
 
     @classmethod
     def IS_CHANGED(cls, model, lora_stack, output_strength,
-                   clip=None, clip_strength_multiplier=1.0, **_kwargs):
-        return LoRAOptimizer.IS_CHANGED(
+                   clip=None, clip_strength_multiplier=1.0, tuner_data=None):
+        base = LoRAOptimizer.IS_CHANGED(
             model, lora_stack, output_strength,
             clip=clip, clip_strength_multiplier=clip_strength_multiplier,
             **cls._SIMPLE_DEFAULTS,
         )
+        if tuner_data is not None:
+            return f"{base}|td={id(tuner_data)}"
+        return base
 
 
 class LoRAAutoTuner(LoRAOptimizer):
