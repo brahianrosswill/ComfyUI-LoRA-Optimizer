@@ -17,7 +17,7 @@
 
 ---
 
-A ComfyUI node suite that **automatically analyzes your LoRA stack** and selects the best merge strategy per weight group — diff-based merging, TIES conflict resolution, DARE/DELLA sparsification, per-prefix adaptive decisions, SVD patch compression, architecture-aware key normalization, merge refinement (KnOTS alignment, orthogonalization, TALL-mask protection), and auto-tuned parameters. Core nodes: **LoRA Stack** (build input), **LoRA Optimizer** (analyze + merge), and **LoRA AutoTuner** (sweep all parameters automatically and find the best config).
+Stacking multiple LoRAs in ComfyUI often causes oversaturation, artifacts, or lost details. This node suite **automatically figures out the best way to combine your LoRAs** — analyzing where they conflict, resolving those conflicts per model layer, and adjusting strengths so the result looks clean. Just add your LoRAs to a stack, connect the optimizer, and generate.
 
 ## The Problem
 
@@ -44,65 +44,69 @@ How LoRAs relate to each other, what the optimizer does about it, and when to ch
 
 ---
 
-## Nodes
+## Quick Start
 
-### LoRA Stack
+1. Add a **LoRA Stack (Dynamic)** node — pick your LoRAs, set strengths
+2. Add a **LoRA Optimizer** node — connect `MODEL` (and optionally `CLIP`) from your checkpoint
+3. Connect the optimizer's `MODEL`/`CLIP` outputs to your sampler — done
 
-Builds a list of LoRAs for the optimizer. Chain multiple Stack nodes to add any number of LoRAs.
+```
+LoRA Stack (Dynamic) ──► LoRA Optimizer ──► KSampler
+                              ▲
+Load Checkpoint ──► MODEL ────┘
+```
 
-**Inputs:** LoRA selector, strength, conflict_mode, key_filter, optional previous `LORA_STACK`
+Everything is automatic. Connect `analysis_report` to a **Show Text** node to see what the optimizer did.
 
-**Outputs:** `LORA_STACK`
-
----
-
-### LoRA Stack (Dynamic)
-
-Single node with adjustable slot count (1–10) — replaces chaining multiple Stack nodes.
-
-| Mode | Behavior |
-|------|----------|
-| **Simple** | One `strength` slider per LoRA — clean and beginner-friendly |
-| **Advanced** | Separate `model_strength` and `clip_strength`, plus `conflict_mode` and `key_filter` per LoRA |
-
-Accepts an optional `lora_stack` input to chain with other Stack nodes.
-
-**Outputs:** `LORA_STACK`
+**Want more control?** Add a Settings node → connect to the optimizer's `settings` input.
+**Want the best config found for you?** Use the **LoRA AutoTuner** instead of the optimizer.
 
 ---
 
-### LoRA Optimizer
+## Installation
 
-The auto-optimizer. Takes a `LORA_STACK`, analyzes the LoRAs, and automatically selects merge modes and parameters **per weight group** using local conflict heuristics. Outputs the merged result plus a detailed analysis report with a block strategy map. Available in two variants:
+### ComfyUI Manager
+Search for "LoRA Optimizer" in ComfyUI Manager and install.
 
-| Variant | Description |
-|---------|-------------|
-| **LoRA Optimizer** (Simple) | Sensible defaults — just model, stack, output strength, and optional CLIP. Auto-strength enabled. |
-| **LoRA Optimizer (Advanced)** | Full control — sparsification, merge refinement, SVD device, key normalization, and all other knobs. |
+<details>
+<summary><b>Manual install</b></summary>
+
+```bash
+cd ComfyUI/custom_nodes/
+git clone https://github.com/ethanfel/ComfyUI-LoRA-Optimizer.git
+```
+Restart ComfyUI. Nodes appear under the `loaders` category.
+
+</details>
+
+---
+
+## Nodes at a Glance
+
+| Node | What It Does |
+|------|-------------|
+| **LoRA Stack** / **(Dynamic)** | Build your list of LoRAs — pick files, set strengths |
+| **LoRA Optimizer** | Analyze + merge your stack automatically. Just connect and go |
+| **Settings Nodes** | Optional fine-tuning: sparsification, compression, smoothing, etc. |
+| **LoRA AutoTuner** | Sweep 2000+ parameter combos, rank the best configs |
+| **Merge Selector** | Try alternative ranked configs from AutoTuner results |
+| **Compatibility Analyzer** | Check which LoRAs work well together before merging |
+| **Save Merged LoRA** | Export the merge as a standalone `.safetensors` file |
+| **Merged LoRA to Hook** | Apply merged LoRA per-conditioning instead of globally |
+| **LoRA Optimizer (Legacy)** | All parameters on one node (superseded by Optimizer + Settings) |
 
 Also accepts standard tuple-format stacks `(lora_name, model_strength, clip_strength)` from Efficiency Nodes, Comfyroll, and similar packs.
 
-Uses a **two-pass streaming architecture** for low memory usage:
-- **Pass 1 (Analysis):** Resolves trainer aliases to target weights, aggregates alias collisions per LoRA, samples conflict and magnitude statistics per target group, then discards the diffs. Only lightweight scalars are kept.
-- **Pass 2 (Merge):** Recomputes diffs per target group, looks up that group's conflict data, picks a strategy for it, and merges. Each group is freed after merging. Standard linear merges stay in exact low-rank form; nonlinear merges and optional compression still use dense/SVD paths.
+> Full parameter reference: **[Nodes wiki page](docs/wiki/Nodes.md)** · **[Configuration Guide](docs/wiki/Configuration-Guide.md)** · **[Workflows](docs/wiki/Workflows.md)**
 
-Peak memory is still roughly “one target group at a time,” but the exact peak depends on the largest layer, how many LoRAs hit it, and whether extra quality/compression steps are enabled. GPU-accelerated on both passes.
+---
+
+## How It Works
 
 <p align="center"><a href="assets/optimizer-pipeline.png"><img src="assets/optimizer-pipeline.svg" alt="Optimizer Pipeline" width="100%"></a></p>
 
 <details>
-<summary><b>What It Analyzes</b></summary>
-
-- Per-LoRA metrics (rank, key count, effective L2 norms)
-- Pairwise raw + magnitude-weighted conflict ratios per target group (sampled for efficiency)
-- Excess conflict over the cosine baseline, plus low-rank subspace overlap
-- Pairwise cosine similarity (directional alignment between LoRAs)
-- Magnitude / activation-importance distribution per target group
-- Key overlap between LoRAs
-
-</details>
-
-#### Per-Group Adaptive Merge
+<summary><b>Per-Group Adaptive Merge — Deep Dive</b></summary>
 
 The key insight: two LoRAs may overlap in some model blocks but not others. A face LoRA and a style LoRA might only conflict in attention layers 4-7, while the rest of the model is touched by only one of them.
 
@@ -124,6 +128,32 @@ Instead of picking one global strategy (which either wastes TIES trimming on non
 This means non-overlapping regions keep 100% of their LoRA's effect, while genuinely conflicting regions get proper TIES resolution. When `decision_smoothing > 0`, those per-group metrics are softly pulled toward the block average so adjacent layers do not flip strategies due to noisy samples.
 
 <p align="center"><a href="assets/merge-strategies.png"><img src="assets/merge-strategies.svg" alt="Merge Strategies Comparison" width="100%"></a></p>
+
+#### Two-Pass Streaming Architecture
+
+The optimizer uses a **two-pass streaming architecture** for low memory usage:
+- **Pass 1 (Analysis):** Resolves trainer aliases to target weights, aggregates alias collisions per LoRA, samples conflict and magnitude statistics per target group, then discards the diffs. Only lightweight scalars are kept.
+- **Pass 2 (Merge):** Recomputes diffs per target group, looks up that group's conflict data, picks a strategy for it, and merges. Each group is freed after merging. Standard linear merges stay in exact low-rank form; nonlinear merges and optional compression still use dense/SVD paths.
+
+Peak memory is still roughly "one target group at a time," but the exact peak depends on the largest layer, how many LoRAs hit it, and whether extra quality/compression steps are enabled. GPU-accelerated on both passes.
+
+<details>
+<summary><b>What It Analyzes</b></summary>
+
+- Per-LoRA metrics (rank, key count, effective L2 norms)
+- Pairwise raw + magnitude-weighted conflict ratios per target group (sampled for efficiency)
+- Excess conflict over the cosine baseline, plus low-rank subspace overlap
+- Pairwise cosine similarity (directional alignment between LoRAs)
+- Magnitude / activation-importance distribution per target group
+- Key overlap between LoRAs
+
+</details>
+
+</details>
+
+---
+
+## Optimizer Features
 
 <details>
 <summary><b>TIES Merging</b></summary>
@@ -252,7 +282,7 @@ When orthogonal LoRAs are effectively independent, the optimizer can clamp the s
 | 2 opposing LoRAs (cos~-1) at strength 1.0 | ~1.0 each (they cancel) |
 | 1 strong + 1 weak LoRA | Proportional reduction |
 | Single LoRA | No change |
-| `auto_strength` disabled | No adjustment (default) |
+| `auto_strength` disabled | No adjustment |
 
 Your original strength ratios are always preserved — the algorithm only scales them down uniformly.
 
@@ -262,6 +292,8 @@ Your original strength ratios are always preserved — the algorithm only scales
 <summary><b>Decision Smoothing</b></summary>
 
 **`decision_smoothing`** — blends each group's decision metrics toward the average of its surrounding block. This reduces jagged layer-to-layer mode flips when the stack is noisy.
+
+**`smooth_slerp_gate`** — when enabled, uses per-prefix cosine similarity (computed during analysis) instead of the collection average for the SLERP interpolation gate. This makes the SLERP weight vary per layer based on local alignment rather than using a single global value. Available on the LoRA Merge Settings node or the Legacy optimizer.
 
 </details>
 
@@ -370,12 +402,6 @@ The analysis report includes a visual block-by-block map showing what strategy w
 
 </details>
 
-#### Inputs / Outputs
-
-**Inputs (Advanced):** `MODEL`, `CLIP` (optional), `LORA_STACK`, output strength, clip strength multiplier, auto strength, auto strength floor, optimization mode, merge refinement, strategy set, architecture preset, cache patches, patch compression, SVD device, free VRAM between passes, normalize keys, sparsification, sparsification density, DARE dampening, `TUNER_DATA` (optional — for bridge workflow), settings_source.
-
-**Outputs:** `MODEL`, `CLIP`, `STRING` (analysis report), `LORA_DATA` (for Save Merged LoRA / Merged LoRA to Hook)
-
 <details>
 <summary><b>Example Report</b></summary>
 
@@ -474,13 +500,11 @@ Connect the `STRING` output to a **Show Text** node to see the report in ComfyUI
 
 ---
 
-### LoRA AutoTuner
+## AutoTuner
 
 Automatically sweeps all merge parameters (mode, sparsification, density, dampening, quality level) and ranks configurations for your LoRA stack. Runs Pass 1 analysis once, scores all parameter combinations via heuristic proxies, then merges the top-N candidates and measures output quality. When an `AUTOTUNER_EVALUATOR` is connected, the built-in score can be blended with external prompt/reference evaluation logic. Outputs the highest-ranked merge directly as `MODEL`/`CLIP`, plus a ranked report and `TUNER_DATA` for exploring alternatives via a **Merge Selector** node.
 
-**Inputs:** `MODEL`, `LORA_STACK`, output strength, optional `CLIP`, top_n, normalize_keys, scoring_svd, scoring_device, scoring_speed, architecture_preset, auto strength floor, output mode, `decision_smoothing`, optional `evaluator`, diff_cache_mode, diff_cache_ram_pct, cache_patches, record_dataset, vram_budget.
-
-**Outputs:** `MODEL`, `CLIP`, `STRING` (ranked report), `STRING` (analysis report), `TUNER_DATA` (for Merge Selector / Save Tuner Data), `LORA_DATA` (for Save Merged LoRA)
+> Full parameter reference: **[Nodes wiki page](docs/wiki/Nodes.md)**
 
 <details>
 <summary><b>Diff Cache</b></summary>
@@ -489,7 +513,7 @@ During the parameter sweep, each candidate recomputes raw LoRA diffs (A@B matmul
 
 | Mode | Behavior |
 |------|----------|
-| `disabled` (default) | Recomputes diffs each time. No extra memory |
+| `disabled` | Recomputes diffs each time. No extra memory |
 | `auto` | Uses RAM up to `diff_cache_ram_pct` of free memory, then spills to disk. Recommended for most setups |
 | `ram` | All diffs in RAM. Fastest, but uses ~1.5 GB (SDXL) to ~6 GB (Flux) |
 | `disk` | All diffs to temp files with memory-mapping. Slowest cache mode, but minimal RAM |
@@ -504,18 +528,6 @@ When `auto` mode runs out of disk space, it falls back to RAM automatically.
 </details>
 
 <details>
-<summary><b>Output Mode</b></summary>
-
-| Mode | Behavior |
-|------|----------|
-| `merge` (default) | Full sweep + final merge — outputs the top-ranked merged model |
-| `tuning_only` | Full sweep but skips the final merge — outputs the base model unchanged so a downstream optimizer can apply the winning config |
-
-When cache is enabled, switching between modes reuses the same sweep results.
-
-</details>
-
-<details>
 <summary><b>VRAM Budget</b></summary>
 
 The `vram_budget` slider (0.0–1.0) controls what fraction of free VRAM to use for storing merged patches on GPU. Default is 0 (all patches on CPU). Setting it higher keeps patches on GPU, reducing RAM usage on systems with enough VRAM. Available on both LoRA Optimizer and LoRA AutoTuner.
@@ -524,13 +536,12 @@ The `vram_budget` slider (0.0–1.0) controls what fraction of free VRAM to use 
 
 ---
 
+<details>
+<summary><b>Other Nodes & Workflows</b></summary>
+
 ### Merge Selector
 
 Applies a specific configuration from AutoTuner results without re-running the sweep. Connect `TUNER_DATA` from a LoRA AutoTuner (or Load Tuner Data) node and set the `selection` index to choose which ranked configuration to apply (1 = top-ranked, 2 = next-ranked, etc.).
-
-**Inputs:** `MODEL`, `LORA_STACK`, `TUNER_DATA`, selection (1–10), output strength, optional `CLIP`, optional clip strength multiplier, optional auto strength floor, optional `decision_smoothing`, vram_budget.
-
-**Outputs:** `MODEL`, `CLIP`, `STRING` (report), `LORA_DATA`
 
 **Workflow:**
 ```
@@ -543,23 +554,24 @@ LoRA AutoTuner → TUNER_DATA → Merge Selector (selection=2) → try the 2nd-r
 
 ### AutoTuner → Optimizer Bridge
 
-Chain the AutoTuner and Optimizer in a single model line for a “rank, then tweak” workflow. Only one node merges at a time — the other passes the model through. A single switch controls which node is authoritative, and the UI bridge keeps the paired widgets in sync.
+Chain the AutoTuner and the Legacy optimizer in a single model line for a "rank, then tweak" workflow. Only one node merges at a time — the other passes the model through. The Legacy optimizer's `settings_source` switch controls which node is authoritative, and the UI bridge keeps the paired widgets in sync.
 
 <p align="center">
   <a href="assets/bridge-workflow.png"><img src="assets/bridge-workflow.svg" alt="AutoTuner ↔ Optimizer Bridge workflow" width="700"></a>
 </p>
 
 ```
-[Load Model] → [AutoTuner] → model → [Optimizer] → MODEL → sampler
+[Load Model] → [AutoTuner] → model → [Optimizer (Legacy)] → MODEL → sampler
 [LoRA Stack]  → [AutoTuner]
-[LoRA Stack]  → [Optimizer]
-               [AutoTuner] → tuner_data → [Optimizer]
+[LoRA Stack]  → [Optimizer (Legacy)]
+               [AutoTuner] → tuner_data → [Optimizer (Legacy)]
 ```
 
-| Optimizer `settings_source` | AutoTuner `output_mode` | What happens |
-|----|----|----|
-| `from_autotuner` | `merge` (auto-synced) | AutoTuner merges → Optimizer passes through. Optimizer widgets show the winning config. |
-| `manual` | `tuning_only` (auto-synced) | AutoTuner passes the base model through → Optimizer merges with its own widget settings. |
+| Legacy Optimizer `settings_source` | What happens |
+|----|----|
+| `from_autotuner` | AutoTuner merges → Legacy Optimizer passes through. Optimizer widgets show the winning config. |
+| `manual` | AutoTuner passes the base model through → Legacy Optimizer merges with its own widget settings. |
+| `from_tuner_data` | Legacy Optimizer reads settings from connected `tuner_data` input. |
 
 **Typical flow:**
 1. Start with `from_autotuner` — let the AutoTuner find the best config
@@ -569,10 +581,11 @@ Chain the AutoTuner and Optimizer in a single model line for a “rank, then twe
 
 Switching between modes is instant — the AutoTuner reuses its cached sweep results.
 
+> **Note:** The bridge workflow requires the **LoRA Optimizer (Legacy)** node. The simplified **LoRA Optimizer** uses Settings nodes and `tuner_data` input instead.
+
 ---
 
-<details>
-<summary><b>Save / Load Tuner Data</b></summary>
+### Save / Load Tuner Data
 
 Two utility nodes for persisting AutoTuner results to disk:
 
@@ -580,21 +593,17 @@ Two utility nodes for persisting AutoTuner results to disk:
 
 **Load Tuner Data** — Dropdown of saved tuner data files. Outputs `TUNER_DATA` ready for Merge Selector. Auto-reloads when the file changes on disk.
 
-</details>
+---
 
-<details>
-<summary><b>Evaluator Utilities</b></summary>
+### Evaluator Utilities
 
 **Build AutoTuner Python Evaluator** — packages a Python module path + callable name into an `AUTOTUNER_EVALUATOR` object. The callable can run prompts, compare references, and return a score in `[0, 1]`.
 
 The evaluator callable receives keyword arguments: `model`, `clip`, `lora_data`, `config`, `context`, and `analysis_summary`.
 
-</details>
-
 ---
 
-<details>
-<summary><b>Save Merged LoRA</b></summary>
+### Save Merged LoRA
 
 Saves the optimizer's merged result as a standalone `.safetensors` file that works with any standard LoRA loader.
 
@@ -609,12 +618,9 @@ Connect the `LORA_DATA` output from LoRA Optimizer to this node.
 
 **Outputs:** `STRING` (file path)
 
-</details>
-
 ---
 
-<details>
-<summary><b>Merged LoRA to Hook</b></summary>
+### Merged LoRA to Hook
 
 Wraps the optimizer's merged patches as a **conditioning hook** (`HOOKS`) for per-conditioning LoRA application. Instead of applying the merged LoRA globally to the model, you can attach it to specific conditioning entries using ComfyUI's hook system.
 
@@ -640,20 +646,13 @@ Load Checkpoint → MODEL ──┬──→ LoRA Optimizer → LORA_DATA → Me
 
 The `prev_hooks` input allows chaining multiple hook sources together.
 
-</details>
-
 ---
 
-<details>
-<summary><b>WanVideo LoRA Optimizer</b></summary>
+### WanVideo LoRA Optimizer
 
 Variant of the LoRA Optimizer for **WanVideo models** (via [kijai's WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)). Accepts `WANVIDEOMODEL` instead of `MODEL`, skips CLIP, and applies merged patches in-memory.
 
 All merging algorithms are inherited — TIES, DARE/DELLA, SVD compression, auto-strength, per-prefix adaptive merge, merge refinement (KnOTS, orthogonalization, TALL-masks), and Wan key normalization (LyCORIS, diffusers, Fun LoRA, finetrainer, RS-LoRA) all work identically.
-
-**Inputs:** `WANVIDEOMODEL`, `LORA_STACK`, output strength, and all optimizer options (except CLIP-related ones). Defaults: `normalize_keys=enabled`, `cache_patches=disabled`.
-
-**Outputs:** `WANVIDEOMODEL` (patched), `STRING` (analysis report), `LORA_DATA` (for Save Merged LoRA)
 
 **Basic workflow:**
 ```
@@ -678,22 +677,6 @@ WanVideoLoraSelect → WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA O
 </details>
 
 ---
-
-## Installation
-
-### ComfyUI Manager
-Search for "LoRA Optimizer" in ComfyUI Manager and install.
-
-<details>
-<summary><b>Manual install</b></summary>
-
-```bash
-cd ComfyUI/custom_nodes/
-git clone https://github.com/ethanfel/ComfyUI-LoRA-Optimizer.git
-```
-Restart ComfyUI. Nodes appear under the `loaders` category.
-
-</details>
 
 <details>
 <summary><b>Compatibility</b></summary>
