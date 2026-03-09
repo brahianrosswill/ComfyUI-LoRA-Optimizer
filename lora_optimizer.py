@@ -8105,11 +8105,24 @@ class LoRACompatibilityAnalyzer(LoRAOptimizer):
                         "strength": active_loras[idx]["strength"],
                     })
 
-        return {"ui": {"groups": groups_for_ui, "has_clip": has_clip, "text": [report]}, "result": (report, heatmap)}
+        return {"ui": {"groups": groups_for_ui, "has_clip": has_clip, "text": [report], "images": self._save_temp_image(heatmap)}, "result": (report, heatmap)}
 
     @staticmethod
     def _empty_image():
         return torch.zeros(1, 1, 1, 3, dtype=torch.float32)
+
+    @staticmethod
+    def _save_temp_image(image_tensor):
+        """Save an IMAGE tensor to ComfyUI's temp dir and return ui-compatible metadata."""
+        import numpy as np
+        from PIL import Image
+        arr = (image_tensor.squeeze(0).cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
+        img = Image.fromarray(arr)
+        temp_dir = folder_paths.get_temp_directory()
+        fname = f"compat_heatmap_{id(image_tensor):x}.png"
+        fpath = os.path.join(temp_dir, fname)
+        img.save(fpath)
+        return [{"filename": fname, "subfolder": "", "type": "temp"}]
 
     @staticmethod
     def _compute_compat_matrix(pairwise_similarities, pairwise_conflicts, n_loras):
