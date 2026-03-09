@@ -5841,10 +5841,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         selected_params = {"mode": mode, "density": density, "sign_method": sign_method, "optimization_mode": optimization_mode}
         if optimization_mode == "per_prefix":
             selected_params["strategy_counts"] = dict(strategy_counts)
-        if not _skip_report:
-            report_path = self._save_report_to_disk(cache_key, lora_combo, auto_strength, report, selected_params)
-            if report_path:
-                logging.info(f"[LoRA Optimizer] Report saved to: {report_path}")
+        # Report is returned in the UI output — no need to also save to disk
 
         logging.info(f"[LoRA Optimizer] Done! {processed_keys} keys processed ({time.time() - t_start:.1f}s total)")
 
