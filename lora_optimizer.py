@@ -9038,13 +9038,13 @@ class LoRAMetadataReader:
             prompt = meta.get("prompt", "")
             desc = meta.get("description", "")
             if prompt:
-                all_prompts.append(f"# {name}\n{prompt}")
+                all_prompts.append(prompt)
             if desc:
-                all_descriptions.append(f"# {name}\n{desc}")
+                all_descriptions.append(desc)
 
-            # Collect interesting metadata fields
+            # Collect interesting metadata fields (exclude prompt/description — they have dedicated outputs)
             entry_lines = [f"[{name}]"]
-            for key in ("prompt", "description", "source_loras", "tool",
+            for key in ("source_loras", "tool",
                          "merge_mode", "merge_optimization_mode", "merge_architecture",
                          "merge_auto_strength", "merge_sparsification",
                          "merge_merge_refinement", "merge_strategy_set",
