@@ -101,6 +101,17 @@ Also accepts standard tuple-format stacks `(lora_name, model_strength, clip_stre
 
 ---
 
+<details>
+<summary><b>Examples</b></summary>
+
+### Z-Image (Lumina2) — 3 LoRAs merged
+
+<p align="center"><img src="assets/zit_example_1.png" width="720" alt="Z-Image 3-LoRA merge example"></p>
+
+</details>
+
+---
+
 ## How It Works
 
 <p align="center"><a href="assets/optimizer-pipeline.png"><img src="assets/optimizer-pipeline.svg" alt="Optimizer Pipeline" width="100%"></a></p>
