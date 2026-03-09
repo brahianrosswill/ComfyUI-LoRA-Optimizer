@@ -6694,7 +6694,9 @@ class LoRAAutoTuner(LoRAOptimizer):
             )
             t_score_elapsed = time.time() - t_score
             # --- Post-scoring adjustments ---
-            # Compute energy_preservation from branch_energy (model + clip)
+            # Compute energy_preservation from branch_energy (model + clip).
+            # Baseline = weighted_average expected energy (not weighted_sum).
+            # Auto-strength cancels in WA normalization, so same formula for all.
             measured_energy_sq = measured.get("norm_energy_sq", 0.0)
             measured_energy = math.sqrt(max(measured_energy_sq, 0.0))
             model_strengths = [item["strength"] for item in active_loras]
@@ -6702,63 +6704,66 @@ class LoRAAutoTuner(LoRAOptimizer):
                 item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
                 for item in active_loras
             ]
-            if config["auto_strength"] == "enabled":
-                # With auto-strength, expected energy = reference (max single LoRA)
-                # across both branches
-                ref_model = [
-                    abs(model_strengths[i]) * math.sqrt(max(branch_energy["model"]["norm_sq"][i], 0.0))
-                    for i in range(len(active_loras))
-                ]
-                ref_clip = [
-                    abs(clip_strengths[i]) * math.sqrt(max(branch_energy["clip"]["norm_sq"][i], 0.0))
-                    for i in range(len(active_loras))
-                ]
-                ref_model_max = max(ref_model) if ref_model else 0.0
-                ref_clip_max = max(ref_clip) if ref_clip else 0.0
-                expected_energy = math.sqrt(ref_model_max ** 2 + ref_clip_max ** 2)
-            elif is_ortho_score:
+            total_model_w = sum(abs(s) for s in model_strengths)
+            total_clip_w = sum(abs(s) for s in clip_strengths)
+            if is_ortho_score:
                 # Orthogonal: Pythagorean — no cross-terms
-                expected_energy_sq = sum(
+                expected_model_sq = sum(
                     model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                    + clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
                     for i in range(len(active_loras))
                 )
-                expected_energy = math.sqrt(max(expected_energy_sq, 0.0))
+                expected_clip_sq = sum(
+                    clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                    for i in range(len(active_loras))
+                )
             else:
                 # Non-orthogonal: include cross-terms
-                expected_energy_sq = sum(
+                expected_model_sq = sum(
                     model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                    + clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
                     for i in range(len(active_loras))
                 )
                 for (i, j), dot in branch_energy["model"]["dot"].items():
-                    expected_energy_sq += 2.0 * model_strengths[i] * model_strengths[j] * dot
+                    expected_model_sq += 2.0 * model_strengths[i] * model_strengths[j] * dot
+                expected_clip_sq = sum(
+                    clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                    for i in range(len(active_loras))
+                )
                 for (i, j), dot in branch_energy["clip"]["dot"].items():
-                    expected_energy_sq += 2.0 * clip_strengths[i] * clip_strengths[j] * dot
-                expected_energy = math.sqrt(max(expected_energy_sq, 0.0))
+                    expected_clip_sq += 2.0 * clip_strengths[i] * clip_strengths[j] * dot
+            # Divide by total_weight^2 per branch for weighted_average baseline
+            if total_model_w > 0:
+                expected_model_sq = max(expected_model_sq, 0.0) / (total_model_w ** 2)
+            if total_clip_w > 0:
+                expected_clip_sq = max(expected_clip_sq, 0.0) / (total_clip_w ** 2)
+            expected_energy = math.sqrt(expected_model_sq + expected_clip_sq)
             # Scale expected energy by prefix fraction when subsampling
             if use_subsampling and prefix_count > 0:
                 prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
                 expected_energy *= math.sqrt(prefix_fraction)
             energy_ratio = measured_energy / expected_energy if expected_energy > 0 else 1.0
-            energy_preservation = max(0.0, 1.0 - abs(energy_ratio - 1.0) * 2.0)
+            # One-sided: only penalize energy loss below WA baseline (ratio < 1)
+            # SLERP legitimately boosts energy above WA — don't penalize that
+            energy_preservation = min(energy_ratio, 1.0)
             measured["energy_ratio"] = energy_ratio
             measured["energy_preservation"] = energy_preservation
             # Discount sparsity_fit when sparsification artificially inflates it
             if config["sparsification"] != "disabled":
                 measured["sparsity_fit"] *= 0.5
-            # Recompute composite with energy-aware weights
+            # Recompute composite score
             cv_s = max(0.0, 1.0 - measured["norm_cv"])
             if measured.get("effective_rank_mean", 0) > 0:
+                # Non-orthogonal (with SVD): energy helps detect destructive merges
                 rank_s = min(measured["effective_rank_mean"] / 40.0, 1.0)
                 measured["composite_score"] = (
                     rank_s * 0.30 + cv_s * 0.25
-                    + energy_preservation * 0.25 + measured["sparsity_fit"] * 0.20
+                    + energy_preservation * 0.20 + measured["sparsity_fit"] * 0.25
                 )
             else:
+                # Orthogonal (without SVD): energy doesn't predict quality here
+                # (SLERP vs WA energy ≠ quality for orthogonal LoRAs).
+                # Arch-aware sparsity_fit is the primary discriminator.
                 measured["composite_score"] = (
-                    cv_s * 0.30 + energy_preservation * 0.45
-                    + measured["sparsity_fit"] * 0.25
+                    cv_s * 0.50 + measured["sparsity_fit"] * 0.50
                 )
             external_eval = _run_autotuner_evaluator(
                 evaluator, merged_model, merged_clip, lora_data, config, analysis_summary
