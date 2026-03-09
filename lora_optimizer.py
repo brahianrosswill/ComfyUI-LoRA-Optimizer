@@ -5968,7 +5968,7 @@ class LoRAAutoTunerSettings:
                 }),
                 "scoring_svd": (["disabled", "enabled"], {
                     "default": "disabled",
-                    "tooltip": "Enable SVD-based effective rank scoring. More thorough but slower."
+                    "tooltip": "Enable SVD-based effective rank scoring. More thorough but slower. Skipped for orthogonal LoRAs (near-zero cosine similarity) where it does not improve ranking accuracy."
                 }),
                 "scoring_device": (["cpu", "gpu"], {
                     "default": "gpu",
@@ -6290,7 +6290,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 }),
                 "scoring_svd": (["disabled", "enabled"], {
                     "default": "disabled",
-                    "tooltip": "Enable SVD-based effective rank scoring for candidates. More thorough but much slower on large models."
+                    "tooltip": "Enable SVD-based effective rank scoring for candidates. More thorough but much slower on large models. Skipped for orthogonal LoRAs (near-zero cosine similarity) where it does not improve ranking accuracy."
                 }),
                 "scoring_device": (["cpu", "gpu"], {
                     "default": "gpu",
@@ -6669,7 +6669,13 @@ class LoRAAutoTuner(LoRAOptimizer):
             # LoRAAdapter patches; _score_merge_result handles both formats)
             m_patches = lora_data["model_patches"] if lora_data else {}
             c_patches = lora_data["clip_patches"] if lora_data else {}
-            compute_svd = scoring_svd == "enabled"
+            is_ortho_score = (
+                abs(avg_cos_sim) < tuner_arch_preset["orthogonal_cos_sim_max"]
+                and avg_subspace_overlap < 0.35
+            )
+            # Skip SVD for orthogonal LoRAs — SLERP vs average produce different
+            # rank profiles that don't correlate with generation quality
+            compute_svd = scoring_svd == "enabled" and not is_ortho_score
             score_dev = torch.device("cuda") if scoring_device == "gpu" and torch.cuda.is_available() else None
             t_score = time.time()
             measured = _score_merge_result(
@@ -6678,26 +6684,14 @@ class LoRAAutoTuner(LoRAOptimizer):
             )
             t_score_elapsed = time.time() - t_score
             # --- Post-scoring adjustments ---
-            needs_recompute = False
             # Discount sparsity_fit when sparsification artificially inflates it
             if config["sparsification"] != "disabled":
                 measured["sparsity_fit"] *= 0.5
-                needs_recompute = True
-            # For orthogonal LoRAs, reduce effective_rank weight — SLERP vs
-            # average produce different rank profiles that don't correlate
-            # with generation quality (architecture-dependent)
-            is_ortho_score = (
-                abs(avg_cos_sim) < tuner_arch_preset["orthogonal_cos_sim_max"]
-                and avg_subspace_overlap < 0.35
-            )
-            rank_weight = 0.15 if is_ortho_score else 0.4
-            if needs_recompute or is_ortho_score:
                 if measured.get("effective_rank_mean", 0) > 0:
                     cv_s = max(0.0, 1.0 - measured["norm_cv"])
-                    other_w = (1.0 - rank_weight) / 2.0
                     measured["composite_score"] = (
-                        min(measured["effective_rank_mean"] / 40.0, 1.0) * rank_weight
-                        + cv_s * other_w + measured["sparsity_fit"] * other_w
+                        min(measured["effective_rank_mean"] / 40.0, 1.0) * 0.4
+                        + cv_s * 0.3 + measured["sparsity_fit"] * 0.3
                     )
                 else:
                     cv_s = max(0.0, 1.0 - measured["norm_cv"])
