@@ -3115,13 +3115,9 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
     strat_set = config.get("strategy_set", "full")
     if opt_mode == "per_prefix":
         if is_orthogonal:
-            # Orthogonal LoRAs: SLERP preserves magnitude geometry
-            if strat_set == "full":
-                score += 0.05
-            elif strat_set == "no_slerp":
-                score += 0.03
-            else:  # basic
-                score += 0.02
+            # Orthogonal LoRAs: strategy_set impact is architecture-dependent
+            # (SLERP helps WAN but hurts Z-Image) — stay neutral, let Phase 2 decide
+            score += 0.04
         elif effective_conflict < ties_thresh:
             # Low conflict, non-orthogonal: SLERP upgrade can help
             if strat_set == "full":
@@ -6681,14 +6677,27 @@ class LoRAAutoTuner(LoRAOptimizer):
                 score_device=score_dev
             )
             t_score_elapsed = time.time() - t_score
+            # --- Post-scoring adjustments ---
+            needs_recompute = False
             # Discount sparsity_fit when sparsification artificially inflates it
             if config["sparsification"] != "disabled":
                 measured["sparsity_fit"] *= 0.5
+                needs_recompute = True
+            # For orthogonal LoRAs, reduce effective_rank weight — SLERP vs
+            # average produce different rank profiles that don't correlate
+            # with generation quality (architecture-dependent)
+            is_ortho_score = (
+                abs(avg_cos_sim) < tuner_arch_preset["orthogonal_cos_sim_max"]
+                and avg_subspace_overlap < 0.35
+            )
+            rank_weight = 0.15 if is_ortho_score else 0.4
+            if needs_recompute or is_ortho_score:
                 if measured.get("effective_rank_mean", 0) > 0:
                     cv_s = max(0.0, 1.0 - measured["norm_cv"])
+                    other_w = (1.0 - rank_weight) / 2.0
                     measured["composite_score"] = (
-                        min(measured["effective_rank_mean"] / 40.0, 1.0) * 0.4
-                        + cv_s * 0.3 + measured["sparsity_fit"] * 0.3
+                        min(measured["effective_rank_mean"] / 40.0, 1.0) * rank_weight
+                        + cv_s * other_w + measured["sparsity_fit"] * other_w
                     )
                 else:
                     cv_s = max(0.0, 1.0 - measured["norm_cv"])
