@@ -5018,6 +5018,13 @@ class LoRAOptimizer(_LoRAMergeBase):
                 self._merge_cache.clear()
             if hasattr(self, '_autotuner_cache') and getattr(self, '_autotuner_cache', None):
                 self._autotuner_cache.clear()
+            delegate = getattr(self, '_autotuner_delegate', None)
+            if delegate is not None:
+                if hasattr(delegate, '_merge_cache') and delegate._merge_cache:
+                    delegate._merge_cache.clear()
+                if hasattr(delegate, '_autotuner_cache') and getattr(delegate, '_autotuner_cache', None):
+                    delegate._autotuner_cache.clear()
+                delegate._cached_model_id = None
             gc.collect()
         self._cached_model_id = current_mid
 
@@ -5840,6 +5847,74 @@ class LoRAOptimizer(_LoRAMergeBase):
         return (new_model, new_clip, report, None, lora_data)
 
 
+class LoRAMergeSettings:
+    """
+    Common merge settings shared between Optimizer and AutoTuner modes.
+    Connect to the 'merge_settings' input of either settings node.
+    """
+
+    _DEFAULTS = {
+        "normalize_keys": "enabled",
+        "architecture_preset": "auto",
+        "auto_strength_floor": -1.0,
+        "decision_smoothing": 0.25,
+        "vram_budget": 0.0,
+        "cache_patches": "enabled",
+    }
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "normalize_keys": (["disabled", "enabled"], {
+                    "default": "enabled",
+                    "tooltip": "Makes LoRAs from different training tools compatible."
+                }),
+                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                    "default": "auto",
+                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys."
+                }),
+                "auto_strength_floor": ("FLOAT", {
+                    "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Minimum auto-strength scale factor. -1 = architecture-aware default."
+                }),
+                "decision_smoothing": ("FLOAT", {
+                    "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Smooth per-group decision metrics toward block average."
+                }),
+                "vram_budget": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Fraction of free VRAM to use for storing merged patches."
+                }),
+                "cache_patches": (["enabled", "disabled"], {
+                    "default": "enabled",
+                    "tooltip": "Cache merged patches/results in RAM for faster re-execution."
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("MERGE_SETTINGS",)
+    RETURN_NAMES = ("merge_settings",)
+    FUNCTION = "build_settings"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = (
+        "Common merge settings shared between Optimizer and AutoTuner modes. "
+        "Connect to the 'merge_settings' input of either settings node."
+    )
+
+    def build_settings(self, normalize_keys, architecture_preset,
+                       auto_strength_floor, decision_smoothing,
+                       vram_budget, cache_patches):
+        return ({
+            "normalize_keys": normalize_keys,
+            "architecture_preset": architecture_preset,
+            "auto_strength_floor": auto_strength_floor,
+            "decision_smoothing": decision_smoothing,
+            "vram_budget": vram_budget,
+            "cache_patches": cache_patches,
+        },)
+
+
 class LoRAOptimizerSettings:
     """
     Pure data node that outputs Advanced-mode settings for the Simple optimizer.
@@ -5883,40 +5958,19 @@ class LoRAOptimizerSettings:
                     "default": "gpu",
                     "tooltip": "Device for SVD computations during patch compression."
                 }),
-                "cache_patches": (["enabled", "disabled"], {
-                    "default": "enabled",
-                    "tooltip": "Cache merged patches in RAM for faster re-execution."
-                }),
                 "free_vram_between_passes": (["disabled", "enabled"], {
                     "default": "disabled",
                     "tooltip": "Free VRAM between merge passes. Enable for very large models."
-                }),
-                "normalize_keys": (["disabled", "enabled"], {
-                    "default": "enabled",
-                    "tooltip": "Makes LoRAs from different training tools compatible."
                 }),
                 "strategy_set": (["full", "no_slerp", "basic"], {
                     "default": "full",
                     "tooltip": "Which merge strategies to consider. 'full' includes SLERP, 'basic' uses only weighted average/sum."
                 }),
-                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
-                    "default": "auto",
-                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys."
-                }),
-                "auto_strength_floor": ("FLOAT", {
-                    "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Minimum auto-strength scale factor. -1 = architecture-aware default."
-                }),
-                "decision_smoothing": ("FLOAT", {
-                    "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Smooth per-group decision metrics toward block average before strategy selection."
-                }),
-                "vram_budget": ("FLOAT", {
-                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Fraction of free VRAM to use for storing merged patches."
-                }),
             },
             "optional": {
+                "merge_settings": ("MERGE_SETTINGS", {
+                    "tooltip": "Common merge settings from LoRA Merge Settings node. Uses defaults if not connected."
+                }),
                 "merge_strategy_override": ("STRING", {
                     "forceInput": True,
                     "tooltip": "Force a specific merge strategy for all prefixes (advanced)."
@@ -5935,10 +5989,10 @@ class LoRAOptimizerSettings:
 
     def build_settings(self, auto_strength, optimization_mode, merge_refinement,
                        sparsification, sparsification_density, dare_dampening,
-                       patch_compression, svd_device, cache_patches,
-                       free_vram_between_passes, normalize_keys, strategy_set,
-                       architecture_preset, auto_strength_floor, decision_smoothing,
-                       vram_budget, merge_strategy_override=""):
+                       patch_compression, svd_device,
+                       free_vram_between_passes, strategy_set,
+                       merge_settings=None, merge_strategy_override=""):
+        ms = merge_settings if merge_settings is not None else LoRAMergeSettings._DEFAULTS
         return ({
             "mode": "advanced",
             "auto_strength": auto_strength,
@@ -5949,14 +6003,14 @@ class LoRAOptimizerSettings:
             "dare_dampening": dare_dampening,
             "patch_compression": patch_compression,
             "svd_device": svd_device,
-            "cache_patches": cache_patches,
+            "cache_patches": ms["cache_patches"],
             "free_vram_between_passes": free_vram_between_passes,
-            "normalize_keys": normalize_keys,
+            "normalize_keys": ms["normalize_keys"],
             "strategy_set": strategy_set,
-            "architecture_preset": architecture_preset,
-            "auto_strength_floor": auto_strength_floor,
-            "decision_smoothing": decision_smoothing,
-            "vram_budget": vram_budget,
+            "architecture_preset": ms["architecture_preset"],
+            "auto_strength_floor": ms["auto_strength_floor"],
+            "decision_smoothing": ms["decision_smoothing"],
+            "vram_budget": ms["vram_budget"],
             "merge_strategy_override": merge_strategy_override,
         },)
 
@@ -5988,6 +6042,10 @@ class LoRAAutoTunerSettings:
                     "default": "turbo",
                     "tooltip": "Controls how many prefixes Phase 2 scores per candidate."
                 }),
+                "scoring_formula": (["v2", "v1"], {
+                    "default": "v2",
+                    "tooltip": "Phase 2 scoring formula. v2: arch-aware sparsity + energy metrics (recommended). v1: legacy scoring with fixed 40% sparsity target."
+                }),
                 "output_mode": (["merge", "tuning_only"], {
                     "default": "merge",
                     "tooltip": "merge: output merged model. tuning_only: skip final merge, pass base model through."
@@ -5995,30 +6053,6 @@ class LoRAAutoTunerSettings:
                 "smooth_slerp_gate": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Use smoothed cosine for SLERP gate instead of raw avg_cos_sim."
-                }),
-                "normalize_keys": (["disabled", "enabled"], {
-                    "default": "enabled",
-                    "tooltip": "Makes LoRAs from different training tools compatible."
-                }),
-                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
-                    "default": "auto",
-                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys."
-                }),
-                "auto_strength_floor": ("FLOAT", {
-                    "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Minimum auto-strength scale factor. -1 = architecture-aware default."
-                }),
-                "decision_smoothing": ("FLOAT", {
-                    "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Smooth per-group decision metrics toward block average."
-                }),
-                "vram_budget": ("FLOAT", {
-                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Fraction of free VRAM to use for storing merged patches."
-                }),
-                "cache_patches": (["enabled", "disabled"], {
-                    "default": "enabled",
-                    "tooltip": "Cache AutoTuner result in RAM for faster re-execution."
                 }),
                 "diff_cache_mode": (["disabled", "auto", "ram", "disk"], {
                     "default": "auto",
@@ -6034,6 +6068,9 @@ class LoRAAutoTunerSettings:
                 }),
             },
             "optional": {
+                "merge_settings": ("MERGE_SETTINGS", {
+                    "tooltip": "Common merge settings from LoRA Merge Settings node. Uses defaults if not connected."
+                }),
                 "evaluator": ("AUTOTUNER_EVALUATOR", {
                     "tooltip": "Optional external evaluator for blending custom scoring."
                 }),
@@ -6050,24 +6087,25 @@ class LoRAAutoTunerSettings:
     )
 
     def build_settings(self, top_n, scoring_svd, scoring_device, scoring_speed,
-                       output_mode, smooth_slerp_gate, normalize_keys,
-                       architecture_preset, auto_strength_floor, decision_smoothing,
-                       vram_budget, cache_patches, diff_cache_mode,
-                       diff_cache_ram_pct, record_dataset, evaluator=None):
+                       scoring_formula, output_mode, smooth_slerp_gate,
+                       diff_cache_mode, diff_cache_ram_pct, record_dataset,
+                       merge_settings=None, evaluator=None):
+        ms = merge_settings if merge_settings is not None else LoRAMergeSettings._DEFAULTS
         return ({
             "mode": "autotuner",
             "top_n": top_n,
             "scoring_svd": scoring_svd,
             "scoring_device": scoring_device,
             "scoring_speed": scoring_speed,
+            "scoring_formula": scoring_formula,
             "output_mode": output_mode,
             "smooth_slerp_gate": smooth_slerp_gate,
-            "normalize_keys": normalize_keys,
-            "architecture_preset": architecture_preset,
-            "auto_strength_floor": auto_strength_floor,
-            "decision_smoothing": decision_smoothing,
-            "vram_budget": vram_budget,
-            "cache_patches": cache_patches,
+            "normalize_keys": ms["normalize_keys"],
+            "architecture_preset": ms["architecture_preset"],
+            "auto_strength_floor": ms["auto_strength_floor"],
+            "decision_smoothing": ms["decision_smoothing"],
+            "vram_budget": ms["vram_budget"],
+            "cache_patches": ms["cache_patches"],
             "diff_cache_mode": diff_cache_mode,
             "diff_cache_ram_pct": diff_cache_ram_pct,
             "record_dataset": record_dataset,
@@ -6147,6 +6185,13 @@ class LoRAOptimizerSimple(LoRAOptimizer):
         if settings is not None:
             mode = settings.get("mode")
             if mode == "advanced":
+                # Free delegate caches when switching away from autotuner mode
+                delegate = getattr(self, '_autotuner_delegate', None)
+                if delegate is not None:
+                    if getattr(delegate, '_autotuner_cache', None):
+                        delegate._autotuner_cache.clear()
+                    if getattr(delegate, '_merge_cache', None):
+                        delegate._merge_cache.clear()
                 return super().optimize_merge(
                     model, lora_stack, output_strength,
                     clip=clip, clip_strength_multiplier=clip_strength_multiplier,
@@ -6169,6 +6214,9 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                     vram_budget=settings["vram_budget"],
                 )
             elif mode == "autotuner":
+                # Free optimizer cache when switching away from advanced mode
+                if self._merge_cache:
+                    self._merge_cache.clear()
                 if not hasattr(self, '_autotuner_delegate'):
                     self._autotuner_delegate = LoRAAutoTuner()
                 result = self._autotuner_delegate.auto_tune(
@@ -6178,6 +6226,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                     scoring_svd=settings["scoring_svd"],
                     scoring_device=settings["scoring_device"],
                     scoring_speed=settings["scoring_speed"],
+                    scoring_formula=settings.get("scoring_formula", "v2"),
                     output_mode=settings["output_mode"],
                     smooth_slerp_gate=settings["smooth_slerp_gate"],
                     normalize_keys=settings["normalize_keys"],
@@ -6346,6 +6395,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                                "• turbo — Every 3rd prefix (~67%% faster). Works well when your LoRAs have similar conflict across blocks (e.g. multiple characters from the same trainer).\n"
                                "• turbo+ — Every 4th prefix (~75%% faster). Best for large models (DiT/Flux/WAN) or when iterating quickly. May miss subtle block-level differences on SD/SDXL."
                 }),
+                "scoring_formula": (["v2", "v1"], {
+                    "default": "v2",
+                    "tooltip": "Phase 2 scoring formula. v2: arch-aware sparsity + energy metrics (recommended). v1: legacy scoring with fixed 40% sparsity target."
+                }),
                 "output_mode": (["merge", "tuning_only"], {
                     "default": "merge",
                     "tooltip": "merge: output the top-ranked merged model. tuning_only: skip the final merge and pass the base model through so a downstream optimizer can apply the selected AutoTuner settings."
@@ -6378,7 +6431,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                   record_dataset="disabled",
                   cache_patches="enabled",
                   diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0,
-                  scoring_speed="full", output_mode="merge",
+                  scoring_speed="full", scoring_formula="v2", output_mode="merge",
                   decision_smoothing=0.25, smooth_slerp_gate=False):
         import hashlib, json
 
@@ -6688,83 +6741,100 @@ class LoRAAutoTuner(LoRAOptimizer):
             compute_svd = scoring_svd == "enabled" and not is_ortho_score
             score_dev = torch.device("cuda") if scoring_device == "gpu" and torch.cuda.is_available() else None
             t_score = time.time()
+            score_arch = tuner_arch_preset if scoring_formula == "v2" else None
             measured = _score_merge_result(
                 m_patches, c_patches, compute_svd=compute_svd,
-                score_device=score_dev, arch_preset=tuner_arch_preset
+                score_device=score_dev, arch_preset=score_arch
             )
             t_score_elapsed = time.time() - t_score
             # --- Post-scoring adjustments ---
-            # Compute energy_preservation from branch_energy (model + clip).
-            # Baseline = weighted_average expected energy (not weighted_sum).
-            # Auto-strength cancels in WA normalization, so same formula for all.
-            measured_energy_sq = measured.get("norm_energy_sq", 0.0)
-            measured_energy = math.sqrt(max(measured_energy_sq, 0.0))
-            model_strengths = [item["strength"] for item in active_loras]
-            clip_strengths = [
-                item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
-                for item in active_loras
-            ]
-            total_model_w = sum(abs(s) for s in model_strengths)
-            total_clip_w = sum(abs(s) for s in clip_strengths)
-            if is_ortho_score:
-                # Orthogonal: Pythagorean — no cross-terms
-                expected_model_sq = sum(
-                    model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                    for i in range(len(active_loras))
-                )
-                expected_clip_sq = sum(
-                    clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
-                    for i in range(len(active_loras))
-                )
+            if scoring_formula == "v1":
+                # Legacy scoring: conditional sparsity discount, old composite weights
+                if config["sparsification"] != "disabled":
+                    measured["sparsity_fit"] *= 0.5
+                cv_s = max(0.0, 1.0 - measured["norm_cv"])
+                if measured.get("effective_rank_mean", 0) > 0:
+                    rank_s = min(measured["effective_rank_mean"] / 40.0, 1.0)
+                    measured["composite_score"] = (
+                        rank_s * 0.4 + cv_s * 0.3 + measured["sparsity_fit"] * 0.3
+                    )
+                else:
+                    measured["composite_score"] = (
+                        cv_s * 0.5 + measured["sparsity_fit"] * 0.5
+                    )
             else:
-                # Non-orthogonal: include cross-terms
-                expected_model_sq = sum(
-                    model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                    for i in range(len(active_loras))
-                )
-                for (i, j), dot in branch_energy["model"]["dot"].items():
-                    expected_model_sq += 2.0 * model_strengths[i] * model_strengths[j] * dot
-                expected_clip_sq = sum(
-                    clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
-                    for i in range(len(active_loras))
-                )
-                for (i, j), dot in branch_energy["clip"]["dot"].items():
-                    expected_clip_sq += 2.0 * clip_strengths[i] * clip_strengths[j] * dot
-            # Divide by total_weight^2 per branch for weighted_average baseline
-            if total_model_w > 0:
-                expected_model_sq = max(expected_model_sq, 0.0) / (total_model_w ** 2)
-            if total_clip_w > 0:
-                expected_clip_sq = max(expected_clip_sq, 0.0) / (total_clip_w ** 2)
-            expected_energy = math.sqrt(expected_model_sq + expected_clip_sq)
-            # Scale expected energy by prefix fraction when subsampling
-            if use_subsampling and prefix_count > 0:
-                prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
-                expected_energy *= math.sqrt(prefix_fraction)
-            energy_ratio = measured_energy / expected_energy if expected_energy > 0 else 1.0
-            # One-sided: only penalize energy loss below WA baseline (ratio < 1)
-            # SLERP legitimately boosts energy above WA — don't penalize that
-            energy_preservation = min(energy_ratio, 1.0)
-            measured["energy_ratio"] = energy_ratio
-            measured["energy_preservation"] = energy_preservation
-            # Discount sparsity_fit when sparsification artificially inflates it
-            if config["sparsification"] != "disabled":
-                measured["sparsity_fit"] *= 0.5
-            # Recompute composite score
-            cv_s = max(0.0, 1.0 - measured["norm_cv"])
-            if measured.get("effective_rank_mean", 0) > 0:
-                # Non-orthogonal (with SVD): energy helps detect destructive merges
-                rank_s = min(measured["effective_rank_mean"] / 40.0, 1.0)
-                measured["composite_score"] = (
-                    rank_s * 0.30 + cv_s * 0.25
-                    + energy_preservation * 0.20 + measured["sparsity_fit"] * 0.25
-                )
-            else:
-                # Orthogonal (without SVD): energy doesn't predict quality here
-                # (SLERP vs WA energy ≠ quality for orthogonal LoRAs).
-                # Arch-aware sparsity_fit is the primary discriminator.
-                measured["composite_score"] = (
-                    cv_s * 0.50 + measured["sparsity_fit"] * 0.50
-                )
+                # v2: energy-aware scoring with arch-aware sparsity baseline
+                # Compute energy_preservation from branch_energy (model + clip).
+                # Baseline = weighted_average expected energy (not weighted_sum).
+                # Auto-strength cancels in WA normalization, so same formula for all.
+                measured_energy_sq = measured.get("norm_energy_sq", 0.0)
+                measured_energy = math.sqrt(max(measured_energy_sq, 0.0))
+                model_strengths = [item["strength"] for item in active_loras]
+                clip_strengths = [
+                    item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
+                    for item in active_loras
+                ]
+                total_model_w = sum(abs(s) for s in model_strengths)
+                total_clip_w = sum(abs(s) for s in clip_strengths)
+                if is_ortho_score:
+                    # Orthogonal: Pythagorean — no cross-terms
+                    expected_model_sq = sum(
+                        model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
+                        for i in range(len(active_loras))
+                    )
+                    expected_clip_sq = sum(
+                        clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                        for i in range(len(active_loras))
+                    )
+                else:
+                    # Non-orthogonal: include cross-terms
+                    expected_model_sq = sum(
+                        model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
+                        for i in range(len(active_loras))
+                    )
+                    for (i, j), dot in branch_energy["model"]["dot"].items():
+                        expected_model_sq += 2.0 * model_strengths[i] * model_strengths[j] * dot
+                    expected_clip_sq = sum(
+                        clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                        for i in range(len(active_loras))
+                    )
+                    for (i, j), dot in branch_energy["clip"]["dot"].items():
+                        expected_clip_sq += 2.0 * clip_strengths[i] * clip_strengths[j] * dot
+                # Divide by total_weight^2 per branch for weighted_average baseline
+                if total_model_w > 0:
+                    expected_model_sq = max(expected_model_sq, 0.0) / (total_model_w ** 2)
+                if total_clip_w > 0:
+                    expected_clip_sq = max(expected_clip_sq, 0.0) / (total_clip_w ** 2)
+                expected_energy = math.sqrt(expected_model_sq + expected_clip_sq)
+                # Scale expected energy by prefix fraction when subsampling
+                if use_subsampling and prefix_count > 0:
+                    prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
+                    expected_energy *= math.sqrt(prefix_fraction)
+                energy_ratio = measured_energy / expected_energy if expected_energy > 0 else 1.0
+                # One-sided: only penalize energy loss below WA baseline (ratio < 1)
+                # SLERP legitimately boosts energy above WA — don't penalize that
+                energy_preservation = min(energy_ratio, 1.0)
+                measured["energy_ratio"] = energy_ratio
+                measured["energy_preservation"] = energy_preservation
+                # Discount sparsity_fit when sparsification artificially inflates it
+                if config["sparsification"] != "disabled":
+                    measured["sparsity_fit"] *= 0.5
+                # Recompute composite score
+                cv_s = max(0.0, 1.0 - measured["norm_cv"])
+                if measured.get("effective_rank_mean", 0) > 0:
+                    # Non-orthogonal (with SVD): energy helps detect destructive merges
+                    rank_s = min(measured["effective_rank_mean"] / 40.0, 1.0)
+                    measured["composite_score"] = (
+                        rank_s * 0.30 + cv_s * 0.25
+                        + energy_preservation * 0.20 + measured["sparsity_fit"] * 0.25
+                    )
+                else:
+                    # Orthogonal (without SVD): energy doesn't predict quality here
+                    # (SLERP vs WA energy ≠ quality for orthogonal LoRAs).
+                    # Arch-aware sparsity_fit is the primary discriminator.
+                    measured["composite_score"] = (
+                        cv_s * 0.50 + measured["sparsity_fit"] * 0.50
+                    )
             external_eval = _run_autotuner_evaluator(
                 evaluator, merged_model, merged_clip, lora_data, config, analysis_summary
             ) if evaluator else None
@@ -6781,9 +6851,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     final_score = (1.0 - eval_weight) * final_score + eval_weight * external_score
 
             t_elapsed = time.time() - t_merge
+            energy_log = f", energy={measured['energy_ratio']:.2f}x" if "energy_ratio" in measured else ""
             logging.info(f"[LoRA AutoTuner]   Candidate #{rank_idx + 1}: "
                          f"measured={measured['composite_score']:.3f}"
-                         f", energy={energy_ratio:.2f}x"
+                         f"{energy_log}"
                          f"{f', external={external_score:.3f}' if external_score is not None else ''}"
                          f", final={final_score:.3f} "
                          f"(merge {t_elapsed - t_score_elapsed:.1f}s + score {t_score_elapsed:.1f}s)")
@@ -6823,8 +6894,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "effective_rank_mean": measured.get("effective_rank_mean", 0.0),
                     "sparsity_mean": measured.get("sparsity_mean", 0.0),
                     "norm_cv": measured.get("norm_cv", 0.0),
-                    "energy_ratio": measured.get("energy_ratio", 1.0),
-                    "energy_preservation": measured.get("energy_preservation", 0.5),
+                    **({"energy_ratio": measured.get("energy_ratio", 1.0),
+                        "energy_preservation": measured.get("energy_preservation", 0.5)}
+                       if scoring_formula == "v2" else
+                       {"importance_cv": measured.get("importance_cv", measured.get("norm_cv", 0.0))}),
                 },
                 "external_details": external_eval.get("details") if external_eval else None,
             })
@@ -7115,12 +7188,12 @@ class LoRAAutoTuner(LoRAOptimizer):
                    architecture_preset="auto", auto_strength_floor=-1.0, evaluator=None, record_dataset="disabled",
                    cache_patches="enabled",
                    diff_cache_mode="disabled", diff_cache_ram_pct=0.5,
-                   vram_budget=0.0, scoring_speed="full", output_mode="merge",
-                   decision_smoothing=0.25):
+                   vram_budget=0.0, scoring_speed="full", scoring_formula="v2",
+                   output_mode="merge", decision_smoothing=0.25):
         evaluator_hash = cls._stable_data_hash(evaluator) if evaluator is not None else ""
         return (id(model), id(lora_stack), output_strength, clip_strength_multiplier, top_n,
                 normalize_keys, scoring_svd, scoring_device, architecture_preset,
-                vram_budget, record_dataset, scoring_speed, output_mode,
+                vram_budget, record_dataset, scoring_speed, scoring_formula, output_mode,
                 auto_strength_floor, decision_smoothing, evaluator_hash)
 
 
@@ -8787,6 +8860,7 @@ NODE_CLASS_MAPPINGS = {
     "SaveTunerData": SaveTunerData,
     "LoadTunerData": LoadTunerData,
     "LoRACompatibilityAnalyzer": LoRACompatibilityAnalyzer,
+    "LoRAMergeSettings": LoRAMergeSettings,
     "LoRAOptimizerSettings": LoRAOptimizerSettings,
     "LoRAAutoTunerSettings": LoRAAutoTunerSettings,
 }
@@ -8807,6 +8881,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SaveTunerData": "Save Tuner Data",
     "LoadTunerData": "Load Tuner Data",
     "LoRACompatibilityAnalyzer": "LoRA Compatibility Analyzer",
+    "LoRAMergeSettings": "LoRA Merge Settings",
     "LoRAOptimizerSettings": "LoRA Optimizer Settings",
     "LoRAAutoTunerSettings": "LoRA AutoTuner Settings",
 }
