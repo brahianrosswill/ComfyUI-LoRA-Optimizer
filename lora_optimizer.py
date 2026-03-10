@@ -1653,14 +1653,15 @@ class _LoRAMergeBase:
                     if diff_cache is not None:
                         diff_cache.put(cache_key, diff)
                     diff = diff.float()
-                else:
-                    skip_count += 1
-                    continue
-                diff_accum = diff if diff_accum is None else diff_accum + diff
+                    diff_accum = diff if diff_accum is None else diff_accum + diff
 
             if diff_accum is not None:
                 aggregated[i] = diff_accum
                 ranks[i] = rank_sum
+            elif i in raw_contributors:
+                pass  # contributed via cache but diff_accum ended up None (shouldn't happen)
+            else:
+                skip_count += 1
 
         raw_n = len(aggregated)
         if raw_n == 0:
