@@ -43,7 +43,6 @@ def test_autotune_resolve_tree_calls_auto_tune_for_subgroups(self):
 
     # Track auto_tune calls
     calls = []
-    original_auto_tune = tuner.auto_tune
 
     def mock_auto_tune(model, lora_stack, output_strength, **kwargs):
         calls.append({"n_loras": len(lora_stack), "names": [l["name"] for l in lora_stack]})
@@ -55,6 +54,7 @@ def test_autotune_resolve_tree_calls_auto_tune_for_subgroups(self):
     tuner.auto_tune = mock_auto_tune
 
     at_kwargs = {
+        "clip_strength_multiplier": 1.0,
         "top_n": 3,
         "normalize_keys": "disabled",
         "scoring_svd": "disabled",
@@ -134,6 +134,9 @@ Add the following method to `LoRAAutoTuner` class in `lora_optimizer.py`, after 
                         sub_kwargs["cache_patches"] = "disabled"
                         sub_kwargs["record_dataset"] = "disabled"
                         sub_kwargs["output_mode"] = "merge"
+                        sub_kwargs["_is_sub_merge"] = True
+                        # Evaluator is excluded: it may be prompt-specific and
+                        # inappropriate for sub-groups (character-only merge etc.)
 
                         sub_result = self.auto_tune(
                             model, sub_stack, 1.0, clip=clip, **sub_kwargs)
@@ -193,8 +196,16 @@ git commit -m "feat: add _autotune_resolve_tree for per-sub-merge AutoTuner"
 ### Task 2: Integrate formula detection into `auto_tune()`
 
 **Files:**
-- Modify: `lora_optimizer.py:7140-7161` (inside `auto_tune`, after stack normalization)
+- Modify: `lora_optimizer.py:7118-7161` (inside `auto_tune`, signature + after stack normalization)
 - Test: `tests/test_lora_optimizer.py`
+
+**Review fixes incorporated:**
+- Bug 1: Pass `normalize_keys="disabled"` to recursive outer call (stack already normalized)
+- Bug 2: Include `clip_strength_multiplier` in `at_kwargs`
+- Bug 4: Update `normalized_stack` and `active_loras` when formula resolves to single item
+- Bug 6: Add `_suppress_pbar=False` parameter to suppress sub-merge progress bars
+- Bug 8: Save/restore `_detected_arch` around recursive outer call
+- Bug 9: Pass `_skip_qkv_refusion` to single-LoRA optimize_merge path
 
 **Step 1: Write the failing test**
 
@@ -218,7 +229,6 @@ def test_auto_tune_with_formula_calls_autotune_resolve_tree(self):
 
     # Track _autotune_resolve_tree calls
     resolve_calls = []
-    original_resolve = tuner._autotune_resolve_tree
 
     def mock_resolve(tree, normalized_stack, model, clip, **kwargs):
         resolve_calls.append(tree)
@@ -245,20 +255,37 @@ Expected: FAIL — `_autotune_resolve_tree` never called (formula not detected i
 
 **Step 3: Write minimal implementation**
 
-Modify `auto_tune()` at line ~7140. Insert formula detection after stack normalization and before the single-LoRA check. Replace lines 7140-7144:
+**3a. Update `auto_tune` method signature** (line ~7118). Add `_is_sub_merge` and `_suppress_pbar`:
 
-**Current code (lines 7140-7161):**
+Change:
 ```python
-        # --- Normalize & validate stack ---
-        normalized_stack = self._normalize_stack(lora_stack, normalize_keys=normalize_keys)
-        active_loras = [item for item in normalized_stack if item["strength"] != 0]
-        if not active_loras:
-            return (model, clip, "No active LoRAs in stack.", "", None, None)
-
-        if len(active_loras) == 1:
+    def auto_tune(self, model, lora_stack, output_strength, clip=None,
+                  clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
+                  scoring_svd="disabled", scoring_device="gpu",
+                  architecture_preset="auto", auto_strength_floor=-1.0, evaluator=None,
+                  record_dataset="disabled",
+                  cache_patches="enabled",
+                  diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0,
+                  scoring_speed="full", scoring_formula="v2", output_mode="merge",
+                  decision_smoothing=0.25, smooth_slerp_gate=False):
 ```
 
-**New code:**
+To:
+```python
+    def auto_tune(self, model, lora_stack, output_strength, clip=None,
+                  clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
+                  scoring_svd="disabled", scoring_device="gpu",
+                  architecture_preset="auto", auto_strength_floor=-1.0, evaluator=None,
+                  record_dataset="disabled",
+                  cache_patches="enabled",
+                  diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0,
+                  scoring_speed="full", scoring_formula="v2", output_mode="merge",
+                  decision_smoothing=0.25, smooth_slerp_gate=False,
+                  _is_sub_merge=False, _suppress_pbar=False):
+```
+
+**3b. Insert formula detection** after stack normalization (line ~7140). Replace the block from `# --- Normalize & validate stack ---` through `if len(active_loras) == 1:`:
+
 ```python
         # --- Extract merge formula before normalization ---
         merge_formula = None
@@ -293,6 +320,7 @@ Modify `auto_tune()` at line ~7140. Insert formula detection after stack normali
                     architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
 
                 at_kwargs = {
+                    "clip_strength_multiplier": clip_strength_multiplier,
                     "top_n": top_n,
                     "normalize_keys": normalize_keys,
                     "scoring_svd": scoring_svd,
@@ -312,13 +340,18 @@ Modify `auto_tune()` at line ~7140. Insert formula detection after stack normali
                     tree, normalized_stack, model, clip, **at_kwargs)
 
                 if len(resolved_stack) >= 2:
-                    # Run outer auto_tune on the resolved flat stack (no formula)
+                    # Save _detected_arch — recursive call may overwrite it
+                    # when all resolved items are virtual (no arch detection possible)
+                    saved_arch = getattr(self, '_detected_arch', None)
+
+                    # Run outer auto_tune on the resolved flat stack (no formula).
+                    # normalize_keys="disabled": stack is already normalized.
                     outer_result = self.auto_tune(
                         model, resolved_stack, output_strength,
                         clip=clip,
                         clip_strength_multiplier=clip_strength_multiplier,
                         top_n=top_n,
-                        normalize_keys=normalize_keys,
+                        normalize_keys="disabled",
                         scoring_svd=scoring_svd,
                         scoring_device=scoring_device,
                         architecture_preset=preset_key,
@@ -336,6 +369,9 @@ Modify `auto_tune()` at line ~7140. Insert formula detection after stack normali
                         smooth_slerp_gate=smooth_slerp_gate,
                     )
 
+                    # Restore _detected_arch
+                    self._detected_arch = saved_arch
+
                     # Prepend sub-reports to the outer report
                     if sub_reports:
                         # outer_result is 6-tuple
@@ -351,12 +387,48 @@ Modify `auto_tune()` at line ~7140. Insert formula detection after stack normali
 
                     return outer_result
                 elif len(resolved_stack) == 1:
-                    # All sub-merges collapsed to one — treat as single LoRA
+                    # All sub-merges collapsed to one — update state and fall through
                     logging.info("[LoRA AutoTuner] Formula resolved to single LoRA — skipping outer tune")
-                    lora_stack = resolved_stack
-                    # Fall through to normal single-LoRA or auto-tune path below
+                    normalized_stack = resolved_stack
+                    active_loras = [item for item in normalized_stack if item["strength"] != 0]
+                    # Fall through to single-LoRA or normal path below
 
         if len(active_loras) == 1:
+```
+
+**3c. Update progress bar creation** (line ~7204). Replace:
+
+```python
+        pbar = comfy.utils.ProgressBar(len(target_groups) + n_pbar_merges)
+```
+
+With:
+
+```python
+        if _suppress_pbar:
+            class _NullPbar:
+                def update(self, n): pass
+            pbar = _NullPbar()
+        else:
+            pbar = comfy.utils.ProgressBar(len(target_groups) + n_pbar_merges)
+```
+
+**3d. Pass `_skip_qkv_refusion` to Phase 2 candidate merges** (line ~7395). Add to the `super().optimize_merge()` call:
+
+```python
+                _skip_qkv_refusion=_is_sub_merge,
+```
+
+**3e. Pass `_skip_qkv_refusion` to final full merge** (line ~7602). Add to the `super().optimize_merge()` call:
+
+```python
+                _skip_qkv_refusion=_is_sub_merge,
+```
+
+**3f. Pass `_skip_qkv_refusion` to single-LoRA path** (line ~7150). Add to the `super().optimize_merge()` call:
+
+```python
+                _skip_qkv_refusion=_is_sub_merge,
 ```
 
 **Step 4: Run test to verify it passes**
@@ -367,29 +439,28 @@ Expected: PASS
 **Step 5: Run all tests**
 
 Run: `cd /media/p5/ComfyUI-ZImage-LoRA-Merger && python -m pytest tests/test_lora_optimizer.py -v`
-Expected: 46/47 pass (1 pre-existing widget order failure)
+Expected: All existing tests pass (1 pre-existing widget order failure)
 
 **Step 6: Commit**
 
 ```bash
 git add lora_optimizer.py tests/test_lora_optimizer.py
-git commit -m "feat: integrate formula detection into AutoTuner auto_tune"
+git commit -m "feat: integrate formula detection into AutoTuner with reviewed bug fixes"
 ```
 
 ---
 
-### Task 3: Handle sub-merge `_skip_qkv_refusion` for Z-Image
+### Task 3: Wire `_suppress_pbar` and `_is_sub_merge` into `_autotune_resolve_tree`
 
 **Files:**
 - Modify: `lora_optimizer.py` (inside `_autotune_resolve_tree`)
-
-**Context:** When auto_tune calls optimize_merge internally (via `super().optimize_merge()`), the sub-merge needs `_skip_qkv_refusion=True` so virtual LoRA patches stay compatible with unfused keys in the outer merge. The `auto_tune` method doesn't pass this flag — it goes through `super().optimize_merge()` which doesn't know about formula sub-merges.
+- Test: `tests/test_lora_optimizer.py`
 
 **Step 1: Write the failing test**
 
 ```python
-def test_autotune_resolve_tree_passes_skip_qkv_refusion(self):
-    """Sub-merge auto_tune calls should include _skip_qkv_refusion context."""
+def test_autotune_resolve_tree_passes_sub_merge_flags(self):
+    """Sub-merge auto_tune calls should include _is_sub_merge and _suppress_pbar."""
     from lora_optimizer import LoRAAutoTuner, _parse_merge_formula
 
     tuner = LoRAAutoTuner()
@@ -407,7 +478,6 @@ def test_autotune_resolve_tree_passes_skip_qkv_refusion(self):
          "clip_strength": None, "metadata": {}},
     ]
 
-    # Track that auto_tune is called with a flag indicating sub-merge
     calls = []
     def mock_auto_tune(model, lora_stack, output_strength, **kwargs):
         calls.append(kwargs)
@@ -418,6 +488,7 @@ def test_autotune_resolve_tree_passes_skip_qkv_refusion(self):
     tuner.auto_tune = mock_auto_tune
 
     at_kwargs = {
+        "clip_strength_multiplier": 1.0,
         "top_n": 3, "normalize_keys": "disabled", "scoring_svd": "disabled",
         "scoring_device": "cpu", "architecture_preset": "dit",
         "auto_strength_floor": -1.0, "decision_smoothing": 0.25,
@@ -428,63 +499,40 @@ def test_autotune_resolve_tree_passes_skip_qkv_refusion(self):
 
     tuner._autotune_resolve_tree(tree, normalized_stack, None, None, **at_kwargs)
 
-    # Sub-merge auto_tune should receive _is_sub_merge flag
     self.assertEqual(len(calls), 1)
     self.assertTrue(calls[0].get("_is_sub_merge", False))
+    self.assertTrue(calls[0].get("_suppress_pbar", False))
+    self.assertEqual(calls[0].get("cache_patches"), "disabled")
+    self.assertEqual(calls[0].get("record_dataset"), "disabled")
+    self.assertEqual(calls[0].get("output_mode"), "merge")
 ```
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /media/p5/ComfyUI-ZImage-LoRA-Merger && python -m pytest tests/test_lora_optimizer.py::TestLoRAOptimizer::test_autotune_resolve_tree_passes_skip_qkv_refusion -v`
-Expected: FAIL — `_is_sub_merge` not in kwargs
+Run: `cd /media/p5/ComfyUI-ZImage-LoRA-Merger && python -m pytest tests/test_lora_optimizer.py::TestLoRAOptimizer::test_autotune_resolve_tree_passes_sub_merge_flags -v`
+Expected: FAIL — `_suppress_pbar` not in kwargs
 
 **Step 3: Implement**
 
-Two changes needed:
-
-**In `_autotune_resolve_tree`**, when calling `self.auto_tune()` for sub-groups, add the flag:
+In `_autotune_resolve_tree`, update the sub_kwargs block to also include `_suppress_pbar`:
 
 ```python
                         sub_kwargs["_is_sub_merge"] = True
+                        sub_kwargs["_suppress_pbar"] = True
 ```
 
-**In `auto_tune` method signature** (line ~7118), add the parameter:
-
-```python
-    def auto_tune(self, model, lora_stack, output_strength, clip=None,
-                  clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
-                  ...
-                  decision_smoothing=0.25, smooth_slerp_gate=False,
-                  _is_sub_merge=False):
-```
-
-**In `auto_tune`**, where it calls `super().optimize_merge()` for Phase 2 candidates (line ~7395) and the final full merge (line ~7602), pass `_skip_qkv_refusion=_is_sub_merge`:
-
-At line ~7395 (Phase 2 candidate merges), add to the kwargs:
-```python
-                _skip_qkv_refusion=_is_sub_merge,
-```
-
-At line ~7602 (final full merge with subsampling), add:
-```python
-                _skip_qkv_refusion=_is_sub_merge,
-```
+(The `_is_sub_merge = True` line should already be there from Task 1's implementation.)
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /media/p5/ComfyUI-ZImage-LoRA-Merger && python -m pytest tests/test_lora_optimizer.py::TestLoRAOptimizer::test_autotune_resolve_tree_passes_skip_qkv_refusion -v`
+Run: `cd /media/p5/ComfyUI-ZImage-LoRA-Merger && python -m pytest tests/test_lora_optimizer.py::TestLoRAOptimizer::test_autotune_resolve_tree_passes_sub_merge_flags -v`
 Expected: PASS
 
-**Step 5: Run all tests**
-
-Run: `cd /media/p5/ComfyUI-ZImage-LoRA-Merger && python -m pytest tests/test_lora_optimizer.py -v`
-Expected: 47/48 pass (1 pre-existing)
-
-**Step 6: Commit**
+**Step 5: Commit**
 
 ```bash
 git add lora_optimizer.py tests/test_lora_optimizer.py
-git commit -m "fix: pass _skip_qkv_refusion for AutoTuner sub-merges (Z-Image compat)"
+git commit -m "fix: suppress progress bars and pass _is_sub_merge for AutoTuner sub-merges"
 ```
 
 ---
@@ -523,6 +571,7 @@ def test_autotune_resolve_tree_single_item_passthrough(self):
     tuner.auto_tune = mock_auto_tune
 
     at_kwargs = {
+        "clip_strength_multiplier": 1.0,
         "top_n": 3, "normalize_keys": "disabled", "scoring_svd": "disabled",
         "scoring_device": "cpu", "architecture_preset": "dit",
         "auto_strength_floor": -1.0, "decision_smoothing": 0.25,
@@ -591,6 +640,7 @@ def test_autotune_resolve_tree_nested_groups(self):
     tuner.auto_tune = mock_auto_tune
 
     at_kwargs = {
+        "clip_strength_multiplier": 1.0,
         "top_n": 3, "normalize_keys": "disabled", "scoring_svd": "disabled",
         "scoring_device": "cpu", "architecture_preset": "dit",
         "auto_strength_floor": -1.0, "decision_smoothing": 0.25,
@@ -625,7 +675,7 @@ Expected: PASS
 **Step 3: Run all tests**
 
 Run: `cd /media/p5/ComfyUI-ZImage-LoRA-Merger && python -m pytest tests/test_lora_optimizer.py -v`
-Expected: 49/50 pass (1 pre-existing)
+Expected: All pass (1 pre-existing widget order failure)
 
 **Step 4: Commit**
 
