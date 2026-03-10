@@ -1440,16 +1440,26 @@ class _LoRAMergeBase:
             clip_target_keys.add(v)
             if isinstance(v, tuple):
                 clip_target_keys.add(v[0])
+        _dbg_resolved = 0
+        _dbg_virtual_self = 0
+        _dbg_skipped = 0
         for prefix in all_lora_prefixes:
             target_key, is_clip = self._resolve_target_key(prefix, model_keys, clip_keys)
             if target_key is None:
                 # Virtual LoRA keys are already target keys — map to themselves
                 if prefix in model_target_keys:
                     target_key, is_clip = prefix, False
+                    _dbg_virtual_self += 1
                 elif prefix in clip_target_keys:
                     target_key, is_clip = prefix, True
+                    _dbg_virtual_self += 1
                 else:
+                    _dbg_skipped += 1
+                    if _dbg_skipped <= 3:
+                        logging.info(f"[Virtual LoRA DEBUG] _build_target_groups: SKIPPED unresolved prefix={prefix}")
                     continue
+            else:
+                _dbg_resolved += 1
             group_id = self._make_target_group_id(target_key, is_clip)
             entry = grouped.setdefault(group_id, {
                 "target_key": target_key,
@@ -1457,6 +1467,9 @@ class _LoRAMergeBase:
                 "aliases": [],
             })
             entry["aliases"].append(prefix)
+
+        if _dbg_virtual_self > 0 or _dbg_skipped > 0:
+            logging.info(f"[Virtual LoRA DEBUG] _build_target_groups: resolved={_dbg_resolved}, virtual_self={_dbg_virtual_self}, skipped={_dbg_skipped}, groups={len(grouped)}")
 
         ordered = {}
         prepared = []
@@ -1579,6 +1592,9 @@ class _LoRAMergeBase:
                 raw = item["lora"].get(tkey)
                 if raw is None and isinstance(tkey, tuple):
                     raw = item["lora"].get(tkey[0])
+                if raw is None:
+                    if skip_count < 3:  # limit spam
+                        logging.info(f"[Virtual LoRA DEBUG] _prepare_group_diffs: LoRA {i} ({item.get('name','?')}) MISS for tkey={tkey}")
                 if raw is not None:
                     if isinstance(raw, torch.Tensor):
                         diff = raw.float()
@@ -6515,15 +6531,21 @@ class LoRAOptimizer(_LoRAMergeBase):
             # loop so compressed adapters (LoRAAdapter etc.) don't blow up
             # memory here.
             if isinstance(patch, tuple) and patch[0] == "diff":
-                virtual_lora[key] = patch[1][0]  # extract the tensor
+                t = patch[1][0]
+                virtual_lora[key] = t
+                logging.info(f"[Virtual LoRA DEBUG] model key={key}, type=diff, shape={t.shape}, norm={t.float().norm().item():.4f}")
             else:
                 virtual_lora[key] = patch  # tensor or adapter object
+                logging.info(f"[Virtual LoRA DEBUG] model key={key}, type={type(patch).__name__}")
 
         for key, patch in clip_patches.items():
             if isinstance(patch, tuple) and patch[0] == "diff":
-                virtual_lora[key] = patch[1][0]
+                t = patch[1][0]
+                virtual_lora[key] = t
+                logging.info(f"[Virtual LoRA DEBUG] clip key={key}, type=diff, shape={t.shape}, norm={t.float().norm().item():.4f}")
             else:
                 virtual_lora[key] = patch
+                logging.info(f"[Virtual LoRA DEBUG] clip key={key}, type={type(patch).__name__}")
 
         # Build label from tree
         def _tree_label(node):
@@ -7202,6 +7224,12 @@ class LoRAAutoTuner(LoRAOptimizer):
                     tree, normalized_stack, model, clip, **at_kwargs)
 
                 if len(resolved_stack) >= 2:
+                    # DEBUG: Log resolved stack details
+                    for rs_idx, rs_item in enumerate(resolved_stack):
+                        is_virtual = rs_item.get("_precomputed_diffs", False)
+                        n_keys = len(rs_item.get("lora", {}))
+                        logging.info(f"[Virtual LoRA DEBUG] resolved_stack[{rs_idx}]: name={rs_item.get('name','?')}, "
+                                     f"virtual={is_virtual}, n_keys={n_keys}, strength={rs_item.get('strength', '?')}")
 
                     # Run outer auto_tune on the resolved flat stack (no formula).
                     # normalize_keys="disabled": stack is already normalized.
@@ -7912,6 +7940,14 @@ class LoRAAutoTuner(LoRAOptimizer):
                         # Build virtual LoRA from sub-merge result
                         sub_model_patches = sub_lora_data.get("model_patches", {})
                         sub_clip_patches = sub_lora_data.get("clip_patches", {})
+                        logging.info(f"[Virtual LoRA DEBUG] _autotune_resolve_tree: sub_model_patches={len(sub_model_patches)}, sub_clip_patches={len(sub_clip_patches)}")
+                        if sub_model_patches:
+                            sample_key = next(iter(sub_model_patches))
+                            sample_patch = sub_model_patches[sample_key]
+                            if isinstance(sample_patch, tuple) and sample_patch[0] == "diff":
+                                logging.info(f"[Virtual LoRA DEBUG]   sample key={sample_key}, patch shape={sample_patch[1][0].shape}, norm={sample_patch[1][0].float().norm().item():.4f}")
+                            else:
+                                logging.info(f"[Virtual LoRA DEBUG]   sample key={sample_key}, patch type={type(sample_patch).__name__}")
                         virtual = self._model_to_virtual_lora(
                             sub_model_patches, sub_clip_patches, child)
                         del sub_model, sub_clip, sub_result, sub_lora_data
