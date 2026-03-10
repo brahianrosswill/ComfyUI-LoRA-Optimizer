@@ -3665,6 +3665,62 @@ def _run_autotuner_evaluator(evaluator, model, clip, lora_data, config, analysis
     }
 
 
+class LoRAMergeFormula:
+    """
+    Passthrough node that attaches a merge formula to the LoRA stack.
+    The formula defines hierarchical merge order, e.g., "(1+2) + 3"
+    merges LoRAs 1 & 2 first, then merges the result with LoRA 3.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "lora_stack": ("LORA_STACK", {
+                    "tooltip": "The LoRA stack to apply the merge formula to."
+                }),
+                "formula": ("STRING", {
+                    "default": "",
+                    "tooltip": "Merge formula defining hierarchical merge order. "
+                               "Numbers reference 1-indexed LoRA positions in the stack. "
+                               "Use + to combine and () to group sub-merges. "
+                               "Example: '(1+2) + 3' merges LoRAs 1 & 2 first, then blends with 3. "
+                               "Optional weights: '(1+2):0.6 + 3:0.4'. "
+                               "Leave empty for default flat merge."
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LORA_STACK",)
+    RETURN_NAMES = ("lora_stack",)
+    FUNCTION = "apply_formula"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = "Attaches a merge formula to the LoRA stack to control hierarchical merge order"
+
+    def apply_formula(self, lora_stack, formula):
+        output = list(lora_stack) if lora_stack else []
+        formula = formula.strip()
+        if not formula:
+            return (output,)
+
+        # Count actual LoRAs (exclude any existing formula metadata)
+        n_loras = sum(1 for item in output
+                      if isinstance(item, dict) and "_merge_formula" not in item)
+
+        # Validate formula
+        try:
+            _parse_merge_formula(formula, n_loras)
+        except ValueError as e:
+            logging.warning(f"[LoRA Optimizer] Invalid merge formula: {e} — using flat merge")
+            return (output,)
+
+        # Remove any existing formula metadata (in case of chaining)
+        output = [item for item in output
+                  if not (isinstance(item, dict) and "_merge_formula" in item)]
+        output.append({"_merge_formula": formula})
+        return (output,)
+
+
 class LoRAOptimizer(_LoRAMergeBase):
     """
     Auto-optimizer that analyzes a LoRA stack (sign conflicts, magnitude
@@ -9407,6 +9463,7 @@ NODE_CLASS_MAPPINGS = {
     "LoRAOptimizerSettings": LoRAOptimizerSettings,
     "LoRAAutoTunerSettings": LoRAAutoTunerSettings,
     "LoRAMetadataReader": LoRAMetadataReader,
+    "LoRAMergeFormula": LoRAMergeFormula,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -9429,4 +9486,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAOptimizerSettings": "LoRA Optimizer Settings",
     "LoRAAutoTunerSettings": "LoRA AutoTuner Settings",
     "LoRAMetadataReader": "LoRA Metadata Reader",
+    "LoRAMergeFormula": "LoRA Merge Formula",
 }

@@ -739,5 +739,32 @@ class LoRASettingsNodeTests(unittest.TestCase):
             lora_optimizer._parse_merge_formula("   ", 3)
 
 
+    def test_merge_formula_node_registered(self):
+        """LoRAMergeFormula is registered in NODE_CLASS_MAPPINGS."""
+        self.assertIn("LoRAMergeFormula", lora_optimizer.NODE_CLASS_MAPPINGS)
+        self.assertIn("LoRAMergeFormula", lora_optimizer.NODE_DISPLAY_NAME_MAPPINGS)
+
+    def test_merge_formula_node_passthrough(self):
+        """LoRAMergeFormula passes stack through with formula metadata."""
+        node = lora_optimizer.LoRAMergeFormula()
+        stack = [{"name": "a", "lora": {}, "strength": 1.0}]
+        result = node.apply_formula(stack, "(1)")
+        self.assertIsInstance(result, tuple)
+        output_stack = result[0]
+        has_formula = any(isinstance(item, dict) and "_merge_formula" in item for item in output_stack)
+        self.assertTrue(has_formula)
+
+    def test_merge_formula_node_validates(self):
+        """LoRAMergeFormula validates formula syntax — invalid returns stack without formula."""
+        node = lora_optimizer.LoRAMergeFormula()
+        stack = [{"name": "a", "lora": {}, "strength": 1.0}]
+        result = node.apply_formula(stack, "(1+2)")  # only 1 LoRA — out of range
+        output_stack = result[0]
+        self.assertIsInstance(output_stack, list)
+        # Should NOT have formula metadata since validation failed
+        has_formula = any(isinstance(item, dict) and "_merge_formula" in item for item in output_stack)
+        self.assertFalse(has_formula)
+
+
 if __name__ == "__main__":
     unittest.main()
