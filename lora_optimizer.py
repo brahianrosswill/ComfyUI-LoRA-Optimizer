@@ -1462,7 +1462,11 @@ class _LoRAMergeBase:
         prepared = []
         for entry in grouped.values():
             aliases = sorted(a for a in set(entry["aliases"]) if isinstance(a, str))
-            canonical = self._choose_canonical_prefix(aliases)
+            if not aliases:
+                canonical = str(entry["target_key"])
+                aliases = [canonical]
+            else:
+                canonical = self._choose_canonical_prefix(aliases)
             prepared.append((entry["is_clip"], canonical, {
                 "target_key": entry["target_key"],
                 "is_clip": entry["is_clip"],
@@ -6446,9 +6450,20 @@ class LoRAOptimizer(_LoRAMergeBase):
                             sub_model, sub_clip, sub_report, _, sub_lora_data = sub_result
                         sub_reports.append(sub_report)
 
+                        if sub_lora_data is None:
+                            # Single-LoRA fast path was hit (e.g. other LoRA had strength 0)
+                            # Pass sub-stack items through directly instead of empty virtual LoRA
+                            del sub_model, sub_clip, sub_result
+                            for sub_item in sub_stack:
+                                item = dict(sub_item)
+                                if child.get("weight") is not None:
+                                    item["strength"] = child["weight"]
+                                resolved.append(item)
+                            continue
+
                         # Extract patches as virtual LoRA from merge output
-                        sub_model_patches = sub_lora_data.get("model_patches", {}) if sub_lora_data else {}
-                        sub_clip_patches = sub_lora_data.get("clip_patches", {}) if sub_lora_data else {}
+                        sub_model_patches = sub_lora_data.get("model_patches", {})
+                        sub_clip_patches = sub_lora_data.get("clip_patches", {})
                         virtual = self._model_to_virtual_lora(
                             sub_model_patches, sub_clip_patches, child)
                         del sub_model, sub_clip, sub_result, sub_lora_data
