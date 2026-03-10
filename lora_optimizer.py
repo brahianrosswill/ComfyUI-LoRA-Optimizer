@@ -7218,6 +7218,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                         output_mode=output_mode,
                         decision_smoothing=decision_smoothing,
                         smooth_slerp_gate=smooth_slerp_gate,
+                        _is_sub_merge=_is_sub_merge,
+                        _suppress_pbar=_suppress_pbar,
                     )
 
                     # Restore _detected_arch
@@ -7249,7 +7251,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if output_mode == "tuning_only":
                 return (model, clip, "Single LoRA detected -- tuning_only passthrough.", "", None, None)
             merged_model, merged_clip, report, _, lora_data = super().optimize_merge(
-                model, lora_stack, output_strength,
+                model, normalized_stack, output_strength,
                 clip=clip, clip_strength_multiplier=clip_strength_multiplier,
                 normalize_keys=normalize_keys, strategy_set="full",
                 architecture_preset=architecture_preset, vram_budget=vram_budget,
