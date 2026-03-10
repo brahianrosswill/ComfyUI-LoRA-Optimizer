@@ -3053,6 +3053,13 @@ class _LoRAMergeBase:
         if not lora_stack:
             return []
 
+        # Filter out formula metadata entries (safety net — optimize_merge
+        # also strips these before calling _normalize_stack)
+        lora_stack = [item for item in lora_stack
+                      if not (isinstance(item, dict) and "_merge_formula" in item)]
+        if not lora_stack:
+            return []
+
         first = lora_stack[0]
         normalized = []
 
@@ -5395,6 +5402,17 @@ class LoRAOptimizer(_LoRAMergeBase):
         if not lora_stack or len(lora_stack) == 0:
             return (model, clip, "No LoRAs in stack.", None, None)
 
+        # Extract merge formula metadata before normalization
+        merge_formula = None
+        clean_stack = []
+        for item in lora_stack:
+            if isinstance(item, dict) and "_merge_formula" in item:
+                merge_formula = item["_merge_formula"]
+            else:
+                clean_stack.append(item)
+        if merge_formula:
+            lora_stack = clean_stack
+
         normalized_stack = self._normalize_stack(lora_stack, normalize_keys=normalize_keys)
         active_loras = [item for item in normalized_stack if item["strength"] != 0]
 
@@ -5405,6 +5423,39 @@ class LoRAOptimizer(_LoRAMergeBase):
         preset_key, arch_preset = _resolve_arch_preset(
             architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
         logging.info(f"[LoRA Optimizer] Architecture preset: {preset_key} ({arch_preset['display_name']})")
+
+        # Formula-based hierarchical merge
+        if merge_formula and len(active_loras) >= 2:
+            try:
+                tree = _parse_merge_formula(merge_formula, len(active_loras))
+            except ValueError as e:
+                logging.warning(f"[LoRA Optimizer] Invalid merge formula: {e} — using flat merge")
+                tree = None
+
+            if tree is not None and tree["type"] == "group":
+                logging.info(f"[LoRA Optimizer] Using merge formula: {merge_formula}")
+                merge_kwargs = {
+                    "clip_strength_multiplier": clip_strength_multiplier,
+                    "auto_strength": auto_strength,
+                    "auto_strength_floor": auto_strength_floor,
+                    "optimization_mode": optimization_mode,
+                    "patch_compression": patch_compression,
+                    "svd_device": svd_device,
+                    "normalize_keys": normalize_keys,
+                    "sparsification": sparsification,
+                    "sparsification_density": sparsification_density,
+                    "dare_dampening": dare_dampening,
+                    "merge_refinement": merge_refinement,
+                    "strategy_set": strategy_set,
+                    "architecture_preset": architecture_preset,
+                    "decision_smoothing": decision_smoothing,
+                    "smooth_slerp_gate": smooth_slerp_gate,
+                    "cache_patches": cache_patches,
+                    "free_vram_between_passes": free_vram_between_passes,
+                    "vram_budget": vram_budget,
+                }
+                return self._execute_merge_tree(
+                    tree, active_loras, model, clip, output_strength, **merge_kwargs)
 
         # Single LoRA: skip analysis, apply directly via ComfyUI's standard
         # additive LoRA application (faster than diff-based pipeline).
@@ -6219,6 +6270,137 @@ class LoRAOptimizer(_LoRAMergeBase):
         logging.info(f"[LoRA Optimizer] Done! {processed_keys} keys processed ({time.time() - t_start:.1f}s total)")
 
         return (new_model, new_clip, report, None, lora_data)
+
+    # ------------------------------------------------------------------
+    #  Merge-formula tree executor
+    # ------------------------------------------------------------------
+
+    def _execute_merge_tree(self, tree, normalized_stack, model, clip, output_strength, **kwargs):
+        """
+        Execute a merge formula tree leaf-to-root.
+        Each sub-group is a full optimize_merge call.
+        Returns the same 5-tuple as optimize_merge.
+        """
+        # Collect the final flat stack by recursively resolving groups
+        final_stack, sub_reports = self._resolve_tree_to_stack(
+            tree, normalized_stack, model, clip, **kwargs)
+
+        # Final merge with the resolved stack
+        result = self.optimize_merge(model, final_stack, output_strength, clip=clip, **kwargs)
+
+        # Prepend sub-reports to the final report
+        if sub_reports:
+            model_out, clip_out, report, tuner_data, lora_data = result
+            separator = "\n" + "=" * 50 + "\n"
+            sub_section = separator.join(sub_reports)
+            report = (
+                "MERGE FORMULA SUB-MERGE REPORTS\n"
+                + separator + sub_section + separator
+                + "\nFINAL MERGE REPORT:\n" + report
+            )
+            result = (model_out, clip_out, report, tuner_data, lora_data)
+
+        return result
+
+    def _resolve_tree_to_stack(self, tree, normalized_stack, model, clip, **kwargs):
+        """
+        Recursively resolve a merge tree into a flat LoRA stack.
+        Groups are merged into virtual LoRAs; leaves reference the original stack.
+        Returns (resolved_stack, sub_reports).
+        """
+        sub_reports = []
+
+        if tree["type"] == "leaf":
+            item = dict(normalized_stack[tree["index"]])
+            if tree["weight"] is not None:
+                item["strength"] = tree["weight"]
+            return ([item], sub_reports)
+
+        # Group: resolve each child
+        resolved = []
+        for child in tree["children"]:
+            if child["type"] == "leaf":
+                item = dict(normalized_stack[child["index"]])
+                if child["weight"] is not None:
+                    item["strength"] = child["weight"]
+                resolved.append(item)
+            else:
+                # Sub-group: resolve recursively then merge
+                sub_stack, child_reports = self._resolve_tree_to_stack(
+                    child, normalized_stack, model, clip, **kwargs)
+                sub_reports.extend(child_reports)
+
+                if len(sub_stack) >= 2:
+                    # Merge this sub-group via full pipeline
+                    try:
+                        sub_result = self.optimize_merge(
+                            model, sub_stack, 1.0, clip=clip, **kwargs)
+                        sub_model, sub_clip, sub_report, _, _ = sub_result
+                        sub_reports.append(sub_report)
+
+                        # Extract patches as virtual LoRA
+                        virtual = self._model_to_virtual_lora(
+                            model, sub_model, clip, sub_clip, child)
+                        if child["weight"] is not None:
+                            virtual["strength"] = child["weight"]
+                        resolved.append(virtual)
+                    except Exception as e:
+                        logging.warning(
+                            f"[LoRA Optimizer] Sub-merge failed: {e} — "
+                            "falling back to flat merge for this sub-group")
+                        for item in sub_stack:
+                            resolved.append(item)
+                elif len(sub_stack) == 1:
+                    item = sub_stack[0]
+                    if child["weight"] is not None:
+                        item["strength"] = child["weight"]
+                    resolved.append(item)
+
+        return (resolved, sub_reports)
+
+    @staticmethod
+    def _model_to_virtual_lora(base_model, patched_model, base_clip, patched_clip, tree_node):
+        """
+        Extract the difference between base and patched models as a virtual LoRA dict.
+        ComfyUI's model patcher stores patches internally — we extract them.
+        """
+        virtual_lora = {}
+
+        # Extract model patches from the patched model's patcher
+        if patched_model is not None and patched_model is not base_model:
+            patcher = patched_model
+            if hasattr(patcher, 'patches'):
+                for key, patch_list in patcher.patches.items():
+                    if patch_list:
+                        virtual_lora[key] = patch_list[-1]  # Latest patch
+            elif hasattr(patcher, 'model') and hasattr(patcher.model, 'patches'):
+                for key, patch_list in patcher.model.patches.items():
+                    if patch_list:
+                        virtual_lora[key] = patch_list[-1]
+
+        # Extract CLIP patches similarly
+        if patched_clip is not None and patched_clip is not base_clip:
+            clip_patcher = patched_clip
+            if hasattr(clip_patcher, 'patches'):
+                for key, patch_list in clip_patcher.patches.items():
+                    if patch_list:
+                        virtual_lora[key] = patch_list[-1]
+
+        # Build label from tree
+        def _tree_label(node):
+            if node["type"] == "leaf":
+                return str(node["index"] + 1)
+            return "(" + "+".join(_tree_label(c) for c in node["children"]) + ")"
+
+        return {
+            "name": _tree_label(tree_node),
+            "lora": virtual_lora,
+            "strength": 1.0,
+            "clip_strength": None,
+            "conflict_mode": "all",
+            "key_filter": "all",
+            "metadata": {},
+        }
 
 
 class LoRAMergeSettings:

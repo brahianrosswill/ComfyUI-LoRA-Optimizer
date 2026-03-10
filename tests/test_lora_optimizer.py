@@ -766,5 +766,87 @@ class LoRASettingsNodeTests(unittest.TestCase):
         self.assertFalse(has_formula)
 
 
+    # ------------------------------------------------------------------
+    #  Merge formula tree executor + optimize_merge integration
+    # ------------------------------------------------------------------
+
+    def test_normalize_stack_filters_formula_metadata(self):
+        """_normalize_stack filters out formula metadata entries."""
+        stack = [
+            {"name": "a", "lora": {}, "strength": 1.0},
+            {"_merge_formula": "(1+2)"},
+            {"name": "b", "lora": {}, "strength": 1.0},
+        ]
+        opt = lora_optimizer.LoRAOptimizer()
+        result = opt._normalize_stack(stack)
+        self.assertEqual(len(result), 2)
+        names = [item["name"] for item in result]
+        self.assertEqual(names, ["a", "b"])
+
+    def test_optimize_merge_extracts_formula_metadata(self):
+        """optimize_merge strips formula metadata before normalization."""
+        stack = [
+            {"name": "a", "lora": {"key1": ("diff", (torch.randn(4, 4),))}, "strength": 1.0},
+            {"name": "b", "lora": {"key1": ("diff", (torch.randn(4, 4),))}, "strength": 1.0},
+            {"_merge_formula": "1 + 2"},
+        ]
+        opt = lora_optimizer.LoRAOptimizer()
+        # model=None → optimize_merge returns early with a report (no model to patch)
+        result = opt.optimize_merge(None, stack, 1.0)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 5)  # 5-tuple
+
+    def test_optimize_merge_invalid_formula_falls_back(self):
+        """Invalid formula logs a warning and falls back to flat merge."""
+        stack = [
+            {"name": "a", "lora": {"key1": ("diff", (torch.randn(4, 4),))}, "strength": 1.0},
+            {"name": "b", "lora": {"key1": ("diff", (torch.randn(4, 4),))}, "strength": 1.0},
+            {"_merge_formula": "((1+2"},  # malformed
+        ]
+        opt = lora_optimizer.LoRAOptimizer()
+        result = opt.optimize_merge(None, stack, 1.0)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 5)
+
+    def test_model_to_virtual_lora_label(self):
+        """_model_to_virtual_lora produces correct tree labels."""
+        tree_node = {
+            "type": "group",
+            "weight": None,
+            "children": [
+                {"type": "leaf", "index": 0, "weight": None},
+                {"type": "leaf", "index": 1, "weight": None},
+            ],
+        }
+        virtual = lora_optimizer.LoRAOptimizer._model_to_virtual_lora(
+            None, None, None, None, tree_node)
+        self.assertEqual(virtual["name"], "(1+2)")
+        self.assertEqual(virtual["strength"], 1.0)
+        self.assertIsInstance(virtual["lora"], dict)
+
+    def test_resolve_tree_to_stack_flat(self):
+        """_resolve_tree_to_stack resolves a flat group to the original items."""
+        opt = lora_optimizer.LoRAOptimizer()
+        normalized = [
+            {"name": "a", "lora": {}, "strength": 0.8, "clip_strength": None,
+             "conflict_mode": "all", "key_filter": "all", "metadata": {}},
+            {"name": "b", "lora": {}, "strength": 0.6, "clip_strength": None,
+             "conflict_mode": "all", "key_filter": "all", "metadata": {}},
+        ]
+        tree = {
+            "type": "group",
+            "weight": None,
+            "children": [
+                {"type": "leaf", "index": 0, "weight": None},
+                {"type": "leaf", "index": 1, "weight": 0.5},
+            ],
+        }
+        resolved, reports = opt._resolve_tree_to_stack(tree, normalized, None, None)
+        self.assertEqual(len(resolved), 2)
+        self.assertEqual(resolved[0]["strength"], 0.8)  # unchanged
+        self.assertEqual(resolved[1]["strength"], 0.5)  # overridden by weight
+        self.assertEqual(reports, [])
+
+
 if __name__ == "__main__":
     unittest.main()
