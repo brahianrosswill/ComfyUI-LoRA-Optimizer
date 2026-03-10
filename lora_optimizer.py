@@ -1592,7 +1592,7 @@ class _LoRAMergeBase:
                         raw_contributors.add(i)
                         rank_sum += 1
                         if storage_dtype is None:
-                            storage_dtype = diff.dtype
+                            storage_dtype = raw.dtype if isinstance(raw, torch.Tensor) else diff.dtype
                         diff_accum = diff
                 if diff_accum is not None:
                     aggregated[i] = diff_accum
