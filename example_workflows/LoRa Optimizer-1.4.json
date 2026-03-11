@@ -1,8 +1,8 @@
 {
   "id": "9ae6082b-c7f4-433c-9971-7a8f65a3ea65",
   "revision": 0,
-  "last_node_id": 780,
-  "last_link_id": 1700,
+  "last_node_id": 783,
+  "last_link_id": 1703,
   "nodes": [
     {
       "id": 533,
@@ -16,7 +16,7 @@
         26
       ],
       "flags": {},
-      "order": 58,
+      "order": 62,
       "mode": 0,
       "inputs": [
         {
@@ -57,7 +57,7 @@
         26
       ],
       "flags": {},
-      "order": 65,
+      "order": 68,
       "mode": 0,
       "inputs": [
         {
@@ -97,7 +97,7 @@
         26
       ],
       "flags": {},
-      "order": 59,
+      "order": 63,
       "mode": 0,
       "inputs": [
         {
@@ -138,7 +138,7 @@
         46
       ],
       "flags": {},
-      "order": 77,
+      "order": 80,
       "mode": 0,
       "inputs": [
         {
@@ -185,7 +185,7 @@
         82
       ],
       "flags": {},
-      "order": 75,
+      "order": 78,
       "mode": 0,
       "inputs": [
         {
@@ -235,7 +235,7 @@
       "flags": {
         "collapsed": false
       },
-      "order": 73,
+      "order": 76,
       "mode": 0,
       "inputs": [
         {
@@ -282,7 +282,7 @@
         26
       ],
       "flags": {},
-      "order": 38,
+      "order": 40,
       "mode": 0,
       "inputs": [
         {
@@ -323,7 +323,7 @@
         26
       ],
       "flags": {},
-      "order": 29,
+      "order": 31,
       "mode": 0,
       "inputs": [
         {
@@ -364,7 +364,7 @@
         26
       ],
       "flags": {},
-      "order": 46,
+      "order": 47,
       "mode": 0,
       "inputs": [
         {
@@ -404,7 +404,7 @@
         26
       ],
       "flags": {},
-      "order": 66,
+      "order": 69,
       "mode": 0,
       "inputs": [
         {
@@ -444,7 +444,7 @@
         26
       ],
       "flags": {},
-      "order": 68,
+      "order": 71,
       "mode": 0,
       "inputs": [
         {
@@ -484,7 +484,7 @@
         26
       ],
       "flags": {},
-      "order": 42,
+      "order": 44,
       "mode": 0,
       "inputs": [
         {
@@ -524,7 +524,7 @@
         631.7287844283444
       ],
       "flags": {},
-      "order": 79,
+      "order": 82,
       "mode": 0,
       "inputs": [
         {
@@ -613,7 +613,7 @@
         26
       ],
       "flags": {},
-      "order": 40,
+      "order": 42,
       "mode": 0,
       "inputs": [
         {
@@ -656,7 +656,7 @@
         668.0457142857142
       ],
       "flags": {},
-      "order": 67,
+      "order": 70,
       "mode": 0,
       "inputs": [
         {
@@ -741,13 +741,13 @@
         -256
       ],
       "size": [
-        204.0999984741211,
+        204.134765625,
         26
       ],
       "flags": {
         "collapsed": true
       },
-      "order": 60,
+      "order": 64,
       "mode": 0,
       "inputs": [
         {
@@ -792,7 +792,7 @@
         26
       ],
       "flags": {},
-      "order": 31,
+      "order": 33,
       "mode": 0,
       "inputs": [
         {
@@ -836,7 +836,7 @@
         672
       ],
       "flags": {},
-      "order": 83,
+      "order": 86,
       "mode": 0,
       "inputs": [
         {
@@ -870,7 +870,7 @@
         26
       ],
       "flags": {},
-      "order": 62,
+      "order": 65,
       "mode": 0,
       "inputs": [
         {
@@ -911,7 +911,7 @@
         26
       ],
       "flags": {},
-      "order": 69,
+      "order": 72,
       "mode": 0,
       "inputs": [
         {
@@ -951,7 +951,7 @@
         26
       ],
       "flags": {},
-      "order": 39,
+      "order": 41,
       "mode": 0,
       "inputs": [
         {
@@ -991,7 +991,7 @@
         46
       ],
       "flags": {},
-      "order": 78,
+      "order": 81,
       "mode": 0,
       "inputs": [
         {
@@ -1038,7 +1038,7 @@
         82
       ],
       "flags": {},
-      "order": 76,
+      "order": 79,
       "mode": 0,
       "inputs": [
         {
@@ -1088,7 +1088,7 @@
       "flags": {
         "collapsed": false
       },
-      "order": 74,
+      "order": 77,
       "mode": 0,
       "inputs": [
         {
@@ -1135,7 +1135,7 @@
         26
       ],
       "flags": {},
-      "order": 54,
+      "order": 53,
       "mode": 0,
       "inputs": [
         {
@@ -1176,7 +1176,7 @@
         26
       ],
       "flags": {},
-      "order": 61,
+      "order": 58,
       "mode": 0,
       "inputs": [
         {
@@ -1216,7 +1216,7 @@
         26
       ],
       "flags": {},
-      "order": 70,
+      "order": 73,
       "mode": 0,
       "inputs": [
         {
@@ -1256,7 +1256,7 @@
         26
       ],
       "flags": {},
-      "order": 71,
+      "order": 74,
       "mode": 0,
       "inputs": [
         {
@@ -1296,7 +1296,7 @@
         26
       ],
       "flags": {},
-      "order": 49,
+      "order": 50,
       "mode": 0,
       "inputs": [
         {
@@ -1336,7 +1336,7 @@
         631.7287844283444
       ],
       "flags": {},
-      "order": 80,
+      "order": 83,
       "mode": 0,
       "inputs": [
         {
@@ -1425,7 +1425,7 @@
         26
       ],
       "flags": {},
-      "order": 48,
+      "order": 49,
       "mode": 0,
       "inputs": [
         {
@@ -1468,7 +1468,7 @@
         668.0457142857142
       ],
       "flags": {},
-      "order": 72,
+      "order": 75,
       "mode": 0,
       "inputs": [
         {
@@ -1553,13 +1553,13 @@
         800
       ],
       "size": [
-        204.0999984741211,
+        204.134765625,
         26
       ],
       "flags": {
         "collapsed": true
       },
-      "order": 64,
+      "order": 67,
       "mode": 0,
       "inputs": [
         {
@@ -1604,7 +1604,7 @@
         26
       ],
       "flags": {},
-      "order": 41,
+      "order": 43,
       "mode": 0,
       "inputs": [
         {
@@ -1650,7 +1650,7 @@
       "flags": {
         "collapsed": false
       },
-      "order": 82,
+      "order": 85,
       "mode": 0,
       "inputs": [
         {
@@ -1686,40 +1686,6 @@
       "widgets_values": []
     },
     {
-      "id": 652,
-      "type": "PreviewImage",
-      "pos": [
-        1152,
-        800
-      ],
-      "size": [
-        992,
-        672
-      ],
-      "flags": {},
-      "order": 84,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 1429
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.15.1",
-        "Node name for S&R": "PreviewImage",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.7"
-        }
-      },
-      "widgets_values": []
-    },
-    {
       "id": 45,
       "type": "CLIPTextEncode",
       "pos": [
@@ -1733,7 +1699,7 @@
       "flags": {
         "collapsed": true
       },
-      "order": 52,
+      "order": 56,
       "mode": 0,
       "inputs": [
         {
@@ -1799,7 +1765,7 @@
       "flags": {
         "collapsed": true
       },
-      "order": 56,
+      "order": 60,
       "mode": 0,
       "inputs": [
         {
@@ -1865,7 +1831,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 25,
+      "order": 27,
       "mode": 0,
       "inputs": [
         {
@@ -1909,7 +1875,7 @@
         26
       ],
       "flags": {},
-      "order": 47,
+      "order": 48,
       "mode": 0,
       "inputs": [
         {
@@ -1950,7 +1916,7 @@
         26
       ],
       "flags": {},
-      "order": 63,
+      "order": 66,
       "mode": 0,
       "inputs": [
         {
@@ -1993,7 +1959,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 44,
+      "order": 51,
       "mode": 0,
       "inputs": [
         {
@@ -2035,7 +2001,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 26,
+      "order": 28,
       "mode": 0,
       "inputs": [
         {
@@ -2077,7 +2043,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 43,
+      "order": 45,
       "mode": 0,
       "inputs": [
         {
@@ -2119,7 +2085,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 30,
+      "order": 32,
       "mode": 0,
       "inputs": [
         {
@@ -2161,7 +2127,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 20,
+      "order": 22,
       "mode": 0,
       "inputs": [
         {
@@ -2204,7 +2170,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 28,
+      "order": 30,
       "mode": 0,
       "inputs": [
         {
@@ -2250,7 +2216,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 37,
+      "order": 39,
       "mode": 0,
       "inputs": [
         {
@@ -2293,7 +2259,7 @@
         60
       ],
       "flags": {},
-      "order": 55,
+      "order": 59,
       "mode": 0,
       "inputs": [
         {
@@ -2357,7 +2323,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 17,
+      "order": 19,
       "mode": 0,
       "inputs": [
         {
@@ -2400,7 +2366,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 33,
+      "order": 35,
       "mode": 0,
       "inputs": [
         {
@@ -2443,7 +2409,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 35,
+      "order": 37,
       "mode": 0,
       "inputs": [
         {
@@ -2488,7 +2454,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 34,
+      "order": 46,
       "mode": 0,
       "inputs": [
         {
@@ -2531,7 +2497,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 14,
+      "order": 16,
       "mode": 0,
       "inputs": [
         {
@@ -2563,36 +2529,6 @@
       }
     },
     {
-      "id": 713,
-      "type": "Note",
-      "pos": [
-        -1696,
-        1152
-      ],
-      "size": [
-        352,
-        320
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "title": "Additional notes LoRa AutoTuner",
-      "properties": {
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "version": "7.7",
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Tips:\n\n• cache_patches keeps the full sweep result in\n  RAM — switching output_mode or re-running with\n  same LoRAs is instant.\n\n• diff_cache_mode \"auto\" speeds up Phase 2 by\n  caching LoRA diffs between candidates. Uses RAM\n  up to diff_cache_ram_pct, then spills to disk.\n\n• scoring_svd adds effective rank scoring — more\n  thorough but much slower on large models. Leave\n  disabled unless you need it.\n\n• The tuner_data output can connect to a Merge\n  Selector node to try alternative ranked configs,\n  or to a LoRA Optimizer for the bridge workflow."
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
-    },
-    {
       "id": 711,
       "type": "Note",
       "pos": [
@@ -2606,7 +2542,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 1,
+      "order": 0,
       "mode": 0,
       "inputs": [],
       "outputs": [],
@@ -2638,7 +2574,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "inputs": [],
       "outputs": [],
@@ -2670,7 +2606,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -2701,76 +2637,6 @@
       "bgcolor": "#353"
     },
     {
-      "id": 709,
-      "type": "Note",
-      "pos": [
-        -2304,
-        128
-      ],
-      "size": [
-        352,
-        320
-      ],
-      "flags": {
-        "pinned": true
-      },
-      "order": 4,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "title": "Additional notes LoRa Optimizer",
-      "properties": {
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "version": "7.7",
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Tips:\n\n• cache_patches keeps the result in RAM — re-runs\n  are instant. Disable for large video models.\n\n• patch_compression \"smart\" shrinks memory with\n  no quality loss. Use \"aggressive\" to save more RAM.\n\n• normalize_keys should stay enabled — it makes\n  LoRAs from different trainers compatible.\n\n• strategy_set \"full\" is the latest. Use\n  \"basic\" only if comparing with older results.\n\n• For edit/distillation/DPO LoRAs, use \n  \"additive\" mode or apply them via a\n  standard Load LoRA node instead."
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
-    },
-    {
-      "id": 657,
-      "type": "PreviewAny",
-      "pos": [
-        -1312,
-        864
-      ],
-      "size": [
-        416,
-        640
-      ],
-      "flags": {},
-      "order": 57,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "source",
-          "type": "*",
-          "link": 1640
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.15.1",
-        "Node name for S&R": "PreviewAny",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.7"
-        }
-      },
-      "widgets_values": [
-        null,
-        null,
-        null
-      ]
-    },
-    {
       "id": 47,
       "type": "ModelSamplingAuraFlow",
       "pos": [
@@ -2782,7 +2648,7 @@
         60
       ],
       "flags": {},
-      "order": 51,
+      "order": 55,
       "mode": 0,
       "inputs": [
         {
@@ -2846,7 +2712,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 18,
+      "order": 20,
       "mode": 0,
       "inputs": [
         {
@@ -2888,7 +2754,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 21,
+      "order": 23,
       "mode": 0,
       "inputs": [
         {
@@ -2934,7 +2800,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 27,
+      "order": 29,
       "mode": 0,
       "inputs": [
         {
@@ -2948,7 +2814,8 @@
           "name": "",
           "type": "CLIP",
           "links": [
-            1506
+            1506,
+            1701
           ]
         }
       ],
@@ -2976,7 +2843,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 32,
+      "order": 34,
       "mode": 0,
       "inputs": [
         {
@@ -3021,7 +2888,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 36,
+      "order": 38,
       "mode": 0,
       "inputs": [
         {
@@ -3061,7 +2928,7 @@
         640
       ],
       "flags": {},
-      "order": 53,
+      "order": 57,
       "mode": 0,
       "inputs": [
         {
@@ -3099,7 +2966,7 @@
         162
       ],
       "flags": {},
-      "order": 50,
+      "order": 54,
       "mode": 0,
       "inputs": [
         {
@@ -3191,7 +3058,7 @@
         202
       ],
       "flags": {},
-      "order": 5,
+      "order": 3,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3224,124 +3091,6 @@
       ]
     },
     {
-      "id": 752,
-      "type": "LoRAAutoTunerSettings",
-      "pos": [
-        -1984,
-        608
-      ],
-      "size": [
-        274.2666702270508,
-        294
-      ],
-      "flags": {},
-      "order": 15,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "merge_settings",
-          "shape": 7,
-          "type": "MERGE_SETTINGS",
-          "link": 1670
-        },
-        {
-          "name": "evaluator",
-          "shape": 7,
-          "type": "AUTOTUNER_EVALUATOR",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "settings",
-          "type": "OPTIMIZER_SETTINGS",
-          "links": [
-            1671
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-lora-optimizer",
-        "ver": "dd42043766c7d63a190c85b06f14085b7ef9b195",
-        "Node name for S&R": "LoRAAutoTunerSettings",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.7"
-        }
-      },
-      "widgets_values": [
-        3,
-        "disabled",
-        "gpu",
-        "turbo",
-        "v2",
-        "auto",
-        0.5,
-        "disabled"
-      ]
-    },
-    {
-      "id": 753,
-      "type": "LoRAOptimizerSettings",
-      "pos": [
-        -1952,
-        -448
-      ],
-      "size": [
-        320.8833312988281,
-        294
-      ],
-      "flags": {},
-      "order": 16,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "merge_settings",
-          "shape": 7,
-          "type": "MERGE_SETTINGS",
-          "link": 1674
-        },
-        {
-          "name": "merge_strategy_override",
-          "shape": 7,
-          "type": "STRING",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "settings",
-          "type": "OPTIMIZER_SETTINGS",
-          "links": [
-            1673
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-lora-optimizer",
-        "ver": "dd42043766c7d63a190c85b06f14085b7ef9b195",
-        "Node name for S&R": "LoRAOptimizerSettings",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.7"
-        }
-      },
-      "widgets_values": [
-        "enabled",
-        "per_prefix",
-        "none",
-        "disabled",
-        0.7,
-        0,
-        "smart",
-        "gpu",
-        "disabled",
-        "basic"
-      ]
-    },
-    {
       "id": 754,
       "type": "LoRAMergeSettings",
       "pos": [
@@ -3353,7 +3102,7 @@
         202
       ],
       "flags": {},
-      "order": 6,
+      "order": 4,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3399,13 +3148,13 @@
       "flags": {
         "pinned": true
       },
-      "order": 24,
+      "order": 36,
       "mode": 0,
       "inputs": [
         {
           "name": "",
           "type": "*",
-          "link": 1694
+          "link": 1703
         }
       ],
       "outputs": [
@@ -3441,7 +3190,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 7,
+      "order": 5,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3500,7 +3249,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 8,
+      "order": 6,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3560,7 +3309,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 22,
+      "order": 24,
       "mode": 0,
       "inputs": [
         {
@@ -3602,7 +3351,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 9,
+      "order": 7,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3644,7 +3393,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 19,
+      "order": 21,
       "mode": 0,
       "inputs": [
         {
@@ -3689,7 +3438,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 10,
+      "order": 8,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3745,7 +3494,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 11,
+      "order": 9,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3793,7 +3542,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 12,
+      "order": 10,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -3840,7 +3589,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 23,
+      "order": 25,
       "mode": 4,
       "inputs": [
         {
@@ -3873,12 +3622,12 @@
         }
       ],
       "properties": {
+        "cnr_id": "comfyui-lora-optimizer",
+        "ver": "66095dec68b6fd9e3d8797b49d651d84a4630eba",
         "createdGroupIds": [
           769,
           770
         ],
-        "cnr_id": "comfyui-lora-optimizer",
-        "ver": "66095dec68b6fd9e3d8797b49d651d84a4630eba",
         "Node name for S&R": "LoRACompatibilityAnalyzer",
         "ue_properties": {
           "widget_ue_connectable": {},
@@ -3905,7 +3654,7 @@
       "flags": {
         "pinned": true
       },
-      "order": 13,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
@@ -3921,7 +3670,7 @@
           "type": "LORA_STACK",
           "links": [
             1688,
-            1694
+            1702
           ]
         }
       ],
@@ -4026,7 +3775,7 @@
       "flags": {
         "collapsed": false
       },
-      "order": 81,
+      "order": 84,
       "mode": 0,
       "inputs": [
         {
@@ -4073,7 +3822,7 @@
         162
       ],
       "flags": {},
-      "order": 45,
+      "order": 52,
       "mode": 0,
       "inputs": [
         {
@@ -4090,7 +3839,7 @@
           "name": "clip",
           "shape": 7,
           "type": "CLIP",
-          "link": null
+          "link": 1701
         },
         {
           "name": "tuner_data",
@@ -4152,6 +3901,350 @@
         -1,
         1
       ]
+    },
+    {
+      "id": 652,
+      "type": "PreviewImage",
+      "pos": [
+        1152,
+        800
+      ],
+      "size": [
+        992,
+        672
+      ],
+      "flags": {},
+      "order": 87,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1429
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.15.1",
+        "Node name for S&R": "PreviewImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.7"
+        }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 753,
+      "type": "LoRAOptimizerSettings",
+      "pos": [
+        -1952,
+        -448
+      ],
+      "size": [
+        320.8833312988281,
+        294
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "merge_settings",
+          "shape": 7,
+          "type": "MERGE_SETTINGS",
+          "link": 1674
+        },
+        {
+          "name": "merge_strategy_override",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "settings",
+          "type": "OPTIMIZER_SETTINGS",
+          "links": [
+            1673
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-lora-optimizer",
+        "ver": "dd42043766c7d63a190c85b06f14085b7ef9b195",
+        "Node name for S&R": "LoRAOptimizerSettings",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.7"
+        }
+      },
+      "widgets_values": [
+        "enabled",
+        "per_prefix",
+        "none",
+        "disabled",
+        0.7,
+        0,
+        "smart",
+        "gpu",
+        "disabled",
+        "basic"
+      ]
+    },
+    {
+      "id": 752,
+      "type": "LoRAAutoTunerSettings",
+      "pos": [
+        -1984,
+        608
+      ],
+      "size": [
+        274.2666702270508,
+        294
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "merge_settings",
+          "shape": 7,
+          "type": "MERGE_SETTINGS",
+          "link": 1670
+        },
+        {
+          "name": "evaluator",
+          "shape": 7,
+          "type": "AUTOTUNER_EVALUATOR",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "settings",
+          "type": "OPTIMIZER_SETTINGS",
+          "links": [
+            1671
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-lora-optimizer",
+        "ver": "dd42043766c7d63a190c85b06f14085b7ef9b195",
+        "Node name for S&R": "LoRAAutoTunerSettings",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.7"
+        }
+      },
+      "widgets_values": [
+        3,
+        "enabled",
+        "gpu",
+        "turbo",
+        "v2",
+        "auto",
+        0.5,
+        "disabled"
+      ]
+    },
+    {
+      "id": 709,
+      "type": "Note",
+      "pos": [
+        -2304,
+        -64
+      ],
+      "size": [
+        1024,
+        320
+      ],
+      "flags": {
+        "pinned": true
+      },
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "Additional notes LoRa Optimizer",
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.7",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "Tips:\n\n• cache_patches keeps the result in RAM — re-runs\n  are instant. Disable for large video models.\n\n• patch_compression \"smart\" shrinks memory with\n  no quality loss. Use \"aggressive\" to save more RAM.\n\n• normalize_keys should stay enabled — it makes\n  LoRAs from different trainers compatible.\n\n• strategy_set picks which merge strategies are\n  available — not a quality ranking. \"full\" has\n  the most options. \"no_slerp\" helps when SLERP\n  over-blends. \"basic\" uses fewer strategies and\n  can outperform full when the extra options add\n  noise.\n\n• merge_refinement is not a quality ladder either.\n  \"none\" is best for low-conflict LoRAs. \"refine\"\n  and \"full\" help high-conflict merges but can\n  over-smooth easy ones.\n\n• For edit/distillation/DPO LoRAs, use \n  \"additive\" mode or apply them via a\n  standard Load LoRA node instead."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 657,
+      "type": "PreviewAny",
+      "pos": [
+        -1216,
+        864
+      ],
+      "size": [
+        416,
+        640
+      ],
+      "flags": {},
+      "order": 61,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 1640
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.15.1",
+        "Node name for S&R": "PreviewAny",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.7"
+        }
+      },
+      "widgets_values": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 713,
+      "type": "Note",
+      "pos": [
+        -2304,
+        960
+      ],
+      "size": [
+        992,
+        320
+      ],
+      "flags": {
+        "pinned": true
+      },
+      "order": 13,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "Additional notes LoRa AutoTuner",
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.7",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "Tips:\n\n• cache_patches keeps the full sweep result in\n  RAM — switching output_mode or re-running with\n  same LoRAs is instant.\n\n• diff_cache_mode \"auto\" speeds up Phase 2 by\n  caching LoRA diffs between candidates. Uses RAM\n  up to diff_cache_ram_pct, then spills to disk.\n\n• scoring_svd adds effective rank scoring — more\n  thorough but much slower on large models. Leave\n  disabled unless you need it.\n\n• The tuner_data output can connect to a Merge\n  Selector node to try alternative ranked configs,\n  or to a LoRA Optimizer for the bridge workflow."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 781,
+      "type": "LoRAMergeFormula",
+      "pos": [
+        -4032,
+        384
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 26,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "lora_stack",
+          "type": "LORA_STACK",
+          "link": 1702
+        }
+      ],
+      "outputs": [
+        {
+          "name": "lora_stack",
+          "type": "LORA_STACK",
+          "links": [
+            1703
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-lora-optimizer",
+        "ver": "8fec5631085da5f27245ad2c2caaa5f9a6d5100a",
+        "Node name for S&R": "LoRAMergeFormula",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.7"
+        }
+      },
+      "widgets_values": [
+        "(3+2) + 1"
+      ]
+    },
+    {
+      "id": 782,
+      "type": "Note",
+      "pos": [
+        -4032,
+        480
+      ],
+      "size": [
+        256,
+        128
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "Formula syntax:\n  (A+B) + C  — merge A and B first,\n  then merge that result with C.\n  Numbers = LoRA position in stack.\n  Parentheses = sub-merge groups."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 783,
+      "type": "Note",
+      "pos": [
+        -4032,
+        128
+      ],
+      "size": [
+        288,
+        128
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "Merge Formula (optional)\n\nControls which LoRAs are merged\ntogether and in what order.\nLeave disconnected for default\n(all LoRAs merged at once)."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
     }
   ],
   "links": [
@@ -4956,14 +5049,6 @@
       "LORA_STACK"
     ],
     [
-      1694,
-      608,
-      0,
-      707,
-      0,
-      "LORA_STACK"
-    ],
-    [
       1699,
       737,
       0,
@@ -4978,6 +5063,30 @@
       45,
       0,
       "CLIP"
+    ],
+    [
+      1701,
+      625,
+      0,
+      737,
+      2,
+      "CLIP"
+    ],
+    [
+      1702,
+      608,
+      0,
+      781,
+      0,
+      "LORA_STACK"
+    ],
+    [
+      1703,
+      781,
+      0,
+      707,
+      0,
+      "LORA_STACK"
     ]
   ],
   "groups": [
@@ -5015,10 +5124,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6115909044841931,
+      "scale": 0.6727499949326395,
       "offset": [
-        4591.2051871064505,
-        795.7750378275482
+        5404.0068933464245,
+        520.0429693014842
       ]
     },
     "frontendVersion": "1.39.19",
@@ -5037,18 +5146,13 @@
           -18
         ],
         "linkIds": [
-          1688,
-          1694
+          1688
         ]
       }
     ],
     "linkExtensions": [
       {
         "id": 1688,
-        "parentId": 1
-      },
-      {
-        "id": 1694,
         "parentId": 1
       }
     ]
