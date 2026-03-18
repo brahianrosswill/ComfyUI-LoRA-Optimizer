@@ -6778,6 +6778,11 @@ class LoRAAutoTunerSettings:
                                "read_only: Use cached results but don't save new ones.\n"
                                "clear_and_run: Delete cached entry and re-tune from scratch."
                 }),
+                "selection": ("INT", {
+                    "default": 1, "min": 1, "max": 10, "step": 1,
+                    "tooltip": "Which ranked configuration to apply (1 = top-ranked). "
+                               "Change this to try a different config without re-running the full sweep."
+                }),
             },
             "optional": {
                 "merge_settings": ("MERGE_SETTINGS", {
@@ -6801,7 +6806,7 @@ class LoRAAutoTunerSettings:
     def build_settings(self, top_n, scoring_svd, scoring_device, scoring_speed,
                        scoring_formula,
                        diff_cache_mode, diff_cache_ram_pct, record_dataset,
-                       memory_mode="disabled",
+                       memory_mode="disabled", selection=1,
                        merge_settings=None, evaluator=None):
         ms = merge_settings if merge_settings is not None else LoRAMergeSettings._DEFAULTS
         return ({
@@ -6824,6 +6829,7 @@ class LoRAAutoTunerSettings:
             "record_dataset": record_dataset,
             "evaluator": evaluator,
             "memory_mode": memory_mode,
+            "selection": selection,
         },)
 
 
@@ -6957,6 +6963,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                     record_dataset=settings["record_dataset"],
                     evaluator=settings.get("evaluator"),
                     memory_mode=settings.get("memory_mode", "disabled"),
+                    selection=settings.get("selection", 1),
                 )
                 # Map 6-value AutoTuner return to 5-value Simple return
                 # (model, clip, report, analysis_report, tuner_data, lora_data)
@@ -7138,6 +7145,11 @@ class LoRAAutoTuner(LoRAOptimizer):
                                "Cache key uses LoRA names + strengths (order-independent) and tuning settings. "
                                "Does not track LoRA file contents — if you retrain a LoRA with the same filename, use clear_and_run."
                 }),
+                "selection": ("INT", {
+                    "default": 1, "min": 1, "max": 10, "step": 1,
+                    "tooltip": "Which ranked configuration to apply (1 = top-ranked). "
+                               "Change this to try a different config without re-running the full sweep."
+                }),
             },
         }
 
@@ -7248,7 +7260,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.info("[AutoTuner Memory] Cleared all memory files")
 
     def _build_memory_hit_report(self, lora_hash, tuner_data, output_strength,
-                                 scoring_speed="full"):
+                                 scoring_speed="full", applied_rank=1):
         """Build report for a memory cache hit."""
         banner = (
             "=" * 54 + "\n"
@@ -7260,7 +7272,7 @@ class LoRAAutoTuner(LoRAOptimizer):
         results = tuner_data["top_n"]
         report = self._build_autotuner_report(
             results, tuner_data["analysis_summary"], output_strength,
-            scoring_speed=scoring_speed)
+            scoring_speed=scoring_speed, applied_rank=applied_rank)
         return banner + report
 
     def auto_tune(self, model, lora_stack, output_strength, clip=None,
@@ -7272,7 +7284,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                   diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0,
                   scoring_speed="full", scoring_formula="v2", output_mode="merge",
                   decision_smoothing=0.25, smooth_slerp_gate=False,
-                  memory_mode="disabled",
+                  memory_mode="disabled", selection=1,
                   _is_sub_merge=False, _suppress_pbar=False):
         import hashlib, json
 
@@ -7369,6 +7381,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                         decision_smoothing=decision_smoothing,
                         smooth_slerp_gate=smooth_slerp_gate,
                         memory_mode=memory_mode,
+                        selection=selection,
                         _is_sub_merge=_is_sub_merge,
                         _suppress_pbar=_suppress_pbar,
                     )
@@ -7434,7 +7447,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             f"{lora_hash}|os={output_strength}|csm={clip_strength_multiplier}"
             f"|top_n={top_n}|nk={normalize_keys}|ss={scoring_svd}"
             f"|ap={architecture_preset}|vb={vram_budget}"
-            f"|spd={scoring_speed}|mid={id(model)}|asf={auto_strength_floor}|ds={decision_smoothing}|eh={evaluator_hash}".encode()
+            f"|spd={scoring_speed}|mid={id(model)}|asf={auto_strength_floor}|ds={decision_smoothing}|eh={evaluator_hash}"
+            f"|sel={selection}".encode()
         ).hexdigest()[:16]
         if cache_patches == "enabled" and hasattr(self, '_autotuner_cache') and at_cache_key in self._autotuner_cache:
             cached_result, cached_mode = self._autotuner_cache[at_cache_key]
@@ -7473,9 +7487,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     if len(cached_tuner_data["top_n"]) > top_n:
                         cached_tuner_data["top_n"] = cached_tuner_data["top_n"][:top_n]
 
+                    sel_idx = min(selection, len(cached_tuner_data["top_n"])) - 1
                     report = self._build_memory_hit_report(
                         memory_lora_hash, cached_tuner_data, output_strength,
-                        scoring_speed=scoring_speed)
+                        scoring_speed=scoring_speed, applied_rank=sel_idx + 1)
 
                     if output_mode == "tuning_only":
                         result = (model, clip, report, "", cached_tuner_data, None)
@@ -7485,8 +7500,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                             self._autotuner_cache[at_cache_key] = (result, "tuning_only")
                         return result
 
-                    # Replay the rank-1 config via optimize_merge
-                    config = cached_tuner_data["top_n"][0]["config"]
+                    # Replay the selected config via optimize_merge
+                    config = cached_tuner_data["top_n"][sel_idx]["config"]
                     strategy_override = (config["merge_mode"]
                                          if config["optimization_mode"] == "global" else "")
                     merged_model, merged_clip, _replay_report, _, lora_data = super().optimize_merge(
@@ -7940,7 +7955,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             })
 
         # Final full merge when subsampling was used
-        if use_subsampling and best_config is not None and output_mode != "tuning_only":
+        # Skip if selection != 1 — the replay merge below will handle it
+        if use_subsampling and best_config is not None and output_mode != "tuning_only" and selection == 1:
             logging.info(f"[LoRA AutoTuner] Final merge with winning config "
                          f"({best_config['merge_mode']}, {best_config['merge_refinement']})...")
             t_final = time.time()
@@ -8047,11 +8063,15 @@ class LoRAAutoTuner(LoRAOptimizer):
             self._memory_save(memory_lora_hash, settings_hash,
                               memory_settings, active_loras, tuner_data)
 
+        # Clamp selection to available results
+        sel_idx = min(selection, len(results)) - 1
+
         # Build report
         suggested_max = best_lora_data.get("suggested_max_strength") if best_lora_data else None
         report = self._build_autotuner_report(
             results, tuner_data["analysis_summary"], output_strength,
-            suggested_max_strength=suggested_max, scoring_speed=scoring_speed)
+            suggested_max_strength=suggested_max, scoring_speed=scoring_speed,
+            applied_rank=sel_idx + 1)
 
         if output_mode == "tuning_only":
             for r in results:
@@ -8070,16 +8090,54 @@ class LoRAAutoTuner(LoRAOptimizer):
                 self._autotuner_cache = {}
             return result
 
-        # Extract return values, then free heavy intermediates
-        ret_model = best["merged_model"]
-        ret_clip = best["merged_clip"]
-        ret_lora_data = best.get("lora_data")
-        ret_analysis_report = best_analysis_report
-        for r in results:
-            r.pop("merged_model", None)
-            r.pop("merged_clip", None)
-            r.pop("lora_data", None)
-        del results, best, best_model, best_clip, best_lora_data, best_analysis_report, active_loras
+        # If selection != 1, replay-merge the selected config (rank-1 model is
+        # the only one kept in memory during the sweep)
+        if sel_idx > 0:
+            sel_config = results[sel_idx]["config"]
+            strategy_override = (sel_config["merge_mode"]
+                                 if sel_config["optimization_mode"] == "global" else "")
+            # Free the rank-1 model before replaying
+            del best_model, best_clip, best_lora_data, best_analysis_report
+            for r in results:
+                r.pop("merged_model", None)
+                r.pop("merged_clip", None)
+                r.pop("lora_data", None)
+            gc.collect()
+            if use_gpu:
+                torch.cuda.empty_cache()
+            logging.info(f"[LoRA AutoTuner] Replaying selected config #{sel_idx + 1}")
+            ret_model, ret_clip, ret_analysis_report, _, ret_lora_data = super().optimize_merge(
+                model, lora_stack, output_strength,
+                clip=clip,
+                clip_strength_multiplier=clip_strength_multiplier,
+                auto_strength=sel_config["auto_strength"],
+                auto_strength_floor=tuner_data.get("auto_strength_floor", auto_strength_floor),
+                optimization_mode=sel_config["optimization_mode"],
+                sparsification=sel_config["sparsification"],
+                sparsification_density=sel_config["sparsification_density"],
+                dare_dampening=sel_config["dare_dampening"],
+                merge_refinement=sel_config["merge_refinement"],
+                merge_strategy_override=strategy_override,
+                strategy_set=sel_config.get("strategy_set", "full"),
+                normalize_keys=tuner_data.get("normalize_keys", normalize_keys),
+                architecture_preset=tuner_data.get("architecture_preset", architecture_preset),
+                decision_smoothing=tuner_data.get("decision_smoothing", decision_smoothing),
+                smooth_slerp_gate=smooth_slerp_gate,
+                cache_patches=cache_patches,
+                vram_budget=vram_budget,
+            )
+            del results, best, active_loras
+        else:
+            # Extract return values, then free heavy intermediates
+            ret_model = best["merged_model"]
+            ret_clip = best["merged_clip"]
+            ret_lora_data = best.get("lora_data")
+            ret_analysis_report = best_analysis_report
+            for r in results:
+                r.pop("merged_model", None)
+                r.pop("merged_clip", None)
+                r.pop("lora_data", None)
+            del results, best, best_model, best_clip, best_lora_data, best_analysis_report, active_loras
         gc.collect()
         if use_gpu:
             torch.cuda.empty_cache()
@@ -8258,7 +8316,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.warning(f"[LoRA AutoTuner] Failed to save dataset entry: {e}")
 
     def _build_autotuner_report(self, results, analysis_summary, output_strength,
-                               suggested_max_strength=None, scoring_speed="full"):
+                               suggested_max_strength=None, scoring_speed="full",
+                               applied_rank=1):
         """Build the ranked report for AutoTuner results."""
         lines = []
         lines.append("=" * 54)
@@ -8289,8 +8348,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             lines.append("")
             c = r["config"]
             m = r["metrics"]
-            marker = " (applied to output)" if r["rank"] == 1 else ""
-            star = " \u2605" if r["rank"] == 1 else ""
+            marker = " (applied to output)" if r["rank"] == applied_rank else ""
+            star = " \u2605" if r["rank"] == applied_rank else ""
             score_line = f"  #{r['rank']}{star}{marker}          Score: {r['score_measured']:.2f}"
             if r.get("score_external") is not None:
                 score_line += f" (internal {r['score_measured']:.2f}, external {r['score_external']:.2f})"
@@ -8317,8 +8376,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                 lines.append(f"    Sparsity: {m.get('sparsity_mean', 0):.1%}{energy_label}")
 
         lines.append("")
-        lines.append("  To use a different config: connect TUNER_DATA")
-        lines.append("  to a Merge Selector node and set selection=N")
+        lines.append("  To use a different config: change selection=N")
+        lines.append("  or connect TUNER_DATA to a Merge Selector node")
         lines.append("=" * 54)
         return "\n".join(lines)
 
@@ -8331,12 +8390,13 @@ class LoRAAutoTuner(LoRAOptimizer):
                    diff_cache_mode="disabled", diff_cache_ram_pct=0.5,
                    vram_budget=0.0, scoring_speed="full", scoring_formula="v2",
                    output_mode="merge", decision_smoothing=0.25,
-                   smooth_slerp_gate=False, memory_mode="disabled"):
+                   smooth_slerp_gate=False, memory_mode="disabled", selection=1):
         evaluator_hash = cls._stable_data_hash(evaluator) if evaluator is not None else ""
         return (id(model), id(lora_stack), output_strength, clip_strength_multiplier, top_n,
                 normalize_keys, scoring_svd, scoring_device, architecture_preset,
                 vram_budget, record_dataset, scoring_speed, scoring_formula, output_mode,
-                auto_strength_floor, decision_smoothing, evaluator_hash, memory_mode)
+                auto_strength_floor, decision_smoothing, evaluator_hash, memory_mode,
+                selection)
 
 
 class LoRAMergeSelector(LoRAOptimizer):
