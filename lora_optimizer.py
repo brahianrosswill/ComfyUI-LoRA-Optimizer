@@ -48,11 +48,13 @@ try:
     _kernel_mod = importlib.util.module_from_spec(_kernel_spec)
     _kernel_spec.loader.exec_module(_kernel_mod)
     _batched_svd = _kernel_mod.batched_svd
+    _batched_procrustes = _kernel_mod.batched_procrustes
     _HAS_SVD_KERNEL = True
     _HAS_TRITON = _kernel_mod.HAS_TRITON
     logging.info(f"[LoRA Optimizer] SVD kernel loaded (Triton={_HAS_TRITON})")
 except Exception as e:
     _batched_svd = None
+    _batched_procrustes = None
     _HAS_SVD_KERNEL = False
     _HAS_TRITON = False
     if _kernel_path and os.path.exists(_kernel_path):
@@ -2676,6 +2678,85 @@ class _LoRAMergeBase:
 
     @staticmethod
     @torch.no_grad()
+    def _procrustes_align(diffs_with_weights, compute_device=None, svd_device=None):
+        """
+        Procrustes alignment: rotate each LoRA diff toward the weighted-mean
+        reference via optimal rotation. Uses batched_procrustes from kernel.py
+        with whiten=False so Frobenius norms are preserved (pure rotation).
+
+        Treats each diff as (n_samples=out_dim, N=in_dim): aligns input-space
+        directions. Batches all diffs into a single (B, out_dim, in_dim) call.
+        """
+        if _batched_procrustes is None:
+            return diffs_with_weights
+        if len(diffs_with_weights) < 2:
+            return diffs_with_weights
+
+        ref = diffs_with_weights[0][0]
+        if ref.dim() < 2 or min(ref.shape) < 2:
+            return diffs_with_weights
+
+        n = len(diffs_with_weights)
+        out_dim = ref.shape[0]
+        in_dim = ref.reshape(out_dim, -1).shape[1]
+        original_shape = ref.shape
+        original_dtype = ref.dtype
+
+        dev = svd_device if svd_device is not None else (compute_device or ref.device)
+        output_device = compute_device if compute_device is not None else ref.device
+
+        # Weighted mean reference
+        total_w = sum(abs(w) for _, w in diffs_with_weights)
+        if total_w < 1e-12:
+            return diffs_with_weights
+        ref_mat = sum(
+            d.reshape(out_dim, in_dim).to(device=dev, dtype=torch.float32) * (abs(w) / total_w)
+            for d, w in diffs_with_weights
+        )
+
+        source_batch = torch.stack([
+            d.reshape(out_dim, in_dim).to(device=dev, dtype=torch.float32)
+            for d, _ in diffs_with_weights
+        ], dim=0)
+        target_batch = ref_mat.unsqueeze(0).expand(n, -1, -1)
+
+        try:
+            # Get rotation from batched_procrustes, then apply to uncentered source.
+            # batched_procrustes centers internally, which corrupts LoRA diffs.
+            # We extract R and compute src @ R ourselves.
+            _, info = _batched_procrustes(
+                source_batch, target_batch, whiten=False)
+            R = info.get('rotation') if 'rotation' in info else info.get('rotation_k')
+            if R is None:
+                del source_batch, target_batch, ref_mat
+                return diffs_with_weights
+            if 'projection' in info:
+                # Subspace path: R_k is in projected space, need to lift back
+                P = info['projection']  # (B, N, k)
+                P_T = P.transpose(1, 2)
+                src_in = torch.bmm(source_batch, P)  # (B, out, k)
+                src_perp = source_batch - torch.bmm(src_in, P_T)
+                aligned_batch = torch.bmm(torch.bmm(src_in, R), P_T) + src_perp
+            else:
+                aligned_batch = torch.bmm(source_batch, R)
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
+            logging.warning(f"[LoRA Optimizer] Procrustes align failed ({e}), skipping")
+            del source_batch, target_batch, ref_mat
+            return diffs_with_weights
+        del source_batch, target_batch, ref_mat
+
+        result = []
+        for i, (_, w) in enumerate(diffs_with_weights):
+            aligned_diff = aligned_batch[i].reshape(original_shape)
+            if aligned_diff.device != output_device:
+                aligned_diff = aligned_diff.to(output_device)
+            result.append((aligned_diff.to(dtype=original_dtype), w))
+        del aligned_batch
+
+        return result
+
+    @staticmethod
+    @torch.no_grad()
     def _compress_to_lowrank(diff, rank, svd_device=None, output_dtype=None):
         """
         Re-compress a full-rank diff tensor to low-rank via truncated SVD.
@@ -2848,8 +2929,12 @@ class _LoRAMergeBase:
             if merge_refinement == "full":
                 first = diffs_with_weights[0][0]
                 if first.dim() >= 2 and min(first.shape) >= 2:
-                    diffs_with_weights = self._knots_align(
-                        diffs_with_weights, compute_device=dev, svd_device=dev)
+                    if _batched_procrustes is not None:
+                        diffs_with_weights = self._procrustes_align(
+                            diffs_with_weights, compute_device=dev, svd_device=dev)
+                    else:
+                        diffs_with_weights = self._knots_align(
+                            diffs_with_weights, compute_device=dev, svd_device=dev)
 
         if mode == "weighted_average":
             result = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
@@ -3109,8 +3194,12 @@ class _LoRAMergeBase:
                 if merge_refinement == "full":
                     first = trimmed_pairs[0][0]
                     if first.dim() >= 2 and min(first.shape) >= 2:
-                        trimmed_pairs = self._knots_align(
-                            trimmed_pairs, compute_device=dev, svd_device=dev)
+                        if _batched_procrustes is not None:
+                            trimmed_pairs = self._procrustes_align(
+                                trimmed_pairs, compute_device=dev, svd_device=dev)
+                        else:
+                            trimmed_pairs = self._knots_align(
+                                trimmed_pairs, compute_device=dev, svd_device=dev)
                 trimmed = [d for d, _ in trimmed_pairs]
                 abs_weights = [w for _, w in trimmed_pairs]
                 del trimmed_pairs
@@ -3513,7 +3602,7 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
 
 
 def _score_merge_result(model_patches, clip_patches, compute_svd=True,
-                        score_device=None, arch_preset=None):
+                        score_device=None, arch_preset=None, lora_svd=False):
     """
     Score an actual merge result by measuring output quality metrics.
     Returns dict with individual metrics and composite score in [0, 1].
@@ -3529,6 +3618,7 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
     importance_values = []
     effective_ranks = []
     sparsities = []
+    _svd_tasks = []  # (gram_up [rank,rank], rank_int) — batched after loop
 
     all_patches = (
         [(False, key, patch) for key, patch in model_patches.items()] +
@@ -3612,6 +3702,11 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
                     sparsity = (sampled.abs() < threshold).float().mean().item()
                     sparsities.append(sparsity)
                 del sampled
+                # Defer effective-rank SVD to batched post-loop computation.
+                # gram_up is [rank, rank] — tiny; batch all same-rank grams
+                # into a single eigvalsh call instead of 240 individual svdvals.
+                if lora_svd and compute_svd and rank > 0 and rank <= 64:
+                    _svd_tasks.append((gram_up, rank))
             continue
         else:
             continue
@@ -3645,6 +3740,27 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
         if threshold > 0:
             sparsity = (t.abs() < threshold).float().mean().item()
             sparsities.append(sparsity)
+
+    # Batched effective-rank from deferred gram matrices.
+    # Group by rank, stack, single eigvalsh per group.
+    if _svd_tasks:
+        from collections import defaultdict
+        _groups = defaultdict(list)
+        for _g, _r in _svd_tasks:
+            _groups[_g.shape[0]].append((_g, _r))
+        for _items in _groups.values():
+            try:
+                _G = torch.stack([g for g, _ in _items])
+                _eigs = torch.linalg.eigvalsh(_G).flip(-1).clamp(min=0)
+                _S = _eigs.sqrt()
+                for _i, (_, _r) in enumerate(_items):
+                    _s = _S[_i]
+                    _s_norm = _s / (_s.sum() + 1e-10)
+                    _ent = -(_s_norm * (_s_norm + 1e-10).log()).sum().item()
+                    effective_ranks.append(min(math.exp(_ent), float(_r)))
+            except Exception:
+                pass
+        del _svd_tasks
 
     metrics = {}
 
@@ -6780,13 +6896,17 @@ class LoRAAutoTunerSettings:
                     "default": 3, "min": 1, "max": 10, "step": 1,
                     "tooltip": "How many of the best configurations to try with a real merge. Higher = explores more options but takes longer."
                 }),
-                "scoring_svd": (["disabled", "enabled"], {
+                "scoring_svd": (["disabled", "merge_quality", "lora_rank", "full"], {
                     "default": "disabled",
-                    "tooltip": "Uses a more thorough (but slower) scoring method to rank configurations. Usually not needed — enable if the default ranking seems off."
+                    "tooltip": "SVD-based scoring for ranking configurations.\n"
+                               "disabled: fast norm-only scoring (usually sufficient).\n"
+                               "merge_quality: SVD on merged diff tensors — more thorough quality measurement.\n"
+                               "lora_rank: effective rank of LoRA factors — experimental, changes ranking.\n"
+                               "full: both merge_quality + lora_rank."
                 }),
                 "scoring_device": (["cpu", "gpu"], {
                     "default": "gpu",
-                    "tooltip": "Where to run scoring math. GPU is much faster, especially with scoring_svd enabled."
+                    "tooltip": "Where to run scoring math. GPU is much faster, especially with SVD scoring modes."
                 }),
                 "scoring_speed": (["full", "fast", "turbo", "turbo+"], {
                     "default": "turbo",
@@ -6840,8 +6960,8 @@ class LoRAAutoTunerSettings:
         "Connect to the 'settings' input on the LoRA Optimizer node."
     )
 
-    def build_settings(self, top_n, scoring_svd, scoring_device, scoring_speed,
-                       scoring_formula,
+    def build_settings(self, top_n, scoring_svd, scoring_device,
+                       scoring_speed, scoring_formula,
                        diff_cache_mode, diff_cache_ram_pct, record_dataset,
                        memory_mode="disabled", selection=1,
                        merge_settings=None, evaluator=None):
@@ -7109,13 +7229,17 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": "enabled",
                     "tooltip": "Makes LoRAs from different training tools compatible."
                 }),
-                "scoring_svd": (["disabled", "enabled"], {
+                "scoring_svd": (["disabled", "merge_quality", "lora_rank", "full"], {
                     "default": "disabled",
-                    "tooltip": "Enable SVD-based effective rank scoring for candidates. More thorough but much slower on large models. Skipped for orthogonal LoRAs (near-zero cosine similarity) where it does not improve ranking accuracy."
+                    "tooltip": "SVD-based scoring for ranking configurations.\n"
+                               "disabled: fast norm-only scoring (usually sufficient).\n"
+                               "merge_quality: SVD on merged diff tensors — more thorough quality measurement.\n"
+                               "lora_rank: effective rank of LoRA factors — experimental, changes ranking.\n"
+                               "full: both merge_quality + lora_rank."
                 }),
                 "scoring_device": (["cpu", "gpu"], {
                     "default": "gpu",
-                    "tooltip": "Device for scoring computations. GPU is much faster when SVD scoring is enabled."
+                    "tooltip": "Device for scoring computations. GPU is much faster with SVD scoring modes."
                 }),
                 "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
                     "default": "auto",
@@ -7314,7 +7438,8 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     def auto_tune(self, model, lora_stack, output_strength, clip=None,
                   clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
-                  scoring_svd="disabled", scoring_device="gpu",
+                  scoring_svd="disabled",
+                  scoring_device="gpu",
                   architecture_preset="auto", auto_strength_floor=-1.0, evaluator=None,
                   record_dataset="disabled",
                   cache_patches="enabled",
@@ -7827,13 +7952,15 @@ class LoRAAutoTuner(LoRAOptimizer):
             )
             # Skip SVD for orthogonal LoRAs — SLERP vs average produce different
             # rank profiles that don't correlate with generation quality
-            compute_svd = scoring_svd == "enabled" and not is_ortho_score
+            compute_svd = scoring_svd in ("merge_quality", "full") and not is_ortho_score
+            compute_lora_svd = scoring_svd in ("lora_rank", "full")
             score_dev = torch.device("cuda") if scoring_device == "gpu" and torch.cuda.is_available() else None
             t_score = time.time()
             score_arch = tuner_arch_preset if scoring_formula == "v2" else None
             measured = _score_merge_result(
                 m_patches, c_patches, compute_svd=compute_svd,
-                score_device=score_dev, arch_preset=score_arch
+                score_device=score_dev, arch_preset=score_arch,
+                lora_svd=compute_lora_svd
             )
             t_score_elapsed = time.time() - t_score
             # --- Post-scoring adjustments ---
@@ -8421,7 +8548,8 @@ class LoRAAutoTuner(LoRAOptimizer):
     @classmethod
     def IS_CHANGED(cls, model, lora_stack, output_strength, clip=None,
                    clip_strength_multiplier=1.0, top_n=3, normalize_keys="disabled",
-                   scoring_svd="disabled", scoring_device="gpu",
+                   scoring_svd="disabled",
+                   scoring_device="gpu",
                    architecture_preset="auto", auto_strength_floor=-1.0, evaluator=None, record_dataset="disabled",
                    cache_patches="enabled",
                    diff_cache_mode="disabled", diff_cache_ram_pct=0.5,
@@ -8430,7 +8558,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                    smooth_slerp_gate=False, memory_mode="disabled", selection=1):
         evaluator_hash = cls._stable_data_hash(evaluator) if evaluator is not None else ""
         return (id(model), id(lora_stack), output_strength, clip_strength_multiplier, top_n,
-                normalize_keys, scoring_svd, scoring_device, architecture_preset,
+                normalize_keys, scoring_svd, scoring_device,
+                architecture_preset,
                 vram_budget, record_dataset, scoring_speed, scoring_formula, output_mode,
                 auto_strength_floor, decision_smoothing, evaluator_hash, memory_mode,
                 selection)
