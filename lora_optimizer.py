@@ -535,6 +535,8 @@ class _DiffCache:
       - "auto": RAM up to ram_pct of free system memory, then spills to disk.
     """
 
+    _MAX_RAM_BYTES = 16 * 1024 * 1024 * 1024  # 16GB absolute cap
+
     def __init__(self, mode="auto", ram_pct=0.5):
         self.mode = mode
         self._ram_store = {}
@@ -559,9 +561,9 @@ class _DiffCache:
         if mode == "auto":
             try:
                 import psutil
-                self._ram_limit = int(psutil.virtual_memory().available * ram_pct)
+                pct_limit = int(psutil.virtual_memory().available * ram_pct)
+                self._ram_limit = min(pct_limit, self._MAX_RAM_BYTES)
             except ImportError:
-                # psutil not available — use 4GB as fallback
                 self._ram_limit = 4 * 1024 * 1024 * 1024
 
     def _use_disk(self, tensor_bytes):
