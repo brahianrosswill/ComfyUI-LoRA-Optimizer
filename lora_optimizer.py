@@ -8120,10 +8120,20 @@ class LoRAAutoTuner(LoRAOptimizer):
             if final_score > best_score:
                 best_score = final_score
                 best_config = config
-            del m_patches, c_patches  # Drop patch-dict references so tensors can free
+            del m_patches, c_patches, measured  # Drop patch-dict references so tensors can free
             gc.collect()
             if use_gpu:
                 torch.cuda.empty_cache()
+            # Log memory usage to help diagnose leaks on large models
+            try:
+                import psutil
+                proc = psutil.Process()
+                rss_gb = proc.memory_info().rss / (1024**3)
+                dc_mb = _diff_cache.size_mb() if _diff_cache else 0
+                logging.info(f"[LoRA AutoTuner]   Memory: process={rss_gb:.1f}GB"
+                             f"{f', diff_cache={dc_mb:.0f}MB' if dc_mb > 0 else ''}")
+            except ImportError:
+                pass
 
             results.append({
                 "rank": rank_idx + 1,
