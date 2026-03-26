@@ -8120,7 +8120,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if final_score > best_score:
                 best_score = final_score
                 best_config = config
-            del m_patches, c_patches, measured  # Drop patch-dict references so tensors can free
+            del m_patches, c_patches  # Drop patch-dict references so tensors can free
             gc.collect()
             if use_gpu:
                 torch.cuda.empty_cache()
@@ -8154,6 +8154,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 },
                 "external_details": external_eval.get("details") if external_eval else None,
             })
+            del measured
 
         # Final full merge when subsampling was used
         # Skip if selection != 1 — the replay merge below will handle it
