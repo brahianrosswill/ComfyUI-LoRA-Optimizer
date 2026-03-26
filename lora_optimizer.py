@@ -6911,7 +6911,8 @@ class LoRAAutoTunerSettings:
                                "disabled: fast norm-only scoring (usually sufficient).\n"
                                "merge_quality: SVD on merged diff tensors — more thorough quality measurement.\n"
                                "lora_rank: effective rank of LoRA factors — experimental, changes ranking.\n"
-                               "full: both merge_quality + lora_rank."
+                               "full: both merge_quality + lora_rank.\n"
+                               "With Triton installed, SVD modes are hardware-accelerated and add minimal overhead."
                 }),
                 "scoring_device": (["cpu", "gpu"], {
                     "default": "gpu",
@@ -7244,7 +7245,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                                "disabled: fast norm-only scoring (usually sufficient).\n"
                                "merge_quality: SVD on merged diff tensors — more thorough quality measurement.\n"
                                "lora_rank: effective rank of LoRA factors — experimental, changes ranking.\n"
-                               "full: both merge_quality + lora_rank."
+                               "full: both merge_quality + lora_rank.\n"
+                               "With Triton installed, SVD modes are hardware-accelerated and add minimal overhead."
                 }),
                 "scoring_device": (["cpu", "gpu"], {
                     "default": "gpu",
