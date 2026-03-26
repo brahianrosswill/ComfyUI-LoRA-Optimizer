@@ -5310,6 +5310,15 @@ class LoRAOptimizer(_LoRAMergeBase):
             if stat.get("key_filter", "all") != "all":
                 lines.append(f"    Key filter: {stat['key_filter']}")
 
+        # Rank variation hint — suggest SVD scoring when ranks differ significantly
+        ranks_with_keys = [s['avg_rank'] for s in lora_stats if s['key_count'] > 0 and s['avg_rank'] > 0]
+        if len(ranks_with_keys) >= 2:
+            rank_ratio = max(ranks_with_keys) / min(ranks_with_keys) if min(ranks_with_keys) > 0 else 1.0
+            if rank_ratio >= 2.0:
+                lines.append("")
+                lines.append(f"  ** Rank variation detected (ratio {rank_ratio:.1f}x) — try scoring_svd='lora_rank' or 'full'")
+                lines.append(f"     SVD scoring may produce better rankings when LoRA ranks differ significantly.")
+
         # Auto-Strength Adjustment (between Per-LoRA and Pairwise)
         if auto_strength_info is not None:
             lines.append("")
