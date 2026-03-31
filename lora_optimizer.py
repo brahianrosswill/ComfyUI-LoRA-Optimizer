@@ -3965,6 +3965,56 @@ class LoRAMergeFormula:
         return (output,)
 
 
+def _extract_lora_svd(delta: torch.Tensor, rank: int, rank_mode: str, energy_threshold: float):
+    """
+    SVD-decompose a weight delta into (lora_up, lora_down, alpha).
+
+    Returns None if the delta is near-zero (layer unaffected by the LoRA).
+    Returns (lora_up, lora_down, alpha) otherwise.
+
+    lora_up  shape: (rows, r)
+    lora_down shape: (r, cols)
+    alpha = float(r)  — effective scale = 1.0 when loaded at strength 1.0
+
+    Note: in auto mode, energy_threshold is measured against the energy of
+    above-floor singular values only, not total delta energy.
+    """
+    NEAR_ZERO_NORM = 1e-8
+    SV_FLOOR_RATIO = 1e-4  # drop singular values below floor_ratio * S[0]
+
+    if delta.norm().item() < NEAR_ZERO_NORM:
+        return None
+
+    # Ensure 2D: conv layers arrive as [C_out, C_in, kH, kW]
+    if delta.ndim > 2:
+        delta = delta.reshape(delta.shape[0], -1)
+
+    delta = delta.float()
+
+    U, S, Vh = torch.linalg.svd(delta, full_matrices=False)
+
+    # Apply singular value floor to exclude noise
+    sv_floor = SV_FLOOR_RATIO * S[0].item()
+    valid = S > sv_floor
+    if not valid.any():
+        return None
+    U, S, Vh = U[:, valid], S[valid], Vh[valid, :]
+
+    # Determine rank r
+    if rank_mode == "auto":
+        energy_cumsum = S.pow(2).cumsum(0) / S.pow(2).sum()
+        r = int((energy_cumsum < energy_threshold).sum().item()) + 1
+        r = min(r, S.shape[0])
+    else:
+        r = min(rank, S.shape[0])
+
+    sqrt_s = S[:r].sqrt()
+    lora_up = U[:, :r] * sqrt_s.unsqueeze(0)    # (rows, r)
+    lora_down = sqrt_s.unsqueeze(1) * Vh[:r, :]  # (r, cols)
+
+    return lora_up, lora_down, float(r)
+
+
 class LoRAOptimizer(_LoRAMergeBase):
     """
     Auto-optimizer that analyzes a LoRA stack (sign conflicts, magnitude

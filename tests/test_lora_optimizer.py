@@ -1148,5 +1148,16 @@ class TestExtractLoRAFromDelta(unittest.TestCase):
         self.assertLessEqual(alpha, 2.0)
 
 
+    def test_conv_layer_reshaped_to_2d(self):
+        """4D conv delta is reshaped to 2D; lora_down has flat spatial dimension."""
+        mod = _load_module()
+        # Simulate a conv2d weight delta: (C_out=64, C_in=32, kH=3, kW=3)
+        delta = torch.randn(64, 32, 3, 3)
+        up, down, alpha = mod._extract_lora_svd(delta, rank=4, rank_mode="fixed", energy_threshold=0.99)
+        self.assertEqual(up.shape[0], 64)       # rows = C_out
+        self.assertEqual(down.shape[1], 32 * 3 * 3)  # cols = C_in * kH * kW
+        self.assertEqual(up.shape[1], down.shape[0])  # inner dim consistent
+
+
 if __name__ == "__main__":
     unittest.main()
