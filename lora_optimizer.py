@@ -10522,6 +10522,207 @@ class LoRAMetadataReader:
         return (lora_stack, combined_prompt, combined_desc, metadata_info)
 
 
+class LoRAExtractFromModel:
+    """
+    Extracts a baked-in LoRA from a finetuned model by subtracting the clean
+    base model weights and SVD-decomposing the per-layer delta.
+
+    Requires the original base model as a reference.
+    Outputs:
+      - LORA_STACK: feeds directly into LoRAOptimizerSimple / LoRAAutoTuner
+      - LORA_DATA:  feeds directly into SaveMergedLoRA
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "base_model": ("MODEL", {
+                    "tooltip": "The original clean base model (e.g. the Flux or SDXL base checkpoint "
+                               "that was used as the starting point for finetuning)."
+                }),
+                "finetuned_model": ("MODEL", {
+                    "tooltip": "The finetuned model with a LoRA already baked into its weights."
+                }),
+                "rank": ("INT", {
+                    "default": 32, "min": 1, "max": 512, "step": 1,
+                    "tooltip": "Maximum rank for SVD decomposition. Used directly in 'fixed' mode; "
+                               "acts as an upper bound in 'auto' mode."
+                }),
+                "rank_mode": (["auto", "fixed"], {
+                    "default": "auto",
+                    "tooltip": "'auto': choose rank to retain the given energy fraction (recommended). "
+                               "'fixed': always use exactly the specified rank."
+                }),
+                "energy_threshold": ("FLOAT", {
+                    "default": 0.99, "min": 0.5, "max": 1.0, "step": 0.01,
+                    "tooltip": "Fraction of delta energy to retain when rank_mode='auto'. "
+                               "0.99 = retain 99% of the signal. Higher = more accurate, higher rank."
+                }),
+                "strength": ("FLOAT", {
+                    "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05,
+                    "tooltip": "Strength to assign this extracted LoRA in the output stack."
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("LORA_STACK", "LORA_DATA")
+    RETURN_NAMES = ("lora_stack", "lora_data")
+    FUNCTION = "extract"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = (
+        "Extracts a LoRA that was baked into a finetuned model by comparing it against "
+        "the original base model. Requires the base model as a reference. "
+        "Connect lora_stack to LoRAOptimizerSimple to merge additional LoRAs on top, "
+        "or connect lora_data to SaveMergedLoRA to save the extracted LoRA to disk."
+    )
+
+    def extract(self, base_model, finetuned_model, rank, rank_mode, energy_threshold, strength):
+        import comfy.lora
+
+        base_sd = base_model.model.state_dict()
+        fine_sd = finetuned_model.model.state_dict()
+
+        # Build inverse key map: model_weight_key → lora_prefix
+        # comfy.lora.model_lora_keys_unet returns {lora_prefix: model_key}
+        lora_to_model_unet = {}
+        lora_to_model_clip = {}
+        try:
+            lora_to_model_unet = comfy.lora.model_lora_keys_unet(base_model.model, {})
+        except Exception:
+            pass
+        try:
+            lora_to_model_clip = comfy.lora.model_lora_keys_clip(base_model.model, {})
+        except Exception:
+            pass
+
+        model_to_lora = {}  # model_key → (lora_prefix, is_clip)
+        for lora_prefix, model_key in lora_to_model_unet.items():
+            model_to_lora[model_key] = (lora_prefix, False)
+        for lora_prefix, model_key in lora_to_model_clip.items():
+            model_to_lora[model_key] = (lora_prefix, True)
+
+        # Validate that both models share the same keys
+        base_keys = set(base_sd.keys())
+        fine_keys = set(fine_sd.keys())
+        if base_keys != fine_keys:
+            missing = base_keys - fine_keys
+            extra = fine_keys - base_keys
+            logging.warning(
+                f"[LoRAExtract] Key mismatch between base and finetuned models. "
+                f"Missing in finetuned: {len(missing)}, extra in finetuned: {len(extra)}. "
+                f"Proceeding with shared keys only."
+            )
+
+        # Counters for diagnostics
+        n_processed = 0
+        n_skipped_zero = 0
+        n_skipped_no_map = 0
+        n_rank_capped = 0
+        sum_extracted_ranks = 0
+
+        # Output containers
+        raw_lora_dict = {}        # for LORA_STACK: {prefix.lora_up.weight: tensor, ...}
+        model_patches = {}        # for LORA_DATA
+        clip_patches = {}
+        key_map = {}              # target_key → {"canonical_prefix": lora_prefix}
+
+        shared_keys = base_keys & fine_keys
+
+        for model_key in sorted(shared_keys):
+            if model_key not in model_to_lora:
+                n_skipped_no_map += 1
+                continue
+
+            W_base = base_sd[model_key]
+            W_fine = fine_sd[model_key]
+
+            if W_base.shape != W_fine.shape:
+                logging.warning(f"[LoRAExtract] Shape mismatch for {model_key}, skipping.")
+                continue
+
+            # Skip non-float layers (embeddings, norms, etc.)
+            if not W_base.is_floating_point():
+                continue
+
+            delta = W_fine.float() - W_base.float()
+            result = _extract_lora_svd(delta, rank=rank, rank_mode=rank_mode, energy_threshold=energy_threshold)
+
+            if result is None:
+                n_skipped_zero += 1
+                continue
+
+            lora_up, lora_down, alpha = result
+            lora_prefix, is_clip = model_to_lora[model_key]
+
+            if alpha < rank and rank_mode == "fixed":
+                n_rank_capped += 1
+
+            sum_extracted_ranks += int(alpha)
+
+            # Build raw LoRA dict entry (for LORA_STACK)
+            raw_lora_dict[f"{lora_prefix}.lora_up.weight"] = lora_up
+            raw_lora_dict[f"{lora_prefix}.lora_down.weight"] = lora_down
+            raw_lora_dict[f"{lora_prefix}.alpha"] = torch.tensor(alpha)
+
+            # Build patch entry (for LORA_DATA)
+            patch = LoRAAdapter(set(), (lora_up, lora_down, alpha, None, None, None))
+            if is_clip:
+                clip_patches[model_key] = patch
+            else:
+                model_patches[model_key] = patch
+
+            key_map[model_key] = {"canonical_prefix": lora_prefix}
+            n_processed += 1
+
+        logging.info(
+            f"[LoRAExtract] Extracted {n_processed} layers "
+            f"({len(model_patches)} model, {len(clip_patches)} CLIP). "
+            f"Skipped: {n_skipped_zero} near-zero, {n_skipped_no_map} unmapped. "
+            f"Rank-capped layers (actual < requested): {n_rank_capped}."
+        )
+
+        if n_processed == 0:
+            logging.warning("[LoRAExtract] No layers extracted — models may be identical or incompatible.")
+
+        # Warn if this looks like a full finetune rather than a LoRA merge
+        total_float_layers = sum(1 for k in shared_keys if base_sd[k].is_floating_point())
+        if total_float_layers > 0 and n_processed > total_float_layers * 0.5:
+            logging.warning(
+                f"[LoRAExtract] {n_processed}/{total_float_layers} layers have significant deltas. "
+                f"This may be a full finetune rather than a LoRA merge — "
+                f"extraction will produce a high-rank approximation."
+            )
+
+        # LORA_STACK output
+        lora_stack = [{
+            "name": "<extracted from finetuned_model>",
+            "lora": raw_lora_dict,
+            "strength": strength,
+            "conflict_mode": "all",
+            "key_filter": "all",
+            "metadata": {},
+        }]
+
+        # LORA_DATA output
+        lora_data = {
+            "model_patches": model_patches,
+            "clip_patches": clip_patches,
+            "key_map": key_map,
+            "output_strength": strength,
+            "clip_strength": strength,
+            "suggested_max_strength": None,
+            "sum_rank": sum_extracted_ranks if sum_extracted_ranks > 0 else rank,
+            "merge_metadata": {
+                "source_loras": [{"name": "<extracted>", "strength": strength}],
+                "mode": "extract",
+                "architecture": "unknown",
+            },
+        }
+
+        return (lora_stack, lora_data)
+
+
 # Node registration
 NODE_CLASS_MAPPINGS = {
     "LoRAStack": LoRAStack,
@@ -10544,6 +10745,7 @@ NODE_CLASS_MAPPINGS = {
     "LoRAAutoTunerSettings": LoRAAutoTunerSettings,
     "LoRAMetadataReader": LoRAMetadataReader,
     "LoRAMergeFormula": LoRAMergeFormula,
+    "LoRAExtractFromModel": LoRAExtractFromModel,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -10567,4 +10769,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAAutoTunerSettings": "LoRA AutoTuner Settings",
     "LoRAMetadataReader": "LoRA Metadata Reader",
     "LoRAMergeFormula": "LoRA Merge Formula",
+    "LoRAExtractFromModel": "LoRA Extract from Model",
 }
