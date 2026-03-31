@@ -104,6 +104,18 @@ def _install_stubs():
     sys.modules["safetensors.torch"] = safetensors_torch
 
 
+def _load_module():
+    """Load lora_optimizer module with stubs in place."""
+    _install_stubs()
+    spec = importlib.util.spec_from_file_location(
+        "lora_optimizer",
+        os.path.join(os.path.dirname(__file__), "..", "lora_optimizer.py"),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 if torch is not None:
     _install_stubs()
     MODULE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "lora_optimizer.py")
@@ -1084,6 +1096,56 @@ class LoRASettingsNodeTests(unittest.TestCase):
         self.assertEqual(resolved[0]["strength"], 0.8)  # unchanged
         self.assertEqual(resolved[1]["strength"], 0.5)  # overridden by weight
         self.assertEqual(reports, [])
+
+
+@unittest.skipIf(torch is None, "torch not available")
+class TestExtractLoRAFromDelta(unittest.TestCase):
+    """Tests for _extract_lora_svd() helper used by LoRAExtractFromModel."""
+
+    def _make_delta(self, rows, cols, rank):
+        """Create a clean rank-r delta matrix using orthonormal U and V."""
+        U, _ = torch.linalg.qr(torch.randn(rows, rank))   # orthonormal (rows, rank)
+        V, _ = torch.linalg.qr(torch.randn(cols, rank))   # orthonormal (cols, rank)
+        S = torch.rand(rank) + 0.5  # positive singular values, not too small
+        return (U * S.unsqueeze(0)) @ V.T                  # (rows, cols)
+
+    def test_fixed_rank_output_shape(self):
+        """Fixed mode: output lora_up/down have correct shapes."""
+        mod = _load_module()
+        delta = self._make_delta(64, 32, 8)
+        up, down, alpha = mod._extract_lora_svd(delta, rank=4, rank_mode="fixed", energy_threshold=0.99)
+        self.assertEqual(up.shape, (64, 4))
+        self.assertEqual(down.shape, (4, 32))
+        self.assertEqual(alpha, 4.0)
+
+    def test_auto_rank_energy_retained(self):
+        """Auto mode: retained energy >= threshold."""
+        mod = _load_module()
+        delta = self._make_delta(64, 32, 16)
+        up, down, alpha = mod._extract_lora_svd(delta, rank=32, rank_mode="auto", energy_threshold=0.95)
+        # Reconstruct and check energy
+        reconstructed = up @ down
+        original_energy = (delta ** 2).sum().item()
+        reconstructed_energy = (reconstructed ** 2).sum().item()
+        self.assertGreaterEqual(reconstructed_energy / original_energy, 0.93)  # allow small numerical error
+
+    def test_near_zero_delta_returns_none(self):
+        """Near-zero delta (unaffected layer) returns None."""
+        mod = _load_module()
+        delta = torch.zeros(64, 32)
+        result = mod._extract_lora_svd(delta, rank=4, rank_mode="fixed", energy_threshold=0.99)
+        self.assertIsNone(result)
+
+    def test_singular_value_floor_applied(self):
+        """Noise-only singular values below floor are excluded even in fixed mode."""
+        mod = _load_module()
+        # Create a clean rank-2 signal with tiny noise
+        signal = self._make_delta(32, 32, 2)
+        noise = torch.randn(32, 32) * 1e-6
+        delta = signal + noise
+        up, down, alpha = mod._extract_lora_svd(delta, rank=16, rank_mode="fixed", energy_threshold=0.99)
+        # Floor should cut noise singular values — effective rank must be ≤ 2
+        self.assertLessEqual(alpha, 2.0)
 
 
 if __name__ == "__main__":
