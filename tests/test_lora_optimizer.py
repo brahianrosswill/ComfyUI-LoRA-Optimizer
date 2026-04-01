@@ -1158,6 +1158,13 @@ class TestExtractLoRAFromDelta(unittest.TestCase):
         self.assertEqual(down.shape[1], 32 * 3 * 3)  # cols = C_in * kH * kW
         self.assertEqual(up.shape[1], down.shape[0])  # inner dim consistent
 
+    def test_1d_delta_returns_none(self):
+        """1D bias delta returns None (SVD requires 2D input)."""
+        mod = _load_module()
+        delta = torch.randn(64)  # bias vector
+        result = mod._extract_lora_svd(delta, rank=4, rank_mode="fixed", energy_threshold=0.99)
+        self.assertIsNone(result)
+
 
 if __name__ == "__main__":
     unittest.main()

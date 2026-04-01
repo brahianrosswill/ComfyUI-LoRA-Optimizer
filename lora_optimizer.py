@@ -3985,7 +3985,9 @@ def _extract_lora_svd(delta: torch.Tensor, rank: int, rank_mode: str, energy_thr
     if delta.norm().item() < NEAR_ZERO_NORM:
         return None
 
-    # Ensure 2D: conv layers arrive as [C_out, C_in, kH, kW]
+    # Ensure 2D: conv layers arrive as [C_out, C_in, kH, kW]; 1D bias vectors unsupported
+    if delta.ndim < 2:
+        return None
     if delta.ndim > 2:
         delta = delta.reshape(delta.shape[0], -1)
 
@@ -10563,6 +10565,14 @@ class LoRAExtractFromModel:
                     "default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05,
                     "tooltip": "Strength to assign this extracted LoRA in the output stack."
                 }),
+            },
+            "optional": {
+                "base_clip": ("CLIP", {
+                    "tooltip": "The CLIP encoder for the base model. Required to extract CLIP/text-encoder LoRA components (e.g. for SDXL). Leave disconnected to extract UNet components only."
+                }),
+                "finetuned_clip": ("CLIP", {
+                    "tooltip": "The CLIP encoder for the finetuned model. Must be connected together with base_clip."
+                }),
             }
         }
 
@@ -10577,11 +10587,14 @@ class LoRAExtractFromModel:
         "or connect lora_data to SaveMergedLoRA to save the extracted LoRA to disk."
     )
 
-    def extract(self, base_model, finetuned_model, rank, rank_mode, energy_threshold, strength):
-        import comfy.lora
-
-        base_sd = base_model.model.state_dict()
-        fine_sd = finetuned_model.model.state_dict()
+    def extract(self, base_model, finetuned_model, rank, rank_mode, energy_threshold, strength, base_clip=None, finetuned_clip=None):
+        base_sd = dict(base_model.model.state_dict())
+        fine_sd = dict(finetuned_model.model.state_dict())
+        if base_clip is not None and finetuned_clip is not None:
+            base_sd.update(base_clip.cond_stage_model.state_dict())
+            fine_sd.update(finetuned_clip.cond_stage_model.state_dict())
+        elif base_clip is not None or finetuned_clip is not None:
+            logging.warning("[LoRAExtract] Both base_clip and finetuned_clip must be connected to extract CLIP layers. CLIP will be skipped.")
 
         # Build inverse key map: model_weight_key → lora_prefix
         # comfy.lora.model_lora_keys_unet returns {lora_prefix: model_key}
@@ -10591,10 +10604,11 @@ class LoRAExtractFromModel:
             lora_to_model_unet = comfy.lora.model_lora_keys_unet(base_model.model, {})
         except Exception:
             pass
-        try:
-            lora_to_model_clip = comfy.lora.model_lora_keys_clip(base_model.model, {})
-        except Exception:
-            pass
+        if base_clip is not None:
+            try:
+                lora_to_model_clip = comfy.lora.model_lora_keys_clip(base_clip.cond_stage_model, {})
+            except Exception:
+                pass
 
         model_to_lora = {}  # model_key → (lora_prefix, is_clip)
         for lora_prefix, model_key in lora_to_model_unet.items():
