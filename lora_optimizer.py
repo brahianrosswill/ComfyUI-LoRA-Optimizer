@@ -10591,8 +10591,11 @@ class LoRAExtractFromModel:
         base_sd = dict(base_model.model.state_dict())
         fine_sd = dict(finetuned_model.model.state_dict())
         if base_clip is not None and finetuned_clip is not None:
-            base_sd.update(base_clip.cond_stage_model.state_dict())
-            fine_sd.update(finetuned_clip.cond_stage_model.state_dict())
+            try:
+                base_sd.update(base_clip.cond_stage_model.state_dict())
+                fine_sd.update(finetuned_clip.cond_stage_model.state_dict())
+            except Exception as e:
+                logging.warning(f"[LoRAExtract] Failed to load CLIP state dicts: {e}. CLIP layers will be skipped.")
         elif base_clip is not None or finetuned_clip is not None:
             logging.warning("[LoRAExtract] Both base_clip and finetuned_clip must be connected to extract CLIP layers. CLIP will be skipped.")
 
@@ -10602,19 +10605,24 @@ class LoRAExtractFromModel:
         lora_to_model_clip = {}
         try:
             lora_to_model_unet = comfy.lora.model_lora_keys_unet(base_model.model, {})
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f"[LoRAExtract] Failed to build UNet key map: {e}. No layers will be extracted.")
         if base_clip is not None:
             try:
                 lora_to_model_clip = comfy.lora.model_lora_keys_clip(base_clip.cond_stage_model, {})
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f"[LoRAExtract] Failed to build CLIP key map: {e}. CLIP layers will be skipped.")
 
+        # Build inverse map: model_key → (lora_prefix, is_clip).
+        # If multiple prefixes resolve to the same model_key (alias keys), prefer
+        # the first occurrence (UNet entries are populated first, then CLIP).
         model_to_lora = {}  # model_key → (lora_prefix, is_clip)
         for lora_prefix, model_key in lora_to_model_unet.items():
-            model_to_lora[model_key] = (lora_prefix, False)
+            if model_key not in model_to_lora:
+                model_to_lora[model_key] = (lora_prefix, False)
         for lora_prefix, model_key in lora_to_model_clip.items():
-            model_to_lora[model_key] = (lora_prefix, True)
+            if model_key not in model_to_lora:
+                model_to_lora[model_key] = (lora_prefix, True)
 
         # Validate that both models share the same keys
         base_keys = set(base_sd.keys())
