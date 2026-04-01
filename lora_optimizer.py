@@ -10607,7 +10607,7 @@ class LoRAExtractFromModel:
             lora_to_model_unet = comfy.lora.model_lora_keys_unet(base_model.model, {})
         except Exception as e:
             logging.warning(f"[LoRAExtract] Failed to build UNet key map: {e}. No layers will be extracted.")
-        if base_clip is not None:
+        if base_clip is not None and finetuned_clip is not None:
             try:
                 lora_to_model_clip = comfy.lora.model_lora_keys_clip(base_clip.cond_stage_model, {})
             except Exception as e:
