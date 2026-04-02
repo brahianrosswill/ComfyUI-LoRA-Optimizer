@@ -7875,6 +7875,14 @@ class LoRAAutoTuner(LoRAOptimizer):
                                 sort_keys=True)
         lora_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
+        names_only_hash, _strength_signs = self._compute_names_only_hash(active_loras)
+        cached_analysis = self._analysis_cache_load(names_only_hash)
+        if cached_analysis is not None:
+            logging.info(
+                f"[AutoTuner Analysis Cache] HIT — {len(cached_analysis)} prefixes cached")
+        else:
+            logging.info("[AutoTuner Analysis Cache] MISS — will run full analysis")
+
         # Order-independent hash for persistent memory (sorted pairs)
         if memory_mode != "disabled" and not _is_sub_merge:
             memory_lora_hash = hashlib.sha256(
@@ -7919,6 +7927,10 @@ class LoRAAutoTuner(LoRAOptimizer):
 
             if memory_mode == "clear_and_run":
                 self._memory_clear(memory_lora_hash, settings_hash)
+                analysis_path = self._analysis_cache_path(names_only_hash)
+                if os.path.exists(analysis_path):
+                    os.unlink(analysis_path)
+                cached_analysis = None
 
             if memory_mode in ("auto", "read_only"):
                 cached_tuner_data = self._memory_load(
@@ -8010,6 +8022,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             merge_refinement="none",
             decision_smoothing=decision_smoothing,
             progress_cb=lambda: pbar.update(1),
+            cached_analysis=cached_analysis,
         )
         all_key_targets = analysis_data["all_key_targets"]
         target_groups = analysis_data["target_groups"]
@@ -8021,6 +8034,13 @@ class LoRAAutoTuner(LoRAOptimizer):
         prefix_count = analysis_data["prefix_count"]
         skipped_keys = analysis_data["skipped_keys"]
         pairs = analysis_data["pairs"]
+
+        new_analysis_entries = analysis_data.get("new_analysis_entries", {})
+        if new_analysis_entries:
+            merged = dict(cached_analysis or {})
+            merged.update(new_analysis_entries)
+            source_loras = [{"name": item["name"]} for item in active_loras]
+            self._analysis_cache_save(names_only_hash, merged, source_loras)
 
         if prefix_count == 0:
             return (model, clip, "No compatible LoRA keys found.", "", None, None)
