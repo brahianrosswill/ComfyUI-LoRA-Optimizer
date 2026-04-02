@@ -1355,6 +1355,72 @@ class AnalysisCacheTests(unittest.TestCase):
             "prefix_x", cached_prefix, active_loras)
         self.assertIsNone(result)
 
+    def test_run_group_analysis_skips_analyze_on_cache_hit(self):
+        """When cached_analysis covers a prefix, _analyze_target_group is not called."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        active_loras = [
+            _make_lora_entry({"prefix_a": 1.0}, strength=1.0, name="a.safetensors"),
+            _make_lora_entry({"prefix_a": 0.5}, strength=1.0, name="b.safetensors"),
+        ]
+        model = _make_model()
+        target_groups = optimizer._build_target_groups(
+            ["prefix_a"], {"prefix_a": "layer.weight"}, {})
+
+        fake_cached = {
+            "prefix_a": {
+                "pair_conflicts": {
+                    "0,1": {"overlap": 10, "conflict": 2, "dot": 0.1,
+                            "norm_a_sq": 1.0, "norm_b_sq": 0.25,
+                            "weighted_total": 0.3, "weighted_conflict": 0.05,
+                            "expected_conflict": 0.1, "excess_conflict": 0.0,
+                            "subspace_overlap": 0.1, "subspace_weight": 0.5}
+                },
+                "per_lora_norm_sq": {"0": 1.0, "1": 0.25},
+                "magnitude_samples_unscaled": {"0": [0.5], "1": [0.3]},
+                "ranks": {"0": 1, "1": 1},
+                "target_key": "layer.weight",
+                "is_clip": False,
+                "raw_n": 2,
+                "skip_count": 0,
+                "strength_signs": {"0": 1, "1": 1},
+            }
+        }
+
+        call_count = {"n": 0}
+        orig = optimizer._analyze_target_group
+        def counting_analyze(*args, **kwargs):
+            call_count["n"] += 1
+            return orig(*args, **kwargs)
+
+        with mock.patch.object(optimizer, "_analyze_target_group",
+                               side_effect=counting_analyze):
+            device = torch.device("cpu")
+            result = optimizer._run_group_analysis(
+                target_groups, active_loras, model, None, device,
+                cached_analysis=fake_cached,
+            )
+
+        self.assertEqual(call_count["n"], 0)
+        self.assertEqual(result["new_analysis_entries"], {})
+
+    def test_run_group_analysis_populates_new_entries_on_miss(self):
+        """Cache miss populates new_analysis_entries in the return dict."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        active_loras = [
+            _make_lora_entry({"prefix_a": 1.0}, strength=1.0, name="a.safetensors"),
+            _make_lora_entry({"prefix_a": 0.5}, strength=1.0, name="b.safetensors"),
+        ]
+        model = _make_model()
+        target_groups = optimizer._build_target_groups(
+            ["prefix_a"], {"prefix_a": "layer.weight"}, {})
+
+        device = torch.device("cpu")
+        result = optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, device,
+            cached_analysis={},  # empty cache = full miss
+        )
+        self.assertIn("prefix_a", result["new_analysis_entries"])
+
 
 if __name__ == "__main__":
     unittest.main()

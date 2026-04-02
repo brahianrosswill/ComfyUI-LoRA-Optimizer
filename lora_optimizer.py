@@ -4735,7 +4735,8 @@ class LoRAOptimizer(_LoRAMergeBase):
     def _run_group_analysis(self, target_groups, active_loras, model, clip,
                             compute_device, clip_strength_multiplier=1.0,
                             merge_refinement="none",
-                            decision_smoothing=0.0, progress_cb=None):
+                            decision_smoothing=0.0, progress_cb=None,
+                            cached_analysis=None):
         """
         Shared Pass 1 runner used by both the optimizer and AutoTuner.
         Returns the same lightweight accumulators both call sites need.
@@ -4864,30 +4865,54 @@ class LoRAOptimizer(_LoRAMergeBase):
                     },
                 }
 
+        new_analysis_entries = {}
         group_items = list(target_groups.values())
         if use_gpu:
             for target_group in group_items:
-                result = self._analyze_target_group(
-                    target_group, active_loras, model, clip, compute_device,
-                    clip_strength_multiplier=clip_strength_multiplier,
-                    merge_refinement=merge_refinement,
-                )
+                prefix = target_group["label_prefix"]
+                result = None
+                if cached_analysis is not None and prefix in cached_analysis:
+                    result = self._reconstruct_from_analysis_cache(
+                        prefix, cached_analysis[prefix], active_loras)
+                if result is None:
+                    result = self._analyze_target_group(
+                        target_group, active_loras, model, clip, compute_device,
+                        clip_strength_multiplier=clip_strength_multiplier,
+                        merge_refinement=merge_refinement,
+                    )
+                    if result is not None and cached_analysis is not None:
+                        new_analysis_entries[prefix] = \
+                            self._extract_for_analysis_cache(result, active_loras)
                 _collect_analysis_result(result)
                 if progress_cb is not None:
                     progress_cb()
         else:
             max_workers = min(4, max(1, len(group_items)))
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(
+                futures = {}
+                for target_group in group_items:
+                    prefix = target_group["label_prefix"]
+                    if cached_analysis is not None and prefix in cached_analysis:
+                        result = self._reconstruct_from_analysis_cache(
+                            prefix, cached_analysis[prefix], active_loras)
+                        if result is not None:
+                            _collect_analysis_result(result)
+                            if progress_cb is not None:
+                                progress_cb()
+                            continue
+                    futures[executor.submit(
                         self._analyze_target_group, target_group, active_loras,
                         model, clip, compute_device, clip_strength_multiplier,
                         merge_refinement
-                    ): target_group["label_prefix"]
-                    for target_group in group_items
-                }
+                    )] = prefix
                 for future in concurrent.futures.as_completed(futures):
-                    _collect_analysis_result(future.result())
+                    result = future.result()
+                    if result is not None and cached_analysis is not None:
+                        prefix = result[0]
+                        if prefix not in cached_analysis:
+                            new_analysis_entries[prefix] = \
+                                self._extract_for_analysis_cache(result, active_loras)
+                    _collect_analysis_result(result)
                     if progress_cb is not None:
                         progress_cb()
 
@@ -4904,6 +4929,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             "prefix_count": prefix_count,
             "skipped_keys": skipped_keys,
             "pairs": pairs,
+            "new_analysis_entries": new_analysis_entries,
         }
 
     def _estimate_density(self, all_key_diffs, arch_preset=None):
