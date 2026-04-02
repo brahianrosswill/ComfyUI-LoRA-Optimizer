@@ -4583,7 +4583,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             if skip_count > 0 or raw_n > 0:
                 return (
                     target_group["label_prefix"], [], {}, [], (target_key, is_clip),
-                    skip_count, raw_n, {}, {}
+                    skip_count, raw_n, {}
                 )
             return None
 
@@ -4653,17 +4653,26 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Serialize pair_conflict keys: (i,j) -> "i,j"; values are already plain dicts
         pc_serial = {f"{i},{j}": metrics for (i, j), metrics in pair_conflicts.items()}
 
-        # Unscale magnitude_samples: divide by abs(strength) per LoRA
+        # Unscale magnitude_samples: divide by abs(effective strength) per LoRA
+        # For CLIP keys, use clip_strength as the effective strength if set
         lora_indices = [s[0] for s in partial_stats]
         mag_unscaled = {}
         for pos, i in enumerate(lora_indices):
-            abs_strength = abs(active_loras[i]["strength"])
+            clip_s = active_loras[i].get("clip_strength")
+            eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[i]["strength"]
+            abs_strength = abs(eff_s)
             if pos < len(magnitude_samples):
                 raw = magnitude_samples[pos]
                 mag_unscaled[str(i)] = (raw / abs_strength if abs_strength > 0
                                         else raw).tolist()
             else:
                 mag_unscaled[str(i)] = []
+
+        strength_signs = {}
+        for i in lora_indices:
+            clip_s = active_loras[i].get("clip_strength")
+            eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[i]["strength"]
+            strength_signs[str(i)] = 1 if eff_s >= 0 else -1
 
         return {
             "pair_conflicts": pc_serial,
@@ -4674,8 +4683,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             "is_clip": is_clip,
             "raw_n": raw_n,
             "skip_count": skip_count,
-            "strength_signs": {str(i): (1 if active_loras[i]["strength"] >= 0 else -1)
-                               for i in lora_indices},
+            "strength_signs": strength_signs,
         }
 
     @staticmethod
@@ -7875,7 +7883,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                                 sort_keys=True)
         lora_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
-        names_only_hash, _strength_signs = self._compute_names_only_hash(active_loras)
+        names_only_hash, _ = self._compute_names_only_hash(active_loras)
         cached_analysis = self._analysis_cache_load(names_only_hash)
         if cached_analysis is not None:
             logging.info(
