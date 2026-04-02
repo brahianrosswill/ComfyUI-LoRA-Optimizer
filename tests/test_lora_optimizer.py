@@ -1421,6 +1421,66 @@ class AnalysisCacheTests(unittest.TestCase):
         )
         self.assertIn("prefix_a", result["new_analysis_entries"])
 
+    def test_dataset_entry_includes_raw_analysis(self):
+        """Dataset entries include raw_analysis field when new_analysis_entries provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.folder_paths.get_user_directory",
+                            return_value=tmpdir):
+                tuner = lora_optimizer.LoRAAutoTuner()
+                tuner_data = {
+                    "top_n": [],
+                    "analysis_summary": {
+                        "n_loras": 2, "prefix_count": 1,
+                        "avg_conflict_ratio": 0.3, "avg_excess_conflict": 0.1,
+                        "avg_subspace_overlap": 0.2, "avg_cosine_sim": 0.5,
+                        "magnitude_ratio": 1.2, "decision_smoothing": 0.25,
+                    },
+                    "architecture_preset": "auto",
+                    "lora_hash": "abc",
+                }
+                prefix_stats = {
+                    "prefix_a": {
+                        "n_loras": 2, "conflict_ratio": 0.3,
+                        "excess_conflict": 0.1, "avg_cos_sim": 0.5,
+                        "magnitude_ratio": 1.2, "avg_subspace_overlap": 0.2,
+                        "magnitude_samples": [],
+                        "per_lora_norm_sq": {0: 1.0, 1: 0.5},
+                        "pairwise_dots": {},
+                        "raw_n_loras": 2,
+                    }
+                }
+                new_analysis_entries = {
+                    "prefix_a": {
+                        "pair_conflicts": {"0,1": {"overlap": 10}},
+                        "per_lora_norm_sq": {"0": 1.0, "1": 0.5},
+                        "magnitude_samples_unscaled": {"0": [0.5], "1": [0.3]},
+                        "ranks": {"0": 1, "1": 1},
+                        "target_key": "layer.weight",
+                        "is_clip": False,
+                        "raw_n": 2,
+                        "skip_count": 0,
+                        "strength_signs": {"0": 1, "1": 1},
+                    }
+                }
+                active_loras = [
+                    {"name": "a.safetensors", "strength": 1.0},
+                    {"name": "b.safetensors", "strength": 0.5},
+                ]
+                tuner._save_tuner_dataset_entry(
+                    tuner_data, active_loras, prefix_stats, "wan_video",
+                    names_only_hash="testhash",
+                    new_analysis_entries=new_analysis_entries)
+
+                dataset_path = os.path.join(
+                    tmpdir, "lora_optimizer_reports", "autotuner_dataset.jsonl")
+                with open(dataset_path) as f:
+                    entry = json.loads(f.readline())
+                self.assertIn("raw_analysis", entry)
+                self.assertEqual(entry["raw_analysis"]["names_only_hash"], "testhash")
+                self.assertIn("prefix_a", entry["raw_analysis"]["per_prefix"])
+                self.assertIn("pair_conflicts",
+                              entry["raw_analysis"]["per_prefix"]["prefix_a"])
+
 
 if __name__ == "__main__":
     unittest.main()

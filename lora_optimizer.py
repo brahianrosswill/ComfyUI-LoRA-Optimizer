@@ -8517,7 +8517,9 @@ class LoRAAutoTuner(LoRAOptimizer):
         if record_dataset == "enabled":
             self._save_tuner_dataset_entry(
                 tuner_data, active_loras, prefix_stats,
-                getattr(self, '_detected_arch', None))
+                getattr(self, '_detected_arch', None),
+                names_only_hash=names_only_hash,
+                new_analysis_entries=new_analysis_entries)
         prefix_stats.clear()
 
         # Save to persistent memory
@@ -8711,7 +8713,8 @@ class LoRAAutoTuner(LoRAOptimizer):
         return (resolved, sub_reports)
 
     def _save_tuner_dataset_entry(self, tuner_data, active_loras, prefix_stats,
-                                  detected_arch):
+                                  detected_arch, names_only_hash=None,
+                                  new_analysis_entries=None):
         """
         Append one JSONL entry to the AutoTuner dataset for threshold tuning.
         Each entry records: analysis metrics, per-prefix stats distribution,
@@ -8782,6 +8785,14 @@ class LoRAAutoTuner(LoRAOptimizer):
                 },
                 "top_n": tuner_data["top_n"],
             }
+
+            raw_analysis = None
+            if names_only_hash is not None and new_analysis_entries:
+                raw_analysis = {
+                    "names_only_hash": names_only_hash,
+                    "per_prefix": new_analysis_entries,
+                }
+            entry["raw_analysis"] = raw_analysis
 
             with open(dataset_path, "a") as f:
                 f.write(json.dumps(entry) + "\n")
