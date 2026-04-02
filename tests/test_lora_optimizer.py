@@ -1398,6 +1398,7 @@ class AnalysisCacheTests(unittest.TestCase):
             result = optimizer._run_group_analysis(
                 target_groups, active_loras, model, None, device,
                 cached_analysis=fake_cached,
+                track_new_entries=True,
             )
 
         self.assertEqual(call_count["n"], 0)
@@ -1418,6 +1419,7 @@ class AnalysisCacheTests(unittest.TestCase):
         result = optimizer._run_group_analysis(
             target_groups, active_loras, model, None, device,
             cached_analysis={},  # empty cache = full miss
+            track_new_entries=True,
         )
         self.assertIn("prefix_a", result["new_analysis_entries"])
 

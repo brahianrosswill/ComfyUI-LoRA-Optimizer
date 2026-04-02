@@ -4744,7 +4744,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                             compute_device, clip_strength_multiplier=1.0,
                             merge_refinement="none",
                             decision_smoothing=0.0, progress_cb=None,
-                            cached_analysis=None):
+                            cached_analysis=None, track_new_entries=False):
         """
         Shared Pass 1 runner used by both the optimizer and AutoTuner.
         Returns the same lightweight accumulators both call sites need.
@@ -4888,7 +4888,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         clip_strength_multiplier=clip_strength_multiplier,
                         merge_refinement=merge_refinement,
                     )
-                    if result is not None and cached_analysis is not None:
+                    if result is not None and track_new_entries:
                         new_analysis_entries[prefix] = \
                             self._extract_for_analysis_cache(result, active_loras)
                 _collect_analysis_result(result)
@@ -4915,9 +4915,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                     )] = prefix
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
-                    if result is not None and cached_analysis is not None:
+                    if result is not None and track_new_entries:
                         prefix = result[0]
-                        if prefix not in cached_analysis:
+                        if cached_analysis is None or prefix not in cached_analysis:
                             new_analysis_entries[prefix] = \
                                 self._extract_for_analysis_cache(result, active_loras)
                     _collect_analysis_result(result)
@@ -8031,6 +8031,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             decision_smoothing=decision_smoothing,
             progress_cb=lambda: pbar.update(1),
             cached_analysis=cached_analysis,
+            track_new_entries=True,
         )
         all_key_targets = analysis_data["all_key_targets"]
         target_groups = analysis_data["target_groups"]
