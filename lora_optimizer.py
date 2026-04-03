@@ -4744,7 +4744,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                             compute_device, clip_strength_multiplier=1.0,
                             merge_refinement="none",
                             decision_smoothing=0.0, progress_cb=None,
-                            cached_analysis=None, track_new_entries=False):
+                            cached_analysis=None, track_new_entries=False,
+                            on_prefix_done=None):
         """
         Shared Pass 1 runner used by both the optimizer and AutoTuner.
         Returns the same lightweight accumulators both call sites need.
@@ -4889,8 +4890,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                         merge_refinement=merge_refinement,
                     )
                     if result is not None and track_new_entries:
-                        new_analysis_entries[prefix] = \
-                            self._extract_for_analysis_cache(result, active_loras)
+                        entry = self._extract_for_analysis_cache(result, active_loras)
+                        new_analysis_entries[prefix] = entry
+                        if on_prefix_done is not None:
+                            on_prefix_done(prefix, entry)
                 _collect_analysis_result(result)
                 if progress_cb is not None:
                     progress_cb()
@@ -4918,8 +4921,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     if result is not None and track_new_entries:
                         prefix = result[0]
                         if cached_analysis is None or prefix not in cached_analysis:
-                            new_analysis_entries[prefix] = \
-                                self._extract_for_analysis_cache(result, active_loras)
+                            entry = self._extract_for_analysis_cache(result, active_loras)
+                            new_analysis_entries[prefix] = entry
+                            if on_prefix_done is not None:
+                                on_prefix_done(prefix, entry)
                     _collect_analysis_result(result)
                     if progress_cb is not None:
                         progress_cb()

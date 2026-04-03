@@ -1482,6 +1482,71 @@ class AnalysisCacheTests(unittest.TestCase):
         )
         self.assertIn("prefix_a", result["new_analysis_entries"])
 
+    def test_run_group_analysis_calls_on_prefix_done_for_fresh_prefixes(self):
+        """on_prefix_done fires once per freshly-computed prefix."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        active_loras = [
+            _make_lora_entry({"prefix_a": 1.0}, strength=1.0, name="a.safetensors"),
+            _make_lora_entry({"prefix_a": 0.5}, strength=1.0, name="b.safetensors"),
+        ]
+        model = _make_model()
+        target_groups = optimizer._build_target_groups(
+            ["prefix_a"], {"prefix_a": "layer.weight"}, {})
+
+        calls = []
+        device = torch.device("cpu")
+        optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, device,
+            cached_analysis={},
+            track_new_entries=True,
+            on_prefix_done=lambda prefix, entry: calls.append((prefix, entry)),
+        )
+        self.assertEqual(len(calls), 1)
+        prefix, entry = calls[0]
+        self.assertEqual(prefix, "prefix_a")
+        self.assertIn("ranks", entry)
+
+    def test_run_group_analysis_does_not_call_on_prefix_done_for_cache_hits(self):
+        """on_prefix_done is NOT called for prefixes already in cached_analysis."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        active_loras = [
+            _make_lora_entry({"prefix_a": 1.0}, strength=1.0, name="a.safetensors"),
+            _make_lora_entry({"prefix_a": 0.5}, strength=1.0, name="b.safetensors"),
+        ]
+        model = _make_model()
+        target_groups = optimizer._build_target_groups(
+            ["prefix_a"], {"prefix_a": "layer.weight"}, {})
+
+        fake_cached = {
+            "prefix_a": {
+                "pair_conflicts": {
+                    "0,1": {"overlap": 10, "conflict": 2, "dot": 0.1,
+                            "norm_a_sq": 1.0, "norm_b_sq": 0.25,
+                            "weighted_total": 0.3, "weighted_conflict": 0.05,
+                            "expected_conflict": 0.1, "excess_conflict": 0.0,
+                            "subspace_overlap": 0.1, "subspace_weight": 0.5}
+                },
+                "per_lora_norm_sq": {"0": 1.0, "1": 0.25},
+                "magnitude_samples_unscaled": {"0": [0.5], "1": [0.3]},
+                "ranks": {"0": 1, "1": 1},
+                "target_key": "layer.weight",
+                "is_clip": False,
+                "raw_n": 2,
+                "skip_count": 0,
+                "strength_signs": {"0": 1, "1": 1},
+            }
+        }
+
+        calls = []
+        device = torch.device("cpu")
+        optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, device,
+            cached_analysis=fake_cached,
+            track_new_entries=True,
+            on_prefix_done=lambda prefix, entry: calls.append(prefix),
+        )
+        self.assertEqual(calls, [])
+
     def test_dataset_entry_includes_raw_analysis(self):
         """Dataset entries include raw_analysis field when new_analysis_entries provided."""
         with tempfile.TemporaryDirectory() as tmpdir:
