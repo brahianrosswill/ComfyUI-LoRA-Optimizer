@@ -4808,10 +4808,13 @@ class LoRAOptimizer(_LoRAMergeBase):
         if not participating:
             return None  # no LoRAs active for this prefix; fall back to _analyze_target_group
 
-        # Sign-flip check
+        # Sign-flip check (must mirror _extract_for_lora_cache's eff_s logic)
         for i in participating:
             entry = lora_entries[i]
-            current_sign = 1 if active_loras[i]["strength"] >= 0 else -1
+            clip_s = active_loras[i].get("clip_strength")
+            is_clip = entry["is_clip"]
+            eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[i]["strength"]
+            current_sign = 1 if eff_s >= 0 else -1
             if current_sign != entry.get("strength_sign", 1):
                 logging.info(
                     f"[AutoTuner Pair/Lora Cache] Sign flip on LoRA {i} "

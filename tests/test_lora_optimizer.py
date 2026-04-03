@@ -2066,6 +2066,33 @@ class TestPairLoraReconstruction(unittest.TestCase):
         )
         self.assertIsNone(result)
 
+    def test_reconstruction_returns_none_on_clip_strength_sign_flip(self):
+        """Sign flip detected via clip_strength for CLIP prefixes."""
+        lora_entries = {
+            0: {
+                "norm_sq": 2.25, "rank": 16,
+                "magnitude_samples_unscaled": [0.5],
+                "strength_sign": -1,  # cached with negative clip_strength
+                "target_key": "lora_te_text_model_encoder_layers_0_weight",
+                "is_clip": True, "skip_count": 0, "raw_n": 1,
+            },
+            1: {**self._make_lora_entries()[1],
+                "is_clip": True},
+        }
+        active_loras = [
+            {"name": "a.safetensors", "strength": 1.0, "clip_strength": 0.5},  # sign flip vs -1
+            {"name": "b.safetensors", "strength": 1.0},
+        ]
+        lora_hashes = {0: "aaa", 1: "bbb"}
+        result = lora_optimizer.LoRAOptimizer._reconstruct_from_pair_lora_cache(
+            "prefix_clip",
+            lora_entries=lora_entries,
+            pair_entries=self._make_pair_entries(),
+            active_loras=active_loras,
+            lora_hashes=lora_hashes,
+        )
+        self.assertIsNone(result)
+
     def test_reconstruction_swaps_norm_when_hash_ordering_differs(self):
         """When lora 0's hash > lora 1's hash, norm_a_sq in pair file is lora 1's."""
         active_loras = [
