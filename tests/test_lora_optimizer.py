@@ -1608,5 +1608,75 @@ class AnalysisCacheTests(unittest.TestCase):
                               entry["raw_analysis"]["per_prefix"]["prefix_a"])
 
 
+class TestAnalysisPartialLifecycle(unittest.TestCase):
+    """Integration tests for partial checkpoint create/resume/delete lifecycle."""
+
+    def test_partial_file_created_after_each_prefix(self):
+        """Callback writes partial file; file exists after analysis."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                tuner = lora_optimizer.LoRAAutoTuner()
+                active_loras = [
+                    _make_lora_entry({"prefix_a": 1.0}, strength=1.0, name="a.safetensors"),
+                    _make_lora_entry({"prefix_a": 0.5}, strength=1.0, name="b.safetensors"),
+                ]
+                names_only_hash, _ = tuner._compute_names_only_hash(active_loras)
+                source_loras = [{"name": l["name"]} for l in active_loras]
+
+                partial_accumulated = {}
+                written = []
+
+                def on_prefix_done(prefix, entry):
+                    partial_accumulated[prefix] = entry
+                    tuner._analysis_partial_save(names_only_hash, partial_accumulated, source_loras)
+                    written.append(prefix)
+
+                model = _make_model()
+                target_groups = tuner._build_target_groups(
+                    ["prefix_a"], {"prefix_a": "layer.weight"}, {})
+                device = torch.device("cpu")
+                tuner._run_group_analysis(
+                    target_groups, active_loras, model, None, device,
+                    cached_analysis={},
+                    track_new_entries=True,
+                    on_prefix_done=on_prefix_done,
+                )
+
+                self.assertIn("prefix_a", written)
+                partial_path = tuner._analysis_partial_path(names_only_hash)
+                self.assertTrue(os.path.exists(partial_path))
+
+    def test_partial_file_deleted_after_full_cache_saved(self):
+        """_analysis_partial_delete removes the file after full cache is written."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                tuner = lora_optimizer.LoRAAutoTuner()
+                hash_val = "testhash99"
+                tuner._analysis_partial_save(hash_val, {"prefix_a": {}}, [])
+                partial_path = tuner._analysis_partial_path(hash_val)
+                self.assertTrue(os.path.exists(partial_path))
+
+                tuner._analysis_cache_save(hash_val, {"prefix_a": {}}, [])
+                tuner._analysis_partial_delete(hash_val)
+
+                self.assertFalse(os.path.exists(partial_path))
+                full_path = tuner._analysis_cache_path(hash_val)
+                self.assertTrue(os.path.exists(full_path))
+
+    def test_partial_file_loaded_when_no_full_cache(self):
+        """If full cache is missing but .partial exists, it is loaded."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                tuner = lora_optimizer.LoRAAutoTuner()
+                hash_val = "resumehash1"
+                per_prefix = {"prefix_b": {"ranks": {"0": 16}, "is_clip": False}}
+                tuner._analysis_partial_save(hash_val, per_prefix, [])
+
+                self.assertIsNone(tuner._analysis_cache_load(hash_val))
+                loaded = tuner._analysis_partial_load(hash_val)
+                self.assertIsNotNone(loaded)
+                self.assertIn("prefix_b", loaded)
+
+
 if __name__ == "__main__":
     unittest.main()

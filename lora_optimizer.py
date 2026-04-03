@@ -7646,11 +7646,11 @@ class LoRAAutoTuner(LoRAOptimizer):
             with open(path) as f:
                 data = json.load(f)
             if data.get("algo_version") != AUTOTUNER_ALGO_VERSION:
-                logging.info("[AutoTuner Analysis Cache] Partial file stale algo version, ignoring")
+                logging.info("[AutoTuner Analysis Partial] Stale algo version, ignoring")
                 return None
             return data.get("per_prefix")
         except Exception as e:
-            logging.warning(f"[AutoTuner Analysis Cache] Failed to load partial: {e}")
+            logging.warning(f"[AutoTuner Analysis Partial] Failed to load: {e}")
             return None
 
     @staticmethod
@@ -7670,6 +7670,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             with open(tmp_path, "w") as f:
                 json.dump(entry, f)
             os.replace(tmp_path, path)
+            logging.info(f"[AutoTuner Analysis Partial] Saved: {path}")
         except Exception as e:
             logging.warning(f"[AutoTuner Analysis Cache] Failed to save partial: {e}")
             try:
@@ -7949,7 +7950,13 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.info(
                 f"[AutoTuner Analysis Cache] HIT — {len(cached_analysis)} prefixes cached")
         else:
-            logging.info("[AutoTuner Analysis Cache] MISS — will run full analysis")
+            cached_analysis = self._analysis_partial_load(names_only_hash)
+            if cached_analysis is not None:
+                logging.info(
+                    f"[AutoTuner Analysis Cache] Partial resume — "
+                    f"{len(cached_analysis)} prefixes already done")
+            else:
+                logging.info("[AutoTuner Analysis Cache] MISS — will run full analysis")
 
         # Order-independent hash for persistent memory (sorted pairs)
         if memory_mode != "disabled" and not _is_sub_merge:
@@ -7998,6 +8005,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 analysis_path = self._analysis_cache_path(names_only_hash)
                 if os.path.exists(analysis_path):
                     os.unlink(analysis_path)
+                self._analysis_partial_delete(names_only_hash)
                 cached_analysis = None
 
             if memory_mode in ("auto", "read_only"):
@@ -8084,6 +8092,14 @@ class LoRAAutoTuner(LoRAOptimizer):
             pbar = _NullPbar()
         else:
             pbar = comfy.utils.ProgressBar(len(target_groups) + n_pbar_merges)
+        source_loras_for_cache = [{"name": item["name"]} for item in active_loras]
+        partial_accumulated = dict(cached_analysis or {})
+
+        def _on_prefix_done(prefix, entry):
+            partial_accumulated[prefix] = entry
+            self._analysis_partial_save(
+                names_only_hash, partial_accumulated, source_loras_for_cache)
+
         analysis_data = self._run_group_analysis(
             target_groups, active_loras, model, clip, compute_device,
             clip_strength_multiplier=clip_strength_multiplier,
@@ -8092,6 +8108,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             progress_cb=lambda: pbar.update(1),
             cached_analysis=cached_analysis,
             track_new_entries=True,
+            on_prefix_done=_on_prefix_done,
         )
         all_key_targets = analysis_data["all_key_targets"]
         target_groups = analysis_data["target_groups"]
@@ -8108,8 +8125,8 @@ class LoRAAutoTuner(LoRAOptimizer):
         if new_analysis_entries:
             merged = dict(cached_analysis or {})
             merged.update(new_analysis_entries)
-            source_loras = [{"name": item["name"]} for item in active_loras]
-            self._analysis_cache_save(names_only_hash, merged, source_loras)
+            self._analysis_cache_save(names_only_hash, merged, source_loras_for_cache)
+            self._analysis_partial_delete(names_only_hash)
 
         if prefix_count == 0:
             return (model, clip, "No compatible LoRA keys found.", "", None, None)
