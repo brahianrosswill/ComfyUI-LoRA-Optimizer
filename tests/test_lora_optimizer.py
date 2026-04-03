@@ -1943,7 +1943,7 @@ class TestCacheExtraction(unittest.TestCase):
         self.assertAlmostEqual(entry["magnitude_samples_unscaled"][0], 0.5 / 1.5, places=5)
 
     def test_extract_for_lora_cache_non_participating_returns_none(self):
-        """LoRA index not in partial_stats → non-participating → return None."""
+        """LoRA index not in per_lora_norm_sq → non-participating → return None."""
         active_loras = [
             {"name": "a.safetensors", "strength": 1.0},
             {"name": "b.safetensors", "strength": 1.0},

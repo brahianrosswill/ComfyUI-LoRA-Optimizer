@@ -4701,8 +4701,6 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         # Find position of lora_idx in partial_stats (same order as magnitude_samples)
         lora_indices = [s[0] for s in partial_stats]
-        if lora_idx not in lora_indices:
-            return None
         pos = lora_indices.index(lora_idx)
         rank = partial_stats[pos][1]
 
