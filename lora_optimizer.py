@@ -5052,10 +5052,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                                     result, i, active_loras)
                         if pair_caches is not None:
                             for (i, j) in pairs:
-                                lora_entry = self._extract_for_pair_cache(
+                                pair_entry = self._extract_for_pair_cache(
                                     result, i, j, lora_hashes[i], lora_hashes[j])
-                                if lora_entry is not None:
-                                    new_pair_entries[(i, j)][prefix] = lora_entry
+                                if pair_entry is not None:
+                                    new_pair_entries[(i, j)][prefix] = pair_entry
                 _collect_analysis_result(result)
                 if progress_cb is not None:
                     progress_cb()
@@ -5103,10 +5103,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                                         result, i, active_loras)
                             if pair_caches is not None:
                                 for (i, j) in pairs:
-                                    lora_entry = self._extract_for_pair_cache(
+                                    pair_entry = self._extract_for_pair_cache(
                                         result, i, j, lora_hashes[i], lora_hashes[j])
-                                    if lora_entry is not None:
-                                        new_pair_entries[(i, j)][prefix] = lora_entry
+                                    if pair_entry is not None:
+                                        new_pair_entries[(i, j)][prefix] = pair_entry
                     _collect_analysis_result(result)
                     if progress_cb is not None:
                         progress_cb()
