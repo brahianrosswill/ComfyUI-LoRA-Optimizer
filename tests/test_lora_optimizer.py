@@ -1749,5 +1749,97 @@ class TestAnalysisPartialLifecycle(unittest.TestCase):
                 self.assertFalse(os.path.exists(partial_path))
 
 
+class TestLoraCacheIO(unittest.TestCase):
+
+    def test_lora_identity_hash_returns_16char_hex(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a fake lora file so os.stat works
+            lora_path = os.path.join(tmpdir, "test.safetensors")
+            with open(lora_path, "w") as f:
+                f.write("x")
+            with mock.patch("lora_optimizer.folder_paths.get_full_path",
+                            return_value=lora_path):
+                h = lora_optimizer.LoRAAutoTuner._lora_identity_hash(
+                    {"name": "test.safetensors", "strength": 1.0})
+                self.assertIsInstance(h, str)
+                self.assertEqual(len(h), 16)
+                self.assertTrue(all(c in "0123456789abcdef" for c in h))
+
+    def test_lora_identity_hash_differs_for_different_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_a = os.path.join(tmpdir, "a.safetensors")
+            path_b = os.path.join(tmpdir, "b.safetensors")
+            with open(path_a, "w") as f: f.write("x")
+            with open(path_b, "w") as f: f.write("y")
+            def fake_get_full_path(folder, name):
+                return path_a if name == "a.safetensors" else path_b
+            with mock.patch("lora_optimizer.folder_paths.get_full_path",
+                            side_effect=fake_get_full_path):
+                ha = lora_optimizer.LoRAAutoTuner._lora_identity_hash(
+                    {"name": "a.safetensors", "strength": 1.0})
+                hb = lora_optimizer.LoRAAutoTuner._lora_identity_hash(
+                    {"name": "b.safetensors", "strength": 1.0})
+                self.assertNotEqual(ha, hb)
+
+    def test_lora_identity_hash_ignores_strength(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lora_path = os.path.join(tmpdir, "test.safetensors")
+            with open(lora_path, "w") as f: f.write("x")
+            with mock.patch("lora_optimizer.folder_paths.get_full_path",
+                            return_value=lora_path):
+                h1 = lora_optimizer.LoRAAutoTuner._lora_identity_hash(
+                    {"name": "test.safetensors", "strength": 0.5})
+                h2 = lora_optimizer.LoRAAutoTuner._lora_identity_hash(
+                    {"name": "test.safetensors", "strength": 1.0})
+                self.assertEqual(h1, h2)
+
+    def test_lora_cache_path_uses_lora_suffix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                path = lora_optimizer.LoRAAutoTuner._lora_cache_path("abc123")
+                self.assertTrue(path.endswith("abc123.lora.json"))
+
+    def test_lora_cache_load_missing_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                self.assertIsNone(
+                    lora_optimizer.LoRAAutoTuner._lora_cache_load("nonexistent"))
+
+    def test_lora_cache_load_stale_algo_version_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                path = os.path.join(tmpdir, "stale.lora.json")
+                with open(path, "w") as f:
+                    json.dump({"algo_version": "0.0.0", "per_prefix": {}}, f)
+                self.assertIsNone(
+                    lora_optimizer.LoRAAutoTuner._lora_cache_load("stale"))
+
+    def test_lora_cache_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                per_prefix = {
+                    "prefix_a": {
+                        "norm_sq": 1.5, "rank": 16,
+                        "magnitude_samples_unscaled": [0.1, 0.2],
+                        "strength_sign": 1,
+                        "target_key": "layer.weight",
+                        "is_clip": False, "skip_count": 0, "raw_n": 1,
+                    }
+                }
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("abc123", per_prefix)
+                loaded = lora_optimizer.LoRAAutoTuner._lora_cache_load("abc123")
+                self.assertIsNotNone(loaded)
+                self.assertIn("prefix_a", loaded)
+                self.assertEqual(loaded["prefix_a"]["norm_sq"], 1.5)
+
+    def test_lora_cache_save_is_atomic(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("abc123", {})
+                path = lora_optimizer.LoRAAutoTuner._lora_cache_path("abc123")
+                self.assertTrue(os.path.exists(path))
+                self.assertFalse(os.path.exists(path + ".tmp"))
+
+
 if __name__ == "__main__":
     unittest.main()

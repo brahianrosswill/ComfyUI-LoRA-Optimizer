@@ -7688,6 +7688,66 @@ class LoRAAutoTuner(LoRAOptimizer):
             pass
 
     @staticmethod
+    def _lora_identity_hash(lora_item):
+        """16-char hex hash of a single LoRA's file identity (name+mtime+size)."""
+        name = lora_item["name"]
+        path = folder_paths.get_full_path("loras", name)
+        if path is not None:
+            try:
+                st = os.stat(path)
+                entry = (name, st.st_mtime, st.st_size)
+            except OSError:
+                entry = (name, 0, 0)
+        else:
+            entry = (name, 0, 0)
+        hash_input = json.dumps(entry, separators=(",", ":"))
+        return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+
+    @staticmethod
+    def _lora_cache_path(lora_hash):
+        return os.path.join(AUTOTUNER_MEMORY_DIR, f"{lora_hash}.lora.json")
+
+    @staticmethod
+    def _lora_cache_load(lora_hash):
+        """Load per-LoRA prefix stats. Returns per_prefix dict or None on miss/stale."""
+        path = LoRAAutoTuner._lora_cache_path(lora_hash)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            if data.get("algo_version") != AUTOTUNER_ALGO_VERSION:
+                logging.info("[AutoTuner Lora Cache] Stale algo version, ignoring")
+                return None
+            return data.get("per_prefix")
+        except Exception as e:
+            logging.warning(f"[AutoTuner Lora Cache] Failed to load: {e}")
+            return None
+
+    @staticmethod
+    def _lora_cache_save(lora_hash, per_prefix):
+        """Atomic write of per-LoRA cache to disk."""
+        from datetime import datetime
+        path = LoRAAutoTuner._lora_cache_path(lora_hash)
+        entry = {
+            "algo_version": AUTOTUNER_ALGO_VERSION,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "per_prefix": per_prefix,
+        }
+        tmp_path = path + ".tmp"
+        try:
+            with open(tmp_path, "w") as f:
+                json.dump(entry, f)
+            os.replace(tmp_path, path)
+            logging.info(f"[AutoTuner Lora Cache] Saved: {path}")
+        except Exception as e:
+            logging.warning(f"[AutoTuner Lora Cache] Failed to save: {e}")
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    @staticmethod
     def _memory_load(lora_hash, settings_hash, requested_top_n):
         """Load and validate a memory entry. Returns tuner_data or None."""
         path = LoRAAutoTuner._memory_file_path(lora_hash, settings_hash)
