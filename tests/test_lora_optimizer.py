@@ -1677,6 +1677,70 @@ class TestAnalysisPartialLifecycle(unittest.TestCase):
                 self.assertIsNotNone(loaded)
                 self.assertIn("prefix_b", loaded)
 
+    def test_partial_promoted_to_full_cache_when_all_prefixes_already_done(self):
+        """If partial has all prefixes and analysis adds none, full cache is still written."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                tuner = lora_optimizer.LoRAAutoTuner()
+                active_loras = [
+                    _make_lora_entry({"prefix_a": 1.0}, strength=1.0, name="a.safetensors"),
+                    _make_lora_entry({"prefix_a": 0.5}, strength=1.0, name="b.safetensors"),
+                ]
+                names_only_hash, _ = tuner._compute_names_only_hash(active_loras)
+                source_loras = [{"name": l["name"]} for l in active_loras]
+
+                # Simulate: partial file has all prefixes (crash after last prefix, before full save)
+                model = _make_model()
+                target_groups = tuner._build_target_groups(
+                    ["prefix_a"], {"prefix_a": "layer.weight"}, {})
+                device = torch.device("cpu")
+
+                # First: compute full analysis and manually save only to partial
+                result = tuner._run_group_analysis(
+                    target_groups, active_loras, model, None, device,
+                    cached_analysis={},
+                    track_new_entries=True,
+                )
+                partial_entries = result["new_analysis_entries"]
+                tuner._analysis_partial_save(names_only_hash, partial_entries, source_loras)
+
+                # Verify: full cache does NOT exist yet
+                full_path = tuner._analysis_cache_path(names_only_hash)
+                self.assertFalse(os.path.exists(full_path))
+
+                # Now simulate resume: load from partial (all prefixes cached), run analysis
+                cached_analysis = tuner._analysis_partial_load(names_only_hash)
+                self.assertIsNotNone(cached_analysis)
+
+                using_partial = True
+                partial_accumulated = dict(cached_analysis)
+
+                def on_prefix_done(prefix, entry):
+                    partial_accumulated[prefix] = entry
+                    tuner._analysis_partial_save(names_only_hash, partial_accumulated, source_loras)
+
+                result2 = tuner._run_group_analysis(
+                    target_groups, active_loras, model, None, device,
+                    cached_analysis=cached_analysis,
+                    track_new_entries=True,
+                    on_prefix_done=on_prefix_done,
+                )
+                new_entries = result2["new_analysis_entries"]
+                # All prefixes were cached, so new_entries should be empty
+                self.assertEqual(new_entries, {})
+
+                # Apply the fix: promote partial to full cache when using_partial=True
+                if new_entries or using_partial:
+                    merged = dict(cached_analysis or {})
+                    merged.update(new_entries)
+                    tuner._analysis_cache_save(names_only_hash, merged, source_loras)
+                tuner._analysis_partial_delete(names_only_hash)
+
+                # Verify: full cache now exists, partial is gone
+                self.assertTrue(os.path.exists(full_path))
+                partial_path = tuner._analysis_partial_path(names_only_hash)
+                self.assertFalse(os.path.exists(partial_path))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7672,7 +7672,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             os.replace(tmp_path, path)
             logging.info(f"[AutoTuner Analysis Partial] Saved: {path}")
         except Exception as e:
-            logging.warning(f"[AutoTuner Analysis Cache] Failed to save partial: {e}")
+            logging.warning(f"[AutoTuner Analysis Partial] Failed to save partial: {e}")
             try:
                 os.unlink(tmp_path)
             except OSError:
@@ -7946,12 +7946,14 @@ class LoRAAutoTuner(LoRAOptimizer):
 
         names_only_hash, _ = self._compute_names_only_hash(active_loras)
         cached_analysis = self._analysis_cache_load(names_only_hash)
+        using_partial = False
         if cached_analysis is not None:
             logging.info(
                 f"[AutoTuner Analysis Cache] HIT — {len(cached_analysis)} prefixes cached")
         else:
             cached_analysis = self._analysis_partial_load(names_only_hash)
             if cached_analysis is not None:
+                using_partial = True
                 logging.info(
                     f"[AutoTuner Analysis Cache] Partial resume — "
                     f"{len(cached_analysis)} prefixes already done")
@@ -8122,11 +8124,11 @@ class LoRAAutoTuner(LoRAOptimizer):
         pairs = analysis_data["pairs"]
 
         new_analysis_entries = analysis_data.get("new_analysis_entries", {})
-        if new_analysis_entries:
+        if new_analysis_entries or using_partial:
             merged = dict(cached_analysis or {})
             merged.update(new_analysis_entries)
             self._analysis_cache_save(names_only_hash, merged, source_loras_for_cache)
-            self._analysis_partial_delete(names_only_hash)
+        self._analysis_partial_delete(names_only_hash)
 
         if prefix_count == 0:
             return (model, clip, "No compatible LoRA keys found.", "", None, None)
