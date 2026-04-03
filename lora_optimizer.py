@@ -4687,6 +4687,61 @@ class LoRAOptimizer(_LoRAMergeBase):
         }
 
     @staticmethod
+    def _extract_for_lora_cache(result, lora_idx, active_loras):
+        """
+        Extract per-LoRA stats for one LoRA from an _analyze_target_group result.
+        Returns None if lora_idx did not participate in this prefix.
+        """
+        (prefix, partial_stats, pair_conflicts, magnitude_samples,
+         target_info, skip_count, raw_n, per_lora_norm_sq) = result
+        if lora_idx not in per_lora_norm_sq:
+            return None
+        target_key, is_clip = target_info
+        tk_serial = list(target_key) if isinstance(target_key, tuple) else target_key
+
+        # Find position of lora_idx in partial_stats (same order as magnitude_samples)
+        lora_indices = [s[0] for s in partial_stats]
+        if lora_idx not in lora_indices:
+            return None
+        pos = lora_indices.index(lora_idx)
+        rank = partial_stats[pos][1]
+
+        clip_s = active_loras[lora_idx].get("clip_strength")
+        eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[lora_idx]["strength"]
+        abs_strength = abs(eff_s)
+        raw = magnitude_samples[pos] if pos < len(magnitude_samples) else torch.tensor([])
+        mag_unscaled = (raw / abs_strength if abs_strength > 0 else raw).tolist()
+
+        return {
+            "norm_sq": float(per_lora_norm_sq[lora_idx]),
+            "rank": rank,
+            "magnitude_samples_unscaled": mag_unscaled,
+            "strength_sign": 1 if eff_s >= 0 else -1,
+            "target_key": tk_serial,
+            "is_clip": is_clip,
+            "skip_count": skip_count,
+            "raw_n": raw_n,
+        }
+
+    @staticmethod
+    def _extract_for_pair_cache(result, i, j, hash_i, hash_j):
+        """
+        Extract pair metrics for one (i,j) pair from an _analyze_target_group result.
+        norm_a_sq corresponds to the LoRA with the lexicographically smaller hash.
+        Returns None if this pair did not participate.
+        """
+        (prefix, partial_stats, pair_conflicts, magnitude_samples,
+         target_info, skip_count, raw_n, per_lora_norm_sq) = result
+        if (i, j) not in pair_conflicts:
+            return None
+        metrics = dict(pair_conflicts[(i, j)])
+        # Ensure norm_a_sq corresponds to smaller hash
+        if hash_i > hash_j:
+            metrics["norm_a_sq"], metrics["norm_b_sq"] = (
+                metrics["norm_b_sq"], metrics["norm_a_sq"])
+        return metrics
+
+    @staticmethod
     def _reconstruct_from_analysis_cache(prefix, cached_prefix, active_loras):
         """
         Reconstruct the 8-tuple expected by _collect_analysis_result from cached

@@ -1902,5 +1902,84 @@ class TestPairCacheIO(unittest.TestCase):
                 self.assertFalse(os.path.exists(path + ".tmp"))
 
 
+class TestCacheExtraction(unittest.TestCase):
+
+    def _make_result(self):
+        """Minimal 8-tuple from _analyze_target_group."""
+        partial_stats = [(0, 16, 1.5, 2.25), (1, 32, 0.9, 0.81)]
+        pair_conflicts = {
+            (0, 1): {
+                "overlap": 50, "conflict": 10, "dot": 0.4,
+                "norm_a_sq": 2.25, "norm_b_sq": 0.81,
+                "weighted_total": 0.6, "weighted_conflict": 0.1,
+                "expected_conflict": 0.12, "excess_conflict": 0.0,
+                "subspace_overlap": 0.2, "subspace_weight": 0.5,
+            }
+        }
+        magnitude_samples = [
+            torch.tensor([0.5, 1.0]),  # lora 0, already scaled by strength
+            torch.tensor([0.3, 0.6]),  # lora 1
+        ]
+        per_lora_norm_sq = {0: 2.25, 1: 0.81}
+        return (
+            "prefix_a", partial_stats, pair_conflicts, magnitude_samples,
+            ("layer.weight", False), 0, 2, per_lora_norm_sq
+        )
+
+    def test_extract_for_lora_cache_participating(self):
+        active_loras = [
+            {"name": "a.safetensors", "strength": 1.5},
+            {"name": "b.safetensors", "strength": 0.9},
+        ]
+        result = self._make_result()
+        entry = lora_optimizer.LoRAOptimizer._extract_for_lora_cache(result, 0, active_loras)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["norm_sq"], 2.25)
+        self.assertEqual(entry["rank"], 16)
+        self.assertEqual(entry["strength_sign"], 1)
+        self.assertFalse(entry["is_clip"])
+        self.assertEqual(entry["target_key"], "layer.weight")
+        # magnitude unscaled: tensor / abs(strength=1.5)
+        self.assertAlmostEqual(entry["magnitude_samples_unscaled"][0], 0.5 / 1.5, places=5)
+
+    def test_extract_for_lora_cache_non_participating_returns_none(self):
+        """LoRA index not in partial_stats → non-participating → return None."""
+        active_loras = [
+            {"name": "a.safetensors", "strength": 1.0},
+            {"name": "b.safetensors", "strength": 1.0},
+            {"name": "c.safetensors", "strength": 1.0},  # index 2: not in result
+        ]
+        result = self._make_result()
+        entry = lora_optimizer.LoRAOptimizer._extract_for_lora_cache(result, 2, active_loras)
+        self.assertIsNone(entry)
+
+    def test_extract_for_pair_cache_norm_order_by_hash(self):
+        """norm_a_sq in entry corresponds to the LoRA with the smaller hash."""
+        result = self._make_result()
+        # hash_i > hash_j → swap norm_a/norm_b
+        entry = lora_optimizer.LoRAOptimizer._extract_for_pair_cache(
+            result, i=0, j=1, hash_i="zzz", hash_j="aaa")
+        # In result, norm_a_sq=2.25 (lora 0), norm_b_sq=0.81 (lora 1)
+        # hash_j="aaa" < hash_i="zzz", so "aaa" (lora 1) should be norm_a
+        self.assertAlmostEqual(entry["norm_a_sq"], 0.81)
+        self.assertAlmostEqual(entry["norm_b_sq"], 2.25)
+
+    def test_extract_for_pair_cache_no_swap_when_hash_i_smaller(self):
+        result = self._make_result()
+        entry = lora_optimizer.LoRAOptimizer._extract_for_pair_cache(
+            result, i=0, j=1, hash_i="aaa", hash_j="zzz")
+        # hash_i="aaa" < hash_j="zzz" → no swap
+        self.assertAlmostEqual(entry["norm_a_sq"], 2.25)
+        self.assertAlmostEqual(entry["norm_b_sq"], 0.81)
+
+    def test_extract_for_pair_cache_non_participating_returns_none(self):
+        """Pair not in pair_conflicts (one LoRA doesn't participate) → None."""
+        result = self._make_result()
+        # Pair (0,2) not in result
+        entry = lora_optimizer.LoRAOptimizer._extract_for_pair_cache(
+            result, i=0, j=2, hash_i="aaa", hash_j="zzz")
+        self.assertIsNone(entry)
+
+
 if __name__ == "__main__":
     unittest.main()
