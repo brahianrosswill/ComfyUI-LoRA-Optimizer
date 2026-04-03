@@ -244,9 +244,70 @@ Ranking stays fair because all candidates are scored on the same subset. High-co
 
 Scoring formula version for ranking candidates. `v2` is the current default with improved composite scoring. `v1` is the original formula, kept for comparison.
 
+### `output_mode` (merge / tuning_only, default merge)
+
+Controls what the AutoTuner outputs after the sweep.
+
+| Value | Behavior | When to Use |
+|-------|----------|-------------|
+| `merge` (default) | Applies the top-ranked config and outputs the merged model | Normal use — the AutoTuner both ranks and applies |
+| `tuning_only` | Skips the final merge, passes the base model through | Connect AutoTuner → LoRA Optimizer (Legacy) to apply the winning config via a separate optimizer node |
+
+`tuning_only` is useful when you want the AutoTuner to decide the settings but apply the merge through a dedicated Optimizer node with additional controls (e.g., a custom `merge_strategy_override`).
+
+### `memory_mode` (disabled / auto / read_only / clear_and_run, default auto)
+
+Persistent cache for tuning results. When a matching entry exists on disk, the full Phase 1 + Phase 2 sweep is skipped and the cached rankings are replayed in a single merge (~2–5 seconds instead of 30–120+).
+
+| Value | Behavior |
+|-------|----------|
+| `disabled` | No caching — always run the full sweep |
+| `auto` (default) | Load from cache if available; save new results after a sweep |
+| `read_only` | Use cached results but never write new ones |
+| `clear_and_run` | Delete the cached entry and re-run from scratch, then save |
+
+The cache key is the LoRA set (names + strengths) + tuning settings. Changing any LoRA strength or tuning parameter causes a cache miss. Cache files live in `models/autotuner_memory/` as `{lora_hash}_{settings_hash}.memory.json`.
+
+Use `clear_and_run` after updating a LoRA file in place (same filename, different content), or when you want fresh results after tweaking settings.
+
+### `selection` (1–10, default 1)
+
+When a memory hit occurs, `selection` controls which ranked config is replayed. `1` = the original top-ranked config. `2` = second-ranked, and so on. Requires the cached entry to have at least `selection` configs stored (determined by `top_n` at the time of the original run).
+
+This lets you explore alternatives from a cached run without re-running the full sweep: set `memory_mode=auto` and increase `selection` to try the 2nd or 3rd ranked config from the last run.
+
 ### `record_dataset` (enabled / disabled)
 
 Saves analysis metrics and scoring results to `lora_optimizer_reports/autotuner_dataset.jsonl`. Used for threshold tuning research — not needed for normal use.
+
+---
+
+## AutoTuner Caching Infrastructure
+
+The AutoTuner uses three disk-based caches to avoid redundant computation. All cache files live in `models/autotuner_memory/`.
+
+### Persistent Memory (`.memory.json`)
+
+Stores complete tuning results (rankings, configs, scores) keyed by LoRA set + settings. See `memory_mode` above. A cache hit skips the entire sweep — typically 30–120× faster than a full run.
+
+### Analysis Cache (`.analysis.json`)
+
+Stores per-prefix pairwise conflict metrics (overlap, cosine similarity, sign conflicts) keyed by the set of LoRA names. Phase 1 analysis is the most GPU-intensive part of a tuning run — this cache makes repeated runs with the same LoRA set nearly instant.
+
+The analysis cache is populated automatically and invalidated when any LoRA in the set changes. You do not need to configure it.
+
+### Analysis Resume (`.analysis.partial.json`)
+
+If a tuning run is interrupted mid-analysis (OOM, crash, ComfyUI restart), the partial results are saved as a checkpoint. On the next run with the same LoRA set, analysis resumes from where it left off instead of starting over.
+
+The partial file is deleted automatically when analysis completes successfully.
+
+### Clearing Caches
+
+To force a full re-run from scratch:
+- **Persistent memory only:** Set `memory_mode=clear_and_run`
+- **Analysis cache:** Delete `{names_hash}.analysis.json` from `models/autotuner_memory/`
+- **All caches:** Delete all files from `models/autotuner_memory/`
 
 ---
 

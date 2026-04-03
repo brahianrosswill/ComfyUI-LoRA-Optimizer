@@ -137,6 +137,20 @@ Enable `normalize_keys` — this remaps keys from different trainers to a canoni
 
 The Merge Selector validates that the LoRA stack hasn't changed since the AutoTuner ran (via hash comparison). If you modified the stack (changed LoRAs, strengths, or conflict modes), re-run the AutoTuner.
 
+### "AutoTuner memory hit but I updated a LoRA file"
+
+The memory cache key uses filename + modification time + file size. If you replaced a LoRA file in place without the timestamp changing (e.g., via some tools that preserve mtime), the cache won't detect the change. Set `memory_mode=clear_and_run` to force a fresh sweep and update the cache.
+
+### "AutoTuner is slow / I want to reuse analysis from a previous run"
+
+Enable `memory_mode=auto` (the default). After the first sweep completes, results are cached in `models/autotuner_memory/`. Subsequent runs with the same LoRAs and settings replay the cached result in a single merge pass (~2–5s).
+
+The analysis cache (`.analysis.json` files) also persists pairwise conflict metrics between runs — even without a full memory hit, Phase 1 analysis is skipped if the LoRA set matches.
+
+### "AutoTuner crashed or was interrupted mid-run"
+
+The in-progress analysis is checkpointed automatically. On the next run with the same LoRA set, analysis resumes from where it left off. The checkpoint file is deleted automatically after a successful run.
+
 ---
 
 ## Performance Tips
@@ -145,7 +159,8 @@ The Merge Selector validates that the LoRA stack hasn't changed since the AutoTu
 
 - `svd_device=gpu` is 10–50x faster than CPU for SVD compression
 - `cache_patches=enabled` gives instant re-execution when only changing `output_strength`
-- The AutoTuner caches Pass 1 analysis — only Phase 2 merges take time
+- The AutoTuner caches Pass 1 analysis — only Phase 2 merges take time on repeated runs with the same LoRA set
+- Enable `memory_mode=auto` to skip the entire sweep on subsequent runs with the same LoRAs and settings
 - `scoring_device=gpu` speeds up AutoTuner quality scoring
 
 ### Quality

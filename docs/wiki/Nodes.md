@@ -140,6 +140,8 @@ AutoTuner-specific configuration. Accepts optional Merge Settings input.
 | `diff_cache_mode` | COMBO | Yes | `auto` | `disabled`, `auto`, `ram`, `disk` |
 | `diff_cache_ram_pct` | FLOAT | Yes | 0.5 | RAM fraction for auto diff cache (0.1–0.9) |
 | `record_dataset` | COMBO | Yes | `disabled` | `enabled`, `disabled` — save metrics to JSONL |
+| `memory_mode` | COMBO | Yes | `auto` | `disabled`, `auto`, `read_only`, `clear_and_run` — persistent tuning result cache across sessions |
+| `selection` | INT | Yes | 1 | Which ranked config to replay from memory on a cache hit (1 = top-ranked) |
 
 ### Optional Inputs
 
@@ -244,10 +246,13 @@ All inputs from the Legacy optimizer, plus:
 | `scoring_svd` | COMBO | disabled | `enabled`, `disabled` — SVD-based effective rank scoring |
 | `scoring_device` | COMBO | gpu | `cpu`, `gpu` — device for SVD scoring (GPU is 10–50x faster) |
 | `scoring_speed` | COMBO | turbo | `full`, `fast`, `turbo`, `turbo+` — subsample scoring for faster sweeps |
+| `output_mode` | COMBO | merge | `merge`, `tuning_only` — output the top-ranked merged model, or pass the base model through so a downstream optimizer node applies the AutoTuner's settings |
 | `auto_strength_floor` | FLOAT | -1.0 | Minimum auto-strength scale factor for orthogonal LoRAs |
 | `decision_smoothing` | FLOAT | 0.25 | Same smoothing control as the optimizer; affects both ranking and final merge |
 | `evaluator` | AUTOTUNER_EVALUATOR | — | Optional external evaluator hook for prompt/reference scoring |
 | `record_dataset` | COMBO | disabled | `enabled`, `disabled` — save metrics to JSONL for research |
+| `memory_mode` | COMBO | auto | `disabled`, `auto`, `read_only`, `clear_and_run` — persistent tuning result cache across sessions |
+| `selection` | INT | 1 | Which ranked config to replay from memory on a cache hit (1 = top-ranked) |
 | `cache_patches` | COMBO | enabled | Cache the final AutoTuner result in RAM for fast re-execution |
 | `diff_cache_mode` | COMBO | auto | Diff cache mode across candidates: `disabled`, `auto`, `ram`, `disk` |
 | `diff_cache_ram_pct` | FLOAT | 0.5 | RAM fraction used before `auto` diff cache spills to disk |
