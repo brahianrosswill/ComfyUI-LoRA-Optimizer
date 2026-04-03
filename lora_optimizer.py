@@ -4828,7 +4828,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             is_clip = entry["is_clip"]
             eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[i]["strength"]
             abs_strength = abs(eff_s)
-            display_l2 = math.sqrt(norm_sq) * abs_strength
+            display_l2 = math.sqrt(norm_sq) * abs(active_loras[i]["strength"])
             partial_stats.append((i, entry["rank"], display_l2, norm_sq))
             raw = torch.tensor(entry["magnitude_samples_unscaled"], dtype=torch.float32)
             magnitude_samples.append(raw * abs_strength)
