@@ -5100,16 +5100,16 @@ class LoRAOptimizer(_LoRAMergeBase):
                             new_analysis_entries[prefix] = entry
                             if on_prefix_done is not None:
                                 on_prefix_done(prefix, entry)
-                            if lora_caches is not None:
-                                for i in range(len(active_loras)):
-                                    new_lora_entries[i][prefix] = self._extract_for_lora_cache(
-                                        result, i, active_loras)
-                            if pair_caches is not None:
-                                for (i, j) in pairs:
-                                    pair_entry = self._extract_for_pair_cache(
-                                        result, i, j, lora_hashes[i], lora_hashes[j])
-                                    if pair_entry is not None:
-                                        new_pair_entries[(i, j)][prefix] = pair_entry
+                        if lora_caches is not None:
+                            for i in range(len(active_loras)):
+                                new_lora_entries[i][prefix] = self._extract_for_lora_cache(
+                                    result, i, active_loras)
+                        if pair_caches is not None:
+                            for (i, j) in pairs:
+                                pair_entry = self._extract_for_pair_cache(
+                                    result, i, j, lora_hashes[i], lora_hashes[j])
+                                if pair_entry is not None:
+                                    new_pair_entries[(i, j)][prefix] = pair_entry
                     _collect_analysis_result(result)
                     if progress_cb is not None:
                         progress_cb()
