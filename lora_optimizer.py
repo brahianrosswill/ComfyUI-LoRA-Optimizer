@@ -8737,8 +8737,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                     _all_hashed = False
                     break
             if _all_hashed:
-                _arch_key_for_community = (getattr(self, '_detected_arch', None) or
-                                           architecture_preset)
+                _arch_key_for_community, _ = _resolve_arch_preset(
+                    architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
                 _community_tuner_data = self._community_download_caches(
                     active_loras, content_hashes, lora_caches, pair_caches,
                     arch_preset=_arch_key_for_community, top_n=top_n)
@@ -8750,10 +8750,15 @@ class LoRAAutoTuner(LoRAOptimizer):
             if len(_community_tuner_data["top_n"]) > top_n:
                 _community_tuner_data["top_n"] = _community_tuner_data["top_n"][:top_n]
             _sel_idx = min(selection, len(_community_tuner_data["top_n"])) - 1
-            _comm_report = self._build_memory_hit_report(
-                "community", _community_tuner_data, output_strength,
-                scoring_speed=scoring_speed, applied_rank=_sel_idx + 1)
-            _comm_report = "[COMMUNITY CACHE HIT]\n" + _comm_report
+            _comm_banner = (
+                "=" * 54 + "\n"
+                "  COMMUNITY CACHE HIT — Results from HF community cache\n"
+                "  Set community_cache='disabled' to run locally.\n"
+                "=" * 54 + "\n\n"
+            )
+            _comm_report = _comm_banner + self._build_autotuner_report(
+                _community_tuner_data["top_n"], _community_tuner_data["analysis_summary"],
+                output_strength, scoring_speed=scoring_speed, applied_rank=_sel_idx + 1)
 
             if output_mode == "tuning_only":
                 _comm_result = (model, clip, _comm_report, "", _community_tuner_data, None)
@@ -9345,7 +9350,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             else:
                 self._community_upload_results(
                     new_lora_entries, new_pair_entries,
-                    content_hashes, lora_hashes, tuner_data, tuner_preset_key, _hf_token)
+                    content_hashes, lora_hashes, tuner_data, _arch_key_for_community, _hf_token)
 
         # Clamp selection to available results
         sel_idx = min(selection, len(results)) - 1
