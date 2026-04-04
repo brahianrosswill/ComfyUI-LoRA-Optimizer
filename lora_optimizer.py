@@ -7345,7 +7345,7 @@ class LoRAAutoTunerSettings:
                     "default": 0.5, "min": 0.1, "max": 0.9, "step": 0.05,
                     "tooltip": "How much of your free RAM the diff cache can use (in 'auto' mode). 0.5 = up to half your available RAM."
                 }),
-                "community_cache": (["disabled", "download_only", "upload_and_download"], {
+                "community_cache": (["disabled", "upload_and_download"], {
                     "default": "disabled",
                     "tooltip": "Community cache: share and reuse LoRA analysis results via Hugging Face.\n"
                                "download_only: anonymously download cached results before analysis — no account needed.\n"
@@ -7677,9 +7677,9 @@ class LoRAAutoTuner(LoRAOptimizer):
                 "evaluator": ("AUTOTUNER_EVALUATOR", {
                     "tooltip": "Optional external evaluator spec. Use this to blend prompt/reference scoring from your own generation code with the built-in merge metrics."
                 }),
-                "community_cache": (["disabled", "download_only", "upload_and_download"], {
+                "community_cache": (["disabled", "upload_and_download"], {
                     "default": "disabled",
-                    "tooltip": "Community-backed cache on Hugging Face. 'download_only': download precomputed results anonymously. 'upload_and_download': also upload your results (requires HF_TOKEN env var and huggingface_hub installed)."
+                    "tooltip": "Community-backed cache on Hugging Face. Download precomputed results and contribute yours back. Requires huggingface-cli login or HF_TOKEN env var."
                 }),
                 "cache_patches": (["enabled", "disabled"], {
                     "default": "enabled",
@@ -8612,7 +8612,7 @@ class LoRAAutoTuner(LoRAOptimizer):
         # --- Community cache download ---
         _community_tuner_data = None
         content_hashes = {}
-        if community_cache in ("download_only", "upload_and_download") and not _is_sub_merge:
+        if community_cache == "upload_and_download" and not _is_sub_merge:
             logging.info(f"[AutoTuner Community] Mode: {community_cache} — computing content hashes "
                          f"for {len(active_loras)} LoRA(s)...")
             _all_hashed = True

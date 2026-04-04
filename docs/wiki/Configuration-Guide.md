@@ -276,15 +276,14 @@ When a memory hit occurs, `selection` controls which ranked config is replayed. 
 
 This lets you explore alternatives from a cached run without re-running the full sweep: set `memory_mode=auto` and increase `selection` to try the 2nd or 3rd ranked config from the last run.
 
-### `community_cache` (disabled / download_only / upload_and_download)
+### `community_cache` (disabled / upload_and_download)
 
 Community-backed cache hosted on Hugging Face. Precomputed analysis results (per-LoRA conflict stats, pairwise metrics, winning merge configs) are hardware-agnostic — the same LoRA files always produce the same output regardless of GPU tier.
 
 | Value | Behavior |
 |-------|----------|
 | `disabled` (default) | No community interaction — all computation is local |
-| `download_only` | Download precomputed results anonymously. If a matching config exists, skips the AutoTuner sweep entirely |
-| `upload_and_download` | Also upload your results after a sweep. Requires `HF_TOKEN` env var and `huggingface_hub` installed |
+| `upload_and_download` | Download precomputed results and contribute yours back. Requires `huggingface-cli login` or `HF_TOKEN` env var |
 
 **Privacy:** LoRA filenames are never shared. Only content hashes (SHA256[:16]) are used as keys. Results include conflict metrics and winning configs — no paths, no names.
 
