@@ -8011,6 +8011,10 @@ class LoRAAutoTuner(LoRAOptimizer):
         """Download community pair/lora caches and config. Mutates lora_caches and
         pair_caches in place (fill-missing-only — local data always wins).
         Returns reconstructed tuner_data if a config hit occurs, else None."""
+        n_loras = len(active_loras)
+        n_pairs = n_loras * (n_loras - 1) // 2
+        logging.info(f"[AutoTuner Community] Checking cache for {n_loras} LoRA(s), "
+                     f"{n_pairs} pair(s), arch={arch_preset}")
         n_lora_hits = 0
         n_pair_hits = 0
 
@@ -8046,8 +8050,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                 except Exception as e:
                     logging.warning(f"[AutoTuner Community] Error merging pair cache ({i},{j}): {e}")
 
-        if n_lora_hits or n_pair_hits:
-            logging.info(f"[AutoTuner Community] Cache fill: {n_lora_hits} lora, {n_pair_hits} pair")
+        logging.info(f"[AutoTuner Community] Analysis cache: {n_lora_hits}/{n_loras} lora hit, "
+                     f"{n_pair_hits}/{n_pairs} pair hit")
 
         # Step 3: config
         try:
@@ -8055,12 +8059,17 @@ class LoRAAutoTuner(LoRAOptimizer):
             joined = "_".join(sorted_hashes)
             data = LoRAAutoTuner._community_download(f"config/{joined}_{arch_preset}.config.json")
             if data is None:
+                logging.info("[AutoTuner Community] No config found — will run full sweep")
                 return None
             if data.get("algo_version") != AUTOTUNER_ALGO_VERSION:
-                logging.info("[AutoTuner Community] Config version mismatch, ignoring")
+                logging.info(f"[AutoTuner Community] Config version mismatch "
+                             f"({data.get('algo_version')} != {AUTOTUNER_ALGO_VERSION}), ignoring")
                 return None
             if "config" not in data or "score" not in data:
+                logging.warning("[AutoTuner Community] Config entry malformed, ignoring")
                 return None
+            logging.info(f"[AutoTuner Community] Config HIT — score={data['score']:.4f}, "
+                         f"arch={arch_preset}")
             return {
                 "version": 1,
                 "lora_hash": "",
@@ -8097,6 +8106,9 @@ class LoRAAutoTuner(LoRAOptimizer):
     def _community_upload_results(new_lora_entries, new_pair_entries, content_hashes,
                                    lora_hashes, tuner_data, arch_preset, token):
         """Upload newly computed lora/pair caches and (if best) a winning config."""
+        logging.info("[AutoTuner Community] Uploading results...")
+        n_lora_uploaded = 0
+        n_pair_uploaded = 0
         # Upload new lora caches
         for i, new_entries in new_lora_entries.items():
             if not new_entries or i not in content_hashes:
@@ -8106,11 +8118,12 @@ class LoRAAutoTuner(LoRAOptimizer):
                 existing = LoRAAutoTuner._lora_cache_load(lora_hashes[i]) or {}
                 existing.update({k: v for k, v in new_entries.items() if v is not None})
                 if existing:
-                    LoRAAutoTuner._community_upload(
+                    if LoRAAutoTuner._community_upload(
                         f"lora/{ch}.lora.json",
                         {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": existing},
                         token,
-                    )
+                    ):
+                        n_lora_uploaded += 1
             except Exception as e:
                 logging.warning(f"[AutoTuner Community] Error uploading lora cache {i}: {e}")
 
@@ -8123,11 +8136,12 @@ class LoRAAutoTuner(LoRAOptimizer):
                 existing = LoRAAutoTuner._pair_cache_load(lora_hashes[i], lora_hashes[j]) or {}
                 existing.update(new_entries)
                 if existing:
-                    LoRAAutoTuner._community_upload(
+                    if LoRAAutoTuner._community_upload(
                         f"pair/{ha}_{hb}.pair.json",
                         {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": existing},
                         token,
-                    )
+                    ):
+                        n_pair_uploaded += 1
             except Exception as e:
                 logging.warning(f"[AutoTuner Community] Error uploading pair cache ({i},{j}): {e}")
 
@@ -8142,7 +8156,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             config_path = f"config/{joined}_{arch_preset}.config.json"
             existing_config = LoRAAutoTuner._community_download(config_path)
             if existing_config and existing_config.get("score", 0.0) >= local_score:
-                logging.info("[AutoTuner Community] Community config score >= local, not uploading")
+                logging.info(f"[AutoTuner Community] Config not uploaded — community score "
+                             f"({existing_config.get('score', 0.0):.4f}) >= local ({local_score:.4f})")
                 return
             LoRAAutoTuner._community_upload(
                 config_path,
@@ -8155,6 +8170,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                 },
                 token,
             )
+            logging.info(f"[AutoTuner Community] Upload complete — {n_lora_uploaded} lora, "
+                         f"{n_pair_uploaded} pair, config score={local_score:.4f}")
         except Exception as e:
             logging.warning(f"[AutoTuner Community] Error uploading config: {e}")
 
@@ -8725,7 +8742,8 @@ class LoRAAutoTuner(LoRAOptimizer):
         _community_tuner_data = None
         content_hashes = {}
         if community_cache in ("download_only", "upload_and_download") and not _is_sub_merge:
-            logging.info("[AutoTuner Community] Computing content hashes...")
+            logging.info(f"[AutoTuner Community] Mode: {community_cache} — computing content hashes "
+                         f"for {len(active_loras)} LoRA(s)...")
             _all_hashed = True
             for _i, _lora in enumerate(active_loras):
                 _ch = self._lora_content_hash(_lora)
@@ -8746,7 +8764,9 @@ class LoRAAutoTuner(LoRAOptimizer):
                 content_hashes = {}
 
         if _community_tuner_data is not None and not _is_sub_merge:
-            logging.info("[AutoTuner Community] COMMUNITY CACHE HIT — replaying config")
+            _comm_score = _community_tuner_data["top_n"][0].get("score_final", 0.0)
+            logging.info(f"[AutoTuner Community] COMMUNITY CACHE HIT — "
+                         f"replaying config (score={_comm_score:.4f}), skipping full sweep")
             if len(_community_tuner_data["top_n"]) > top_n:
                 _community_tuner_data["top_n"] = _community_tuner_data["top_n"][:top_n]
             _sel_idx = min(selection, len(_community_tuner_data["top_n"])) - 1
