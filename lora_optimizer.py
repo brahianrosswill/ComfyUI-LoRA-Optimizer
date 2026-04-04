@@ -8599,6 +8599,100 @@ class LoRAAutoTuner(LoRAOptimizer):
                 logging.info("[LoRA AutoTuner] Using cached result")
                 return cached_result
 
+        # Load pair/lora caches and run community cache check before any early returns
+        pairs_for_cache = [(i, j) for i in range(len(active_loras))
+                                   for j in range(i+1, len(active_loras))]
+        lora_hashes = {i: self._lora_identity_hash(lora)
+                       for i, lora in enumerate(active_loras)}
+        lora_caches = {i: self._lora_cache_load(h) or {}
+                       for i, h in lora_hashes.items()}
+        pair_caches = {(i, j): self._pair_cache_load(lora_hashes[i], lora_hashes[j]) or {}
+                       for i, j in pairs_for_cache}
+
+        # --- Community cache download ---
+        _community_tuner_data = None
+        content_hashes = {}
+        if community_cache in ("download_only", "upload_and_download") and not _is_sub_merge:
+            logging.info(f"[AutoTuner Community] Mode: {community_cache} — computing content hashes "
+                         f"for {len(active_loras)} LoRA(s)...")
+            _all_hashed = True
+            for _i, _lora in enumerate(active_loras):
+                _ch = self._lora_content_hash(_lora)
+                if _ch is not None:
+                    content_hashes[_i] = _ch
+                else:
+                    logging.warning(
+                        f"[AutoTuner Community] Could not hash '{_lora['name']}', disabling community cache")
+                    _all_hashed = False
+                    break
+            if _all_hashed:
+                _arch_key_for_community, _ = _resolve_arch_preset(
+                    architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
+                _community_tuner_data = self._community_download_caches(
+                    active_loras, content_hashes, lora_caches, pair_caches,
+                    arch_preset=_arch_key_for_community, top_n=top_n)
+            else:
+                content_hashes = {}
+
+        if _community_tuner_data is not None and not _is_sub_merge:
+            _comm_score = _community_tuner_data["top_n"][0].get("score_final", 0.0)
+            logging.info(f"[AutoTuner Community] COMMUNITY CACHE HIT — "
+                         f"replaying config (score={_comm_score:.4f}), skipping full sweep")
+            if len(_community_tuner_data["top_n"]) > top_n:
+                _community_tuner_data["top_n"] = _community_tuner_data["top_n"][:top_n]
+            _sel_idx = min(selection, len(_community_tuner_data["top_n"])) - 1
+            _comm_banner = (
+                "=" * 54 + "\n"
+                "  COMMUNITY CACHE HIT — Results from HF community cache\n"
+                "  Set community_cache='disabled' to run locally.\n"
+                "=" * 54 + "\n\n"
+            )
+            _comm_report = _comm_banner + self._build_autotuner_report(
+                _community_tuner_data["top_n"], _community_tuner_data["analysis_summary"],
+                output_strength, scoring_speed=scoring_speed, applied_rank=_sel_idx + 1)
+
+            if output_mode == "tuning_only":
+                _comm_result = (model, clip, _comm_report, "", _community_tuner_data, None)
+                if cache_patches == "enabled":
+                    if not hasattr(self, '_autotuner_cache'):
+                        self._autotuner_cache = {}
+                    self._autotuner_cache[at_cache_key] = (_comm_result, "tuning_only")
+                return _comm_result
+
+            _comm_config = _community_tuner_data["top_n"][_sel_idx]["config"]
+            _comm_strategy_override = (_comm_config["merge_mode"]
+                                        if _comm_config["optimization_mode"] == "global" else "")
+            _comm_model, _comm_clip, _, _comm_analysis_report, _comm_lora_data = super().optimize_merge(
+                model, lora_stack, output_strength,
+                clip=clip,
+                clip_strength_multiplier=clip_strength_multiplier,
+                auto_strength=_comm_config["auto_strength"],
+                auto_strength_floor=_community_tuner_data.get(
+                    "auto_strength_floor", auto_strength_floor),
+                optimization_mode=_comm_config["optimization_mode"],
+                sparsification=_comm_config["sparsification"],
+                sparsification_density=_comm_config["sparsification_density"],
+                dare_dampening=_comm_config["dare_dampening"],
+                merge_refinement=_comm_config["merge_refinement"],
+                merge_strategy_override=_comm_strategy_override,
+                strategy_set=_comm_config.get("strategy_set", "full"),
+                normalize_keys=_community_tuner_data.get("normalize_keys", normalize_keys),
+                architecture_preset=_community_tuner_data.get(
+                    "architecture_preset", architecture_preset),
+                decision_smoothing=_community_tuner_data.get(
+                    "decision_smoothing", decision_smoothing),
+                smooth_slerp_gate=smooth_slerp_gate,
+                cache_patches=cache_patches,
+                vram_budget=vram_budget,
+            )
+            _comm_result = (_comm_model, _comm_clip, _comm_report,
+                            _comm_analysis_report, _community_tuner_data, _comm_lora_data)
+            if cache_patches == "enabled":
+                if not hasattr(self, '_autotuner_cache'):
+                    self._autotuner_cache = {}
+                self._autotuner_cache[at_cache_key] = (_comm_result, "merge")
+            return _comm_result
+
         # --- Persistent memory lookup ---
         if memory_mode != "disabled" and not _is_sub_merge:
             memory_settings = {
@@ -8728,100 +8822,6 @@ class LoRAAutoTuner(LoRAOptimizer):
             partial_accumulated[prefix] = entry
             self._analysis_partial_save(
                 names_only_hash, partial_accumulated, source_loras_for_cache)
-
-        # Load pair/lora caches for cross-run reuse
-        pairs_for_cache = [(i, j) for i in range(len(active_loras))
-                                   for j in range(i+1, len(active_loras))]
-        lora_hashes = {i: self._lora_identity_hash(lora)
-                       for i, lora in enumerate(active_loras)}
-        lora_caches = {i: self._lora_cache_load(h) or {}
-                       for i, h in lora_hashes.items()}
-        pair_caches = {(i, j): self._pair_cache_load(lora_hashes[i], lora_hashes[j]) or {}
-                       for i, j in pairs_for_cache}
-
-        # --- Community cache download ---
-        _community_tuner_data = None
-        content_hashes = {}
-        if community_cache in ("download_only", "upload_and_download") and not _is_sub_merge:
-            logging.info(f"[AutoTuner Community] Mode: {community_cache} — computing content hashes "
-                         f"for {len(active_loras)} LoRA(s)...")
-            _all_hashed = True
-            for _i, _lora in enumerate(active_loras):
-                _ch = self._lora_content_hash(_lora)
-                if _ch is not None:
-                    content_hashes[_i] = _ch
-                else:
-                    logging.warning(
-                        f"[AutoTuner Community] Could not hash '{_lora['name']}', disabling community cache")
-                    _all_hashed = False
-                    break
-            if _all_hashed:
-                _arch_key_for_community, _ = _resolve_arch_preset(
-                    architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
-                _community_tuner_data = self._community_download_caches(
-                    active_loras, content_hashes, lora_caches, pair_caches,
-                    arch_preset=_arch_key_for_community, top_n=top_n)
-            else:
-                content_hashes = {}
-
-        if _community_tuner_data is not None and not _is_sub_merge:
-            _comm_score = _community_tuner_data["top_n"][0].get("score_final", 0.0)
-            logging.info(f"[AutoTuner Community] COMMUNITY CACHE HIT — "
-                         f"replaying config (score={_comm_score:.4f}), skipping full sweep")
-            if len(_community_tuner_data["top_n"]) > top_n:
-                _community_tuner_data["top_n"] = _community_tuner_data["top_n"][:top_n]
-            _sel_idx = min(selection, len(_community_tuner_data["top_n"])) - 1
-            _comm_banner = (
-                "=" * 54 + "\n"
-                "  COMMUNITY CACHE HIT — Results from HF community cache\n"
-                "  Set community_cache='disabled' to run locally.\n"
-                "=" * 54 + "\n\n"
-            )
-            _comm_report = _comm_banner + self._build_autotuner_report(
-                _community_tuner_data["top_n"], _community_tuner_data["analysis_summary"],
-                output_strength, scoring_speed=scoring_speed, applied_rank=_sel_idx + 1)
-
-            if output_mode == "tuning_only":
-                _comm_result = (model, clip, _comm_report, "", _community_tuner_data, None)
-                if cache_patches == "enabled":
-                    if not hasattr(self, '_autotuner_cache'):
-                        self._autotuner_cache = {}
-                    self._autotuner_cache[at_cache_key] = (_comm_result, "tuning_only")
-                return _comm_result
-
-            _comm_config = _community_tuner_data["top_n"][_sel_idx]["config"]
-            _comm_strategy_override = (_comm_config["merge_mode"]
-                                        if _comm_config["optimization_mode"] == "global" else "")
-            _comm_model, _comm_clip, _, _comm_analysis_report, _comm_lora_data = super().optimize_merge(
-                model, lora_stack, output_strength,
-                clip=clip,
-                clip_strength_multiplier=clip_strength_multiplier,
-                auto_strength=_comm_config["auto_strength"],
-                auto_strength_floor=_community_tuner_data.get(
-                    "auto_strength_floor", auto_strength_floor),
-                optimization_mode=_comm_config["optimization_mode"],
-                sparsification=_comm_config["sparsification"],
-                sparsification_density=_comm_config["sparsification_density"],
-                dare_dampening=_comm_config["dare_dampening"],
-                merge_refinement=_comm_config["merge_refinement"],
-                merge_strategy_override=_comm_strategy_override,
-                strategy_set=_comm_config.get("strategy_set", "full"),
-                normalize_keys=_community_tuner_data.get("normalize_keys", normalize_keys),
-                architecture_preset=_community_tuner_data.get(
-                    "architecture_preset", architecture_preset),
-                decision_smoothing=_community_tuner_data.get(
-                    "decision_smoothing", decision_smoothing),
-                smooth_slerp_gate=smooth_slerp_gate,
-                cache_patches=cache_patches,
-                vram_budget=vram_budget,
-            )
-            _comm_result = (_comm_model, _comm_clip, _comm_report,
-                            _comm_analysis_report, _community_tuner_data, _comm_lora_data)
-            if cache_patches == "enabled":
-                if not hasattr(self, '_autotuner_cache'):
-                    self._autotuner_cache = {}
-                self._autotuner_cache[at_cache_key] = (_comm_result, "merge")
-            return _comm_result
 
         analysis_data = self._run_group_analysis(
             target_groups, active_loras, model, clip, compute_device,
