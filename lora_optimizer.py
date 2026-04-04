@@ -4687,7 +4687,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         }
 
     @staticmethod
-    def _extract_for_lora_cache(result, lora_idx, active_loras):
+    def _extract_for_lora_cache(result, lora_idx, active_loras, clip_strength_multiplier=1.0):
         """
         Extract per-LoRA stats for one LoRA from an _analyze_target_group result.
         Returns None if lora_idx did not participate in this prefix.
@@ -4705,7 +4705,10 @@ class LoRAOptimizer(_LoRAMergeBase):
         rank = partial_stats[pos][1]
 
         clip_s = active_loras[lora_idx].get("clip_strength")
-        eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[lora_idx]["strength"]
+        if is_clip:
+            eff_s = clip_s if clip_s is not None else active_loras[lora_idx]["strength"] * clip_strength_multiplier
+        else:
+            eff_s = active_loras[lora_idx]["strength"]
         abs_strength = abs(eff_s)
         raw = magnitude_samples[pos] if pos < len(magnitude_samples) else torch.tensor([])
         mag_unscaled = (raw / abs_strength if abs_strength > 0 else raw).tolist()
@@ -4795,7 +4798,8 @@ class LoRAOptimizer(_LoRAMergeBase):
 
     @staticmethod
     def _reconstruct_from_pair_lora_cache(prefix, lora_entries, pair_entries,
-                                           active_loras, lora_hashes):
+                                           active_loras, lora_hashes,
+                                           clip_strength_multiplier=1.0):
         """
         Reconstruct the _analyze_target_group 8-tuple from per-LoRA and per-pair
         cache entries. Returns None if any participating LoRA has a sign flip.
@@ -4813,7 +4817,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             entry = lora_entries[i]
             clip_s = active_loras[i].get("clip_strength")
             is_clip = entry["is_clip"]
-            eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[i]["strength"]
+            if is_clip:
+                eff_s = clip_s if clip_s is not None else active_loras[i]["strength"] * clip_strength_multiplier
+            else:
+                eff_s = active_loras[i]["strength"]
             current_sign = 1 if eff_s >= 0 else -1
             if current_sign != entry.get("strength_sign", 1):
                 logging.info(
@@ -4829,7 +4836,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             norm_sq = entry["norm_sq"]
             clip_s = active_loras[i].get("clip_strength")
             is_clip = entry["is_clip"]
-            eff_s = clip_s if (clip_s is not None and is_clip) else active_loras[i]["strength"]
+            if is_clip:
+                eff_s = clip_s if clip_s is not None else active_loras[i]["strength"] * clip_strength_multiplier
+            else:
+                eff_s = active_loras[i]["strength"]
             abs_strength = abs(eff_s)
             display_l2 = math.sqrt(norm_sq) * abs(active_loras[i]["strength"])
             partial_stats.append((i, entry["rank"], display_l2, norm_sq))
@@ -5037,7 +5047,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                     if hit is not None:
                         lora_entries, pair_entries = hit
                         result = self._reconstruct_from_pair_lora_cache(
-                            prefix, lora_entries, pair_entries, active_loras, lora_hashes)
+                            prefix, lora_entries, pair_entries, active_loras, lora_hashes,
+                            clip_strength_multiplier)
                 if result is None:
                     result = self._analyze_target_group(
                         target_group, active_loras, model, clip, compute_device,
@@ -5052,7 +5063,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         if lora_caches is not None:
                             for i in range(len(active_loras)):
                                 new_lora_entries[i][prefix] = self._extract_for_lora_cache(
-                                    result, i, active_loras)
+                                    result, i, active_loras, clip_strength_multiplier)
                         if pair_caches is not None:
                             for (i, j) in pairs:
                                 pair_entry = self._extract_for_pair_cache(
@@ -5080,7 +5091,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                     if hit is not None:
                         lora_entries_hit, pair_entries_hit = hit
                         result = self._reconstruct_from_pair_lora_cache(
-                            prefix, lora_entries_hit, pair_entries_hit, active_loras, lora_hashes)
+                            prefix, lora_entries_hit, pair_entries_hit, active_loras, lora_hashes,
+                            clip_strength_multiplier)
                         if result is not None:
                             _collect_analysis_result(result)
                             if progress_cb is not None:
@@ -5103,7 +5115,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         if lora_caches is not None:
                             for i in range(len(active_loras)):
                                 new_lora_entries[i][prefix] = self._extract_for_lora_cache(
-                                    result, i, active_loras)
+                                    result, i, active_loras, clip_strength_multiplier)
                         if pair_caches is not None:
                             for (i, j) in pairs:
                                 pair_entry = self._extract_for_pair_cache(
