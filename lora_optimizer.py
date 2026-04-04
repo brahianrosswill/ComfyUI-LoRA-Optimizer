@@ -9345,7 +9345,14 @@ class LoRAAutoTuner(LoRAOptimizer):
                 and len(content_hashes) == len(active_loras)):
             _hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
             if not _hf_token:
-                logging.warning("[AutoTuner Community] HF_TOKEN not set, skipping upload")
+                try:
+                    from huggingface_hub import get_token as _hf_get_token
+                    _hf_token = _hf_get_token()
+                except Exception:
+                    pass
+            if not _hf_token:
+                logging.warning("[AutoTuner Community] No HF token found. "
+                                "Run 'huggingface-cli login' or set HF_TOKEN to enable uploads.")
             else:
                 self._community_upload_results(
                     new_lora_entries, new_pair_entries,
