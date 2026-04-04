@@ -8064,7 +8064,6 @@ class LoRAAutoTuner(LoRAOptimizer):
                 "version": 1,
                 "lora_hash": "",
                 "source_loras": [],
-                "normalize_keys": "enabled",
                 "architecture_preset": data.get("arch_preset", arch_preset),
                 "auto_strength_floor": -1.0,
                 "decision_smoothing": 0.25,
