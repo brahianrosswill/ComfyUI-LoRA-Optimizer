@@ -8787,6 +8787,26 @@ class LoRAAutoTuner(LoRAOptimizer):
                         if not hasattr(self, '_autotuner_cache'):
                             self._autotuner_cache = {}
                         self._autotuner_cache[at_cache_key] = (result, "merge")
+
+                    # Upload config from memory hit — lora/pair entries not available here
+                    # but the winning config + score can still be contributed
+                    if (community_cache == "upload_and_download"
+                            and len(content_hashes) == len(active_loras)):
+                        _hf_token = (os.environ.get("HF_TOKEN")
+                                     or os.environ.get("HUGGING_FACE_HUB_TOKEN"))
+                        if not _hf_token:
+                            try:
+                                from huggingface_hub import get_token as _hf_get_token
+                                _hf_token = _hf_get_token()
+                            except Exception:
+                                pass
+                        if _hf_token:
+                            self._community_upload_results(
+                                {}, {}, content_hashes, lora_hashes,
+                                cached_tuner_data, _arch_key_for_community, _hf_token)
+                        else:
+                            logging.warning("[AutoTuner Community] No HF token found. "
+                                            "Run 'huggingface-cli login' or set HF_TOKEN to enable uploads.")
                     return result
 
         # --- Pass 1: Analysis (run once, reuse for all configs) ---
