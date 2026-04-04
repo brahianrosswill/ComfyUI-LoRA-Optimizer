@@ -8568,7 +8568,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     f"[AutoTuner Analysis Partial] Resume — "
                     f"{len(cached_analysis)} prefixes already done")
             else:
-                logging.info("[AutoTuner Analysis Cache] MISS — will run full analysis")
+                logging.info("[AutoTuner Analysis Cache] MISS")
 
         # Order-independent hash for persistent memory (sorted pairs)
         if memory_mode != "disabled" and not _is_sub_merge:
@@ -8696,6 +8696,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     return result
 
         # --- Pass 1: Analysis (run once, reuse for all configs) ---
+        logging.info("[LoRA AutoTuner] No cached results — running full sweep")
         model_keys = self._get_model_keys(model)
         clip_keys = {}
         if clip is not None:
