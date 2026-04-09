@@ -545,6 +545,24 @@ The `vram_budget` slider (0.0–1.0) controls what fraction of free VRAM to use 
 
 </details>
 
+<details>
+<summary><b>Community Cache</b></summary>
+
+LoRA analysis results (conflict metrics, per-LoRA stats, best merge configs) are hardware-agnostic — the same LoRA files always produce the same output regardless of GPU. The community cache lets any user download precomputed results for their LoRAs without running the AutoTuner sweep, and optionally contribute their own results back.
+
+Results are keyed by **content hash** (SHA256 of file contents, not filename), so they match across different users and folder layouts. LoRA names and paths are never shared.
+
+| `community_cache` value | Behavior |
+|---|---|
+| `disabled` | No community interaction (default) |
+| `upload_and_download` | Downloads before analysis; uploads after if local score is higher |
+
+**Downloads** are anonymous (no setup required). **Uploads** require a `HF_TOKEN` environment variable with write access to the dataset repo.
+
+Results are stored in the public dataset [`ethanfel/lora-optimizer-community-cache`](https://huggingface.co/datasets/ethanfel/lora-optimizer-community-cache).
+
+</details>
+
 ---
 
 <details>
