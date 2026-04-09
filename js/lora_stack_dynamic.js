@@ -3,6 +3,17 @@ import { app } from "/scripts/app.js";
 const HIDDEN_TAG = "loraopt_hidden";
 const origProps = {};
 
+const SLOT_WIDGET_NAMES = [
+    "enabled",
+    "lora_name",
+    "lora_name_text",
+    "strength",
+    "model_strength",
+    "clip_strength",
+    "conflict_mode",
+    "key_filter",
+];
+
 function toggleWidget(node, widget, show, suffix = "") {
     if (!widget) return;
 
@@ -348,6 +359,51 @@ function setSlotGrayed(node, i, grayed) {
     }
 }
 
+function getSlotAtY(node, mouseY) {
+    const countWidget = findWidget(node, "lora_count");
+    const count = countWidget ? countWidget.value : 10;
+    let bestSlot = null;
+    let bestDist = Infinity;
+
+    for (let i = 1; i <= count; i++) {
+        for (const base of SLOT_WIDGET_NAMES) {
+            const w = findWidget(node, `${base}_${i}`);
+            if (!w || w.last_y === undefined || w.hidden) continue;
+            const dist = Math.abs(w.last_y - mouseY);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestSlot = i;
+            }
+        }
+    }
+    return bestDist < 30 ? bestSlot : null;
+}
+
+function copySlotValues(node, fromIdx, toIdx) {
+    for (const base of SLOT_WIDGET_NAMES) {
+        const src = findWidget(node, `${base}_${fromIdx}`);
+        const dst = findWidget(node, `${base}_${toIdx}`);
+        if (src && dst) dst.value = src.value;
+    }
+}
+
+function clearSlotValues(node, idx) {
+    const defaults = {
+        [`enabled_${idx}`]: true,
+        [`lora_name_${idx}`]: "None",
+        [`lora_name_text_${idx}`]: "None",
+        [`strength_${idx}`]: 1.0,
+        [`model_strength_${idx}`]: 1.0,
+        [`clip_strength_${idx}`]: 1.0,
+        [`conflict_mode_${idx}`]: "all",
+        [`key_filter_${idx}`]: "all",
+    };
+    for (const [name, val] of Object.entries(defaults)) {
+        const w = findWidget(node, name);
+        if (w) w.value = val;
+    }
+}
+
 // --- Node Registration ---
 
 app.registerExtension({
@@ -386,6 +442,54 @@ app.registerExtension({
             // Patch LoRA combo display to show filename only
             patchLoraWidgets(node);
         }, 100);
+
+        const origGetExtra = node.getExtraMenuOptions;
+        node.getExtraMenuOptions = function (canvas, options) {
+            if (origGetExtra) origGetExtra.apply(this, arguments);
+
+            const countWidget = findWidget(this, "lora_count");
+            const count = countWidget ? countWidget.value : 1;
+            const mouseY = canvas.graph_mouse[1];
+            const slot = getSlotAtY(this, mouseY);
+            if (slot === null) return;
+
+            const node_ = this;
+            const extras = [
+                null,
+                {
+                    content: `Remove LoRA #${slot}`,
+                    callback() {
+                        for (let i = slot; i < count; i++) {
+                            copySlotValues(node_, i + 1, i);
+                        }
+                        clearSlotValues(node_, count);
+                        if (countWidget && count > 1) countWidget.value = count - 1;
+                        updateVisibility(node_);
+                        app.canvas?.setDirty?.(true, true);
+                    },
+                },
+            ];
+            if (slot > 1) {
+                extras.push({
+                    content: `Move LoRA #${slot} up`,
+                    callback() {
+                        const tmp = {};
+                        for (const base of SLOT_WIDGET_NAMES) {
+                            const w = findWidget(node_, `${base}_${slot}`);
+                            if (w) tmp[base] = w.value;
+                        }
+                        copySlotValues(node_, slot - 1, slot);
+                        for (const base of SLOT_WIDGET_NAMES) {
+                            const w = findWidget(node_, `${base}_${slot - 1}`);
+                            if (w && tmp[base] !== undefined) w.value = tmp[base];
+                        }
+                        updateVisibility(node_);
+                        app.canvas?.setDirty?.(true, true);
+                    },
+                });
+            }
+            options.splice(-1, 0, ...extras);
+        };
     },
 });
 
