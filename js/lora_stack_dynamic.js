@@ -463,7 +463,11 @@ app.registerExtension({
                             copySlotValues(node_, i + 1, i);
                         }
                         clearSlotValues(node_, count);
-                        if (countWidget && count > 1) countWidget.value = count - 1;
+                        if (countWidget && count > 1) {
+                            countWidget.value = count - 1; // triggers updateVisibility via intercepted setter
+                        } else {
+                            app.canvas?.setDirty?.(true, true); // count=1: no setter fires, force redraw
+                        }
                     },
                 },
             ];
