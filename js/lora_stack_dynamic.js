@@ -449,7 +449,7 @@ app.registerExtension({
 
             const countWidget = findWidget(this, "lora_count");
             const count = countWidget ? countWidget.value : 1;
-            const mouseY = canvas.graph_mouse[1];
+            const mouseY = canvas.graph_mouse[1] - this.pos[1];
             const slot = getSlotAtY(this, mouseY);
             if (slot === null) return;
 
