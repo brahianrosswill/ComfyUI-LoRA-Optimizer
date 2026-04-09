@@ -120,7 +120,7 @@ function updateVisibility(node) {
     }
 
     // Apply gray state for disabled slots
-    for (let i = 1; i <= MAX; i++) {
+    for (let i = 1; i <= count; i++) {
         const enabledW = findWidget(node, `enabled_${i}`);
         if (enabledW) {
             setSlotGrayed(node, i, !enabledW.value);
@@ -326,7 +326,7 @@ function setSlotGrayed(node, i, grayed) {
         const w = findWidget(node, name);
         if (!w) continue;
         if (grayed) {
-            if (!w._origDraw) {
+            if (!Object.prototype.hasOwnProperty.call(w, "_origDraw")) {
                 w._origDraw = w.draw?.bind(w) ?? null;
             }
             w.draw = function (ctx, node, width, y, height) {
@@ -336,8 +336,12 @@ function setSlotGrayed(node, i, grayed) {
                 ctx.restore();
             };
         } else {
-            if (w._origDraw !== undefined) {
-                w.draw = w._origDraw ?? undefined;
+            if (Object.prototype.hasOwnProperty.call(w, "_origDraw")) {
+                if (w._origDraw !== null) {
+                    w.draw = w._origDraw;
+                } else {
+                    delete w.draw;
+                }
                 delete w._origDraw;
             }
         }
