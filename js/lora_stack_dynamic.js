@@ -321,41 +321,13 @@ function patchLoraWidgets(node) {
     }
 }
 
-const GRAY_ALPHA = 0.35;
-
+// Track grayed slots per node; render overlay in onDrawForeground
 function setSlotGrayed(node, i, grayed) {
-    const siblings = [
-        `lora_name_${i}`,
-        `lora_name_text_${i}`,
-        `strength_${i}`,
-        `model_strength_${i}`,
-        `clip_strength_${i}`,
-        `conflict_mode_${i}`,
-        `key_filter_${i}`,
-    ];
-    for (const name of siblings) {
-        const w = findWidget(node, name);
-        if (!w) continue;
-        if (grayed) {
-            if (!Object.prototype.hasOwnProperty.call(w, "_origDraw")) {
-                w._origDraw = w.draw?.bind(w) ?? null;
-            }
-            w.draw = function (ctx, node, width, y, height) {
-                ctx.save();
-                ctx.globalAlpha = GRAY_ALPHA;
-                if (w._origDraw) w._origDraw(ctx, node, width, y, height);
-                ctx.restore();
-            };
-        } else {
-            if (Object.prototype.hasOwnProperty.call(w, "_origDraw")) {
-                if (w._origDraw !== null) {
-                    w.draw = w._origDraw;
-                } else {
-                    delete w.draw;
-                }
-                delete w._origDraw;
-            }
-        }
+    if (!node._grayedSlots) node._grayedSlots = new Set();
+    if (grayed) {
+        node._grayedSlots.add(i);
+    } else {
+        node._grayedSlots.delete(i);
     }
 }
 
@@ -442,6 +414,31 @@ app.registerExtension({
             // Patch LoRA combo display to show filename only
             patchLoraWidgets(node);
         }, 100);
+
+        // Draw a dark overlay over disabled slot rows (gray-out effect)
+        const origDrawFg = node.onDrawForeground;
+        node.onDrawForeground = function (ctx) {
+            if (origDrawFg) origDrawFg.call(this, ctx);
+            if (!this._grayedSlots?.size) return;
+
+            ctx.save();
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            for (const slot of this._grayedSlots) {
+                let minY = Infinity, maxY = -Infinity;
+                for (const base of SLOT_WIDGET_NAMES) {
+                    if (base === "enabled") continue;
+                    const w = findWidget(this, `${base}_${slot}`);
+                    if (!w || w.hidden || w.last_y === undefined) continue;
+                    const h = w.computeSize?.(this.size[0])?.[1] ?? LiteGraph.NODE_WIDGET_HEIGHT;
+                    minY = Math.min(minY, w.last_y);
+                    maxY = Math.max(maxY, w.last_y + h);
+                }
+                if (minY < Infinity) {
+                    ctx.fillRect(0, minY, this.size[0], maxY - minY);
+                }
+            }
+            ctx.restore();
+        };
 
         const origGetExtra = node.getExtraMenuOptions;
         node.getExtraMenuOptions = function (canvas, options) {
