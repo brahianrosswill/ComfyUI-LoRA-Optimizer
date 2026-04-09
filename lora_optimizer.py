@@ -6406,8 +6406,9 @@ class LoRAOptimizer(_LoRAMergeBase):
         avg_expected_conflict = total_expected_conflict_weighted / total_weighted_total if total_weighted_total > 0 else 0.0
         avg_excess_conflict = total_excess_conflict_weighted / total_weighted_total if total_weighted_total > 0 else 0.0
         avg_subspace_overlap = total_subspace_num / total_subspace_den if total_subspace_den > 0 else 0.0
-        logging.info(f"[LoRA Optimizer]   Average conflict ratio: {avg_conflict_ratio:.1%}")
-        logging.info(f"[LoRA Optimizer]   Excess conflict: {avg_excess_conflict:.1%} | subspace overlap: {avg_subspace_overlap:.2f}")
+        if len(active_loras) > 1:
+            logging.info(f"[LoRA Optimizer]   Average conflict ratio: {avg_conflict_ratio:.1%}")
+            logging.info(f"[LoRA Optimizer]   Excess conflict: {avg_excess_conflict:.1%} | subspace overlap: {avg_subspace_overlap:.2f}")
 
         # Magnitude ratio
         branch_measure = branch_energy["model"]["norm_sq"]
@@ -6434,15 +6435,21 @@ class LoRAOptimizer(_LoRAMergeBase):
         }
 
         # Auto-select parameters (density estimated from pre-sampled magnitudes)
-        global_avg_cos_sim = (sum(ps.get("cosine_sim", 0.0) for ps in pairwise_conflicts)
-                              / len(pairwise_conflicts)) if pairwise_conflicts else 0.0
-        mode, density, sign_method, reasoning = self._auto_select_params(
-            avg_conflict_ratio, magnitude_ratio, magnitude_samples=all_magnitude_samples,
-            avg_cos_sim=global_avg_cos_sim, strategy_set=strategy_set,
-            avg_excess_conflict=avg_excess_conflict,
-            avg_subspace_overlap=avg_subspace_overlap,
-            arch_preset=arch_preset
-        )
+        if len(active_loras) == 1:
+            mode = "weighted_average"
+            density = 0.5
+            sign_method = "frequency"
+            reasoning = ["Single LoRA — applied directly"]
+        else:
+            global_avg_cos_sim = (sum(ps.get("cosine_sim", 0.0) for ps in pairwise_conflicts)
+                                  / len(pairwise_conflicts)) if pairwise_conflicts else 0.0
+            mode, density, sign_method, reasoning = self._auto_select_params(
+                avg_conflict_ratio, magnitude_ratio, magnitude_samples=all_magnitude_samples,
+                avg_cos_sim=global_avg_cos_sim, strategy_set=strategy_set,
+                avg_excess_conflict=avg_excess_conflict,
+                avg_subspace_overlap=avg_subspace_overlap,
+                arch_preset=arch_preset
+            )
         del all_magnitude_samples
 
         # Apply merge strategy override from Conflict Editor
