@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Architecture--Aware-Key_Normalization-22c55e?style=flat-square" alt="Key Normalization">
   <img src="https://img.shields.io/badge/AutoTuner-Parameter_Sweep-e94560?style=flat-square" alt="AutoTuner">
   <img src="https://img.shields.io/badge/Flux_%7C_SDXL_%7C_Wan_%7C_LTX_%7C_Z--Image_%7C_ACE--Step-Compatible-22c55e?style=flat-square" alt="Compatible">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT">
+  <img src="https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square" alt="GPL-3.0">
 </p>
 
 ---
@@ -743,4 +743,4 @@ WanVideoLoraSelect → WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA O
 
 ## License
 
-MIT License - see [LICENSE](LICENSE).
+GPL-3.0 License - see [LICENSE](LICENSE).
