@@ -199,7 +199,7 @@ _ARCH_PRESETS = {
 _VIDEO_ARCH_ORTHOGONAL_FLOOR = {"wan": 1.0, "ltx": 1.0}
 
 _ARCH_TO_PRESET = {
-    "sdxl": "sd_unet", "unknown": "sd_unet",
+    "sdxl": "sd_unet", "sd15": "sd_unet", "unknown": "sd_unet",
     "flux": "dit", "wan": "dit", "zimage": "dit", "ltx": "dit",
     "acestep": "dit",
     "qwen_image": "llm",
@@ -694,7 +694,7 @@ class _LoRAMergeBase:
     def _detect_architecture(lora_sd):
         """
         Detect model architecture from LoRA key patterns.
-        Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'ltx', 'qwen_image', or 'unknown'.
+        Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'sd15', 'ltx', 'qwen_image', or 'unknown'.
         """
         keys = list(lora_sd.keys())
         keys_str = ' '.join(k.lower() for k in keys)
@@ -767,13 +767,19 @@ class _LoRAMergeBase:
                 for k in keys):
             return 'ltx'
 
-        # SDXL: text encoders or UNet block patterns
+        # SDXL: dual text encoders (lora_te1/te2 or text_encoder_2)
         if 'lora_te1_' in keys_str or 'lora_te2_' in keys_str:
             return 'sdxl'
+        if any('text_encoder_2.' in k for k in keys):
+            return 'sdxl'
+
+        # SD 1.5: single text encoder or UNet block patterns without dual TE
+        if 'lora_te_' in keys_str:
+            return 'sd15'
         if any('input_blocks' in k or 'output_blocks' in k for k in keys):
-            return 'sdxl'
+            return 'sd15'
         if any('down_blocks' in k or 'up_blocks' in k for k in keys):
-            return 'sdxl'
+            return 'sd15'
 
         return 'unknown'
 
@@ -1099,8 +1105,32 @@ class _LoRAMergeBase:
 
         return normalized
 
-    @staticmethod
-    def _normalize_keys_sdxl(lora_sd):
+    # LoRA weight suffixes (longest-first to avoid partial matches)
+    _LORA_KEY_SUFFIXES = [
+        ".lora_up.weight", ".lora_down.weight",
+        "_lora.up.weight", "_lora.down.weight",
+        ".lora_B.weight", ".lora_A.weight",
+        ".lora.up.weight", ".lora.down.weight",
+        ".lokr_w1_a", ".lokr_w1_b",
+        ".lokr_w2_a", ".lokr_w2_b",
+        ".lokr_w1", ".lokr_w2",
+        ".lokr_t2",
+        ".hada_w1_a", ".hada_w1_b",
+        ".hada_w2_a", ".hada_w2_b",
+        ".hada_t1", ".hada_t2",
+        ".alpha",
+    ]
+
+    @classmethod
+    def _split_lora_suffix(cls, key):
+        """Split a LoRA key into (prefix, suffix), preserving the suffix intact."""
+        for suffix in cls._LORA_KEY_SUFFIXES:
+            if key.endswith(suffix):
+                return key[:-len(suffix)], suffix
+        return key, ""
+
+    @classmethod
+    def _normalize_keys_sdxl(cls, lora_sd):
         """
         Normalize SDXL LoRA keys to canonical format.
 
@@ -1116,17 +1146,51 @@ class _LoRAMergeBase:
             if new_k.startswith('base_model.model.'):
                 new_k = new_k[len('base_model.model.'):]
 
+            # Split off LoRA suffix to avoid dot-to-underscore mangling
+            stem, suffix = cls._split_lora_suffix(new_k)
+
             # Diffusers format: text_encoder.* -> lora_te1_*, text_encoder_2.* -> lora_te2_*
-            if new_k.startswith('text_encoder_2.'):
-                new_k = 'lora_te2_' + new_k[len('text_encoder_2.'):].replace('.', '_')
-            elif new_k.startswith('text_encoder.'):
-                new_k = 'lora_te1_' + new_k[len('text_encoder.'):].replace('.', '_')
+            if stem.startswith('text_encoder_2.'):
+                stem = 'lora_te2_' + stem[len('text_encoder_2.'):].replace('.', '_')
+            elif stem.startswith('text_encoder.'):
+                stem = 'lora_te1_' + stem[len('text_encoder.'):].replace('.', '_')
 
             # Diffusers UNet: unet.* -> lora_unet_*
-            if new_k.startswith('unet.'):
-                new_k = 'lora_unet_' + new_k[len('unet.'):].replace('.', '_')
+            if stem.startswith('unet.'):
+                stem = 'lora_unet_' + stem[len('unet.'):].replace('.', '_')
 
-            normalized[new_k] = v
+            normalized[stem + suffix] = v
+        return normalized
+
+    @classmethod
+    def _normalize_keys_sd15(cls, lora_sd):
+        """
+        Normalize SD 1.5 LoRA keys to canonical format.
+
+        Canonical format: lora_unet_* / lora_te_* (Kohya convention).
+
+        Same as SDXL but single text encoder: text_encoder.* -> lora_te_*.
+        """
+        normalized = {}
+        for k, v in lora_sd.items():
+            new_k = k
+
+            # Strip PEFT prefix first so subsequent checks work
+            if new_k.startswith('base_model.model.'):
+                new_k = new_k[len('base_model.model.'):]
+
+            # Split off LoRA suffix to avoid dot-to-underscore mangling
+            stem, suffix = cls._split_lora_suffix(new_k)
+
+            # Diffusers format: text_encoder.* -> lora_te_* (single TE)
+            if stem.startswith('text_encoder.'):
+                stem = 'lora_te_' + stem[len('text_encoder.'):].replace('.', '_')
+
+            # Diffusers UNet: unet.* -> lora_unet_*
+            if stem.startswith('unet.'):
+                stem = 'lora_unet_' + stem[len('unet.'):].replace('.', '_')
+
+            normalized[stem + suffix] = v
         return normalized
 
     @staticmethod
@@ -1275,6 +1339,8 @@ class _LoRAMergeBase:
             return cls._normalize_keys_acestep(lora_sd)
         elif architecture == 'sdxl':
             return cls._normalize_keys_sdxl(lora_sd)
+        elif architecture == 'sd15':
+            return cls._normalize_keys_sd15(lora_sd)
         elif architecture == 'ltx':
             return cls._normalize_keys_ltx(lora_sd)
         elif architecture == 'qwen_image':
@@ -5679,6 +5745,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     'wan': 'Wan 2.1/2.2',
                     'acestep': 'ACE-Step',
                     'sdxl': 'SDXL',
+                    'sd15': 'SD 1.5',
                     'ltx': 'LTX Video',
                     'qwen_image': 'Qwen-Image',
                 }
