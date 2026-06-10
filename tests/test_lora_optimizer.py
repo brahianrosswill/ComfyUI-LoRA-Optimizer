@@ -1701,6 +1701,101 @@ class AnalysisCacheTests(unittest.TestCase):
                               entry["raw_analysis"]["per_prefix"]["prefix_a"])
 
 
+class TestAnalysisIndexRemap(unittest.TestCase):
+    """The names_only_hash is order-independent but cache entries are
+    index-keyed — reordering the stack must remap entries, not misattribute
+    one LoRA's stats to another."""
+
+    @staticmethod
+    def _entry(norm_a=1.5, norm_b=0.8):
+        return {
+            "pair_conflicts": {"0,1": {"overlap": 100, "conflict": 30,
+                                       "dot": 0.5,
+                                       "norm_a_sq": norm_a,
+                                       "norm_b_sq": norm_b,
+                                       "weighted_total": 0.8,
+                                       "weighted_conflict": 0.2,
+                                       "expected_conflict": 0.15,
+                                       "excess_conflict": 0.05,
+                                       "subspace_overlap": 0.3,
+                                       "subspace_weight": 1.0}},
+            "per_lora_norm_sq": {"0": norm_a, "1": norm_b},
+            "magnitude_samples_unscaled": {"0": [0.1, 0.2], "1": [0.3]},
+            "ranks": {"0": 16, "1": 32},
+            "target_key": "model.layer.weight",
+            "is_clip": False,
+            "raw_n": 2,
+            "skip_count": 0,
+            "strength_signs": {"0": 1, "1": 1},
+        }
+
+    def test_same_order_passthrough(self):
+        per_prefix = {"p": self._entry()}
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            per_prefix,
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}],
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}])
+        self.assertIs(out, per_prefix)
+
+    def test_reordered_stack_remaps_indices_and_pair_orientation(self):
+        per_prefix = {"p": self._entry(norm_a=1.5, norm_b=0.8)}
+        # Cached order [A, B]; current order [B, A]
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            per_prefix,
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}],
+            [{"name": "b.safetensors"}, {"name": "a.safetensors"}])
+        self.assertIsNotNone(out)
+        entry = out["p"]
+        # A (norm 1.5) is now index 1, B (norm 0.8) is index 0
+        self.assertEqual(entry["per_lora_norm_sq"]["1"], 1.5)
+        self.assertEqual(entry["per_lora_norm_sq"]["0"], 0.8)
+        self.assertEqual(entry["ranks"]["1"], 16)
+        self.assertEqual(entry["ranks"]["0"], 32)
+        self.assertEqual(entry["magnitude_samples_unscaled"]["1"], [0.1, 0.2])
+        # Pair key stays canonical (i < j) with a/b norms swapped to match
+        self.assertIn("0,1", entry["pair_conflicts"])
+        self.assertEqual(entry["pair_conflicts"]["0,1"]["norm_a_sq"], 0.8)
+        self.assertEqual(entry["pair_conflicts"]["0,1"]["norm_b_sq"], 1.5)
+        # Symmetric fields untouched
+        self.assertEqual(entry["pair_conflicts"]["0,1"]["dot"], 0.5)
+
+    def test_name_mismatch_returns_none(self):
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            {"p": self._entry()},
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}],
+            [{"name": "a.safetensors"}, {"name": "c.safetensors"}])
+        self.assertIsNone(out)
+
+    def test_missing_source_loras_returns_none(self):
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            {"p": self._entry()}, None,
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}])
+        self.assertIsNone(out)
+
+    def test_cache_load_remaps_for_reordered_active_loras(self):
+        """End-to-end: save under [A, B], load with [B, A] active order."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._analysis_cache_save(
+                    "reorder1", {"p": self._entry(norm_a=1.5, norm_b=0.8)},
+                    [{"name": "a.safetensors"}, {"name": "b.safetensors"}])
+                loaded = lora_optimizer.LoRAAutoTuner._analysis_cache_load(
+                    "reorder1",
+                    active_loras=[{"name": "b.safetensors", "strength": 1.0},
+                                  {"name": "a.safetensors", "strength": 0.5}])
+                self.assertIsNotNone(loaded)
+                self.assertEqual(loaded["p"]["per_lora_norm_sq"]["1"], 1.5)
+                self.assertEqual(loaded["p"]["per_lora_norm_sq"]["0"], 0.8)
+
+    def test_duplicate_names_matched_in_occurrence_order(self):
+        per_prefix = {"p": self._entry()}
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            per_prefix,
+            [{"name": "a.safetensors"}, {"name": "a.safetensors"}],
+            [{"name": "a.safetensors"}, {"name": "a.safetensors"}])
+        self.assertIs(out, per_prefix)
+
+
 class TestAnalysisPartialLifecycle(unittest.TestCase):
     """Integration tests for partial checkpoint create/resume/delete lifecycle."""
 
