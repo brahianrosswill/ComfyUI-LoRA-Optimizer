@@ -3157,6 +3157,112 @@ class TestCommunityCacheUploadOnly(unittest.TestCase):
         )
 
 
+class TestMergeOnWrite(unittest.TestCase):
+    """Concurrent ComfyUI processes do read-modify-write on shared cache
+    files; saves merge with the on-disk state so neither loses entries."""
+
+    def test_lora_cache_save_preserves_other_writers_keys(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                # "Process A" writes prefix_a; "process B" (stale in-memory
+                # view) writes only prefix_b — A's key must survive
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"prefix_a": {"x": 1}})
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"prefix_b": {"x": 2}})
+                loaded = lora_optimizer.LoRAAutoTuner._lora_cache_load("h1")
+                self.assertEqual(set(loaded), {"prefix_a", "prefix_b"})
+
+    def test_lora_cache_save_none_never_clobbers_real_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"p": {"x": 1}})
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"p": None, "q": None})
+                loaded = lora_optimizer.LoRAAutoTuner._lora_cache_load("h1")
+                self.assertEqual(loaded["p"], {"x": 1})
+                self.assertIsNone(loaded["q"])
+
+    def test_pair_cache_save_merges(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._pair_cache_save("a", "b", {"p1": {"dot": 1}})
+                lora_optimizer.LoRAAutoTuner._pair_cache_save("a", "b", {"p2": {"dot": 2}})
+                loaded = lora_optimizer.LoRAAutoTuner._pair_cache_load("a", "b")
+                self.assertEqual(set(loaded), {"p1", "p2"})
+
+    def test_content_hash_save_merges_unless_gc(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+                lora_optimizer.LoRAAutoTuner._save_content_hash_cache({"k1": "v1"})
+                # Simulate another process's state not containing k1
+                lora_optimizer.LoRAAutoTuner._save_content_hash_cache({"k2": "v2"})
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+                loaded = lora_optimizer.LoRAAutoTuner._load_content_hash_cache()
+                self.assertEqual(set(loaded), {"k1", "k2"})
+                # GC prune path must NOT resurrect dropped keys
+                lora_optimizer.LoRAAutoTuner._save_content_hash_cache({"k2": "v2"}, merge=False)
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+                loaded = lora_optimizer.LoRAAutoTuner._load_content_hash_cache()
+                self.assertEqual(set(loaded), {"k2"})
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+
+
+class TestModelIdentityTracking(unittest.TestCase):
+
+    def test_same_object_not_changed(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        a = types.SimpleNamespace()
+        self.assertFalse(opt._track_model_identity(a))  # first sighting
+        self.assertFalse(opt._track_model_identity(a))  # unchanged
+
+    def test_new_object_changed(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        a, b = types.SimpleNamespace(), types.SimpleNamespace()
+        opt._track_model_identity(a)
+        self.assertTrue(opt._track_model_identity(b))
+
+    def test_clip_swap_detected(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        m = types.SimpleNamespace()
+        c1, c2 = types.SimpleNamespace(), types.SimpleNamespace()
+        opt._track_model_identity(m, c1)
+        self.assertTrue(opt._track_model_identity(m, c2))
+
+    def test_id_reuse_detected_via_dead_weakref(self):
+        import weakref, gc as _gc
+
+        class _Obj:
+            pass
+
+        opt = lora_optimizer.LoRAOptimizer()
+        b = _Obj()
+        # Simulate address reuse: stored id matches b but the original
+        # object the cache was built from is gone
+        dead = weakref.ref(_Obj())
+        _gc.collect()
+        self.assertIsNone(dead())
+        opt._cached_model_id = id(b)
+        opt._cached_clip_id = None
+        opt._cached_model_ref = dead
+        opt._cached_clip_ref = None
+        self.assertTrue(opt._track_model_identity(b))
+
+
+class TestRecordDatasetWiring(unittest.TestCase):
+
+    def test_widget_exists_and_signature_accepts(self):
+        import inspect
+        inputs = lora_optimizer.LoRAAutoTuner.INPUT_TYPES()
+        self.assertIn("record_dataset", inputs["optional"])
+        self.assertEqual(inputs["optional"]["record_dataset"][0],
+                         ["disabled", "enabled"])
+        sig = inspect.signature(lora_optimizer.LoRAAutoTuner.auto_tune)
+        self.assertIn("record_dataset", sig.parameters)
+        self.assertEqual(sig.parameters["record_dataset"].default, "disabled")
+        # The sweep must actually call the dataset writer when enabled
+        src = inspect.getsource(lora_optimizer.LoRAAutoTuner.auto_tune)
+        self.assertIn("_save_tuner_dataset_entry", src)
+
+
 class TestCommunityPairOrientation(unittest.TestCase):
     """Community pair files are content-hash oriented; local caches are
     identity-hash oriented. The swap helper must flip only norm_a/b."""

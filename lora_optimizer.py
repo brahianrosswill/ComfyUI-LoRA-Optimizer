@@ -11,6 +11,8 @@ import os
 import json
 import hashlib
 import zlib
+import functools
+import weakref
 import itertools
 import random
 import time
@@ -739,6 +741,46 @@ class _LoRAMergeBase:
     def __init__(self):
         self.loaded_loras = {}
         self._lora_format_cache = {}  # id(lora_dict) -> format_index (0-3)
+
+    def _track_model_identity(self, model, clip=None):
+        """
+        Returns True when the cached model/clip identity no longer matches the
+        given objects, then records the new identity. Uses weakrefs on top of
+        id(): a bare id() comparison can alias a NEW object that happens to
+        reuse a freed object's address, silently serving stale cached merges.
+        """
+        current_mid = id(model) if model is not None else None
+        current_cid = id(clip) if clip is not None else None
+        prev_mid = getattr(self, '_cached_model_id', None)
+        prev_cid = getattr(self, '_cached_clip_id', None)
+        prev_mref = getattr(self, '_cached_model_ref', None)
+        prev_cref = getattr(self, '_cached_clip_ref', None)
+
+        changed = False
+        if prev_mid is not None:
+            if current_mid != prev_mid:
+                changed = True
+            elif prev_mref is not None and prev_mref() is not model:
+                changed = True  # same id, old object gone — address reuse
+        if not changed and prev_cid is not None:
+            if current_cid != prev_cid:
+                changed = True
+            elif prev_cref is not None and prev_cref() is not clip:
+                changed = True
+
+        def _ref(obj):
+            if obj is None:
+                return None
+            try:
+                return weakref.ref(obj)
+            except TypeError:
+                return None
+
+        self._cached_model_id = current_mid
+        self._cached_clip_id = current_cid
+        self._cached_model_ref = _ref(model)
+        self._cached_clip_ref = _ref(clip)
+        return changed
 
     @staticmethod
     def _get_compute_device():
@@ -5751,6 +5793,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         }
 
     @staticmethod
+    @functools.lru_cache(maxsize=4096)
     def _extract_block_name(prefix):
         """
         Extract a human-readable block name from a LoRA key prefix.
@@ -5764,8 +5807,9 @@ class LoRAOptimizer(_LoRAMergeBase):
           transformer.blocks.8.attn1.to_q -> blocks.8
 
         Falls back to the first two meaningful segments if no pattern matches.
+        Pure function of the prefix — cached (called per prefix per smoothing
+        pass, with two regex evaluations each).
         """
-        import re
         # Normalize separators: lora_unet_input_blocks_4 -> input_blocks.4
         # Strip common prefixes
         p = prefix
@@ -6406,11 +6450,9 @@ class LoRAOptimizer(_LoRAMergeBase):
         Pass 2: Recompute diffs per target group, merge immediately, discard
         Peak memory tracks the largest active target group, not the whole stack.
         """
-        # Free stale cached models when the input model changes — prevents
-        # the old patched model from staying in RAM after switching models.
-        current_mid = id(model) if model is not None else None
-        prev_mid = getattr(self, '_cached_model_id', None)
-        if prev_mid is not None and current_mid != prev_mid:
+        # Free stale cached models when the input model/clip changes — prevents
+        # the old patched clones from staying in RAM after switching models.
+        if self._track_model_identity(model, clip):
             if hasattr(self, '_merge_cache') and self._merge_cache:
                 self._merge_cache.clear()
             if hasattr(self, '_autotuner_cache') and getattr(self, '_autotuner_cache', None):
@@ -6423,7 +6465,6 @@ class LoRAOptimizer(_LoRAMergeBase):
                     delegate._autotuner_cache.clear()
                 delegate._cached_model_id = None
             gc.collect()
-        self._cached_model_id = current_mid
 
         # Normalize stack format (standard tuples or LoRAStack dicts)
         if not lora_stack or len(lora_stack) == 0:
@@ -8113,6 +8154,13 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "tooltip": "Which ranked configuration to apply (1 = top-ranked). "
                                "Change this to try a different config without re-running the full sweep."
                 }),
+                "record_dataset": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Append analysis metrics and all scored configs to "
+                               "user/lora_optimizer_reports/autotuner_dataset.jsonl for "
+                               "threshold-tuning research. Entries are recorded only when "
+                               "a full sweep runs (cache/memory replays don't add entries)."
+                }),
             },
         }
 
@@ -8264,9 +8312,27 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     @staticmethod
     def _analysis_cache_save(names_only_hash, per_prefix, source_loras):
-        """Atomic write of analysis cache to disk."""
+        """Atomic write of analysis cache to disk.
+
+        Merge-on-write: current on-disk entries are remapped to the caller's
+        stack order and overlaid (caller wins), so concurrent processes
+        tuning overlapping stacks don't drop each other's prefixes."""
         from datetime import datetime
         path = LoRAAutoTuner._analysis_cache_path(names_only_hash)
+        try:
+            with open(path) as f:
+                disk = json.load(f)
+            if disk.get("algo_version") == ANALYSIS_CACHE_VERSION:
+                disk_pp = LoRAAutoTuner._remap_analysis_indices(
+                    disk.get("per_prefix"), disk.get("source_loras"), source_loras)
+                if disk_pp:
+                    merged = dict(disk_pp)
+                    merged.update(per_prefix)
+                    per_prefix = merged
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logging.warning(f"[AutoTuner Analysis Cache] Merge-on-write skipped: {e}")
         entry = {
             "analysis_version": 1,
             "algo_version": ANALYSIS_CACHE_VERSION,
@@ -8404,7 +8470,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     continue
             n_pruned = len(cache) - len(pruned)
             if n_pruned:
-                LoRAAutoTuner._save_content_hash_cache(pruned)
+                LoRAAutoTuner._save_content_hash_cache(pruned, merge=False)
             if n_removed or n_pruned:
                 logging.info(f"[AutoTuner GC] Removed {n_removed} stale cache file(s), "
                              f"pruned {n_pruned} dead content-hash entries")
@@ -8444,8 +8510,21 @@ class LoRAAutoTuner(LoRAOptimizer):
         return cache
 
     @staticmethod
-    def _save_content_hash_cache(cache):
+    def _save_content_hash_cache(cache, merge=True):
+        """merge=True overlays the caller's keys onto the current on-disk
+        ones so concurrent processes don't drop each other's hashes; the GC
+        passes merge=False so pruned dead keys aren't resurrected."""
         path = LoRAAutoTuner._content_hash_cache_path()
+        if merge:
+            try:
+                with open(path, "r") as f:
+                    disk = json.load(f)
+                if isinstance(disk, dict):
+                    merged = dict(disk)
+                    merged.update(cache)
+                    cache = merged
+            except Exception:
+                pass
         LoRAAutoTuner._content_hash_mem = (path, cache)
         try:
             tmp = path + ".tmp"
@@ -8857,13 +8936,23 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     @staticmethod
     def _lora_cache_save(lora_hash, per_prefix):
-        """Atomic write of per-LoRA cache to disk."""
+        """Atomic write of per-LoRA cache to disk.
+
+        Merge-on-write: re-reads the current on-disk entries and overlays the
+        caller's (caller wins; None never clobbers a real entry). Entries are
+        content-derived, so same-key collisions between concurrent ComfyUI
+        processes hold equivalent data — this removes lost updates without
+        cross-platform file locking."""
         from datetime import datetime
         path = LoRAAutoTuner._lora_cache_path(lora_hash)
+        merged = LoRAAutoTuner._lora_cache_load(lora_hash) or {}
+        for k, v in per_prefix.items():
+            if v is not None or k not in merged:
+                merged[k] = v
         entry = {
             "algo_version": ANALYSIS_CACHE_VERSION,
             "created_at": datetime.now().isoformat(timespec="seconds"),
-            "per_prefix": per_prefix,
+            "per_prefix": merged,
         }
         tmp_path = path + ".tmp"
         try:
@@ -8903,13 +8992,16 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     @staticmethod
     def _pair_cache_save(hash_a, hash_b, per_prefix):
-        """Atomic write of per-pair cache to disk."""
+        """Atomic write of per-pair cache to disk. Merge-on-write (caller
+        wins) — see _lora_cache_save for the rationale."""
         from datetime import datetime
         path = LoRAAutoTuner._pair_cache_path(hash_a, hash_b)
+        merged = LoRAAutoTuner._pair_cache_load(hash_a, hash_b) or {}
+        merged.update(per_prefix)
         entry = {
             "algo_version": ANALYSIS_CACHE_VERSION,
             "created_at": datetime.now().isoformat(timespec="seconds"),
-            "per_prefix": per_prefix,
+            "per_prefix": merged,
         }
         tmp_path = path + ".tmp"
         try:
@@ -9078,23 +9170,20 @@ class LoRAAutoTuner(LoRAOptimizer):
                   diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0,
                   scoring_speed="full", scoring_formula="v2", output_mode="merge",
                   decision_smoothing=0.25, smooth_slerp_gate=False,
-                  memory_mode="disabled", selection=1,
+                  memory_mode="disabled", selection=1, record_dataset="disabled",
                   _is_sub_merge=False, _suppress_pbar=False):
         import hashlib, json
 
         # Best-effort cleanup of orphaned cache files (once per process)
         self._gc_autotuner_memory()
 
-        # Free stale cached models when the input model changes
-        current_mid = id(model) if model is not None else None
-        prev_mid = getattr(self, '_cached_model_id', None)
-        if prev_mid is not None and current_mid != prev_mid:
+        # Free stale cached models when the input model/clip changes
+        if self._track_model_identity(model, clip):
             if hasattr(self, '_merge_cache') and self._merge_cache:
                 self._merge_cache.clear()
             if hasattr(self, '_autotuner_cache') and getattr(self, '_autotuner_cache', None):
                 self._autotuner_cache.clear()
             gc.collect()
-        self._cached_model_id = current_mid
 
         # --- Extract merge formula before normalization ---
         merge_formula = None
@@ -9180,6 +9269,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                         smooth_slerp_gate=smooth_slerp_gate,
                         memory_mode=memory_mode,
                         selection=selection,
+                        record_dataset=record_dataset,
                         _is_sub_merge=_is_sub_merge,
                         _suppress_pbar=_suppress_pbar,
                     )
@@ -10261,6 +10351,13 @@ class LoRAAutoTuner(LoRAOptimizer):
             } for r in results],
         }
 
+        if record_dataset == "enabled" and not _is_sub_merge:
+            self._save_tuner_dataset_entry(
+                tuner_data, active_loras, prefix_stats,
+                getattr(self, '_detected_arch', None),
+                names_only_hash=names_only_hash,
+                new_analysis_entries=new_analysis_entries)
+
         prefix_stats.clear()
 
         # Save to persistent memory
@@ -10644,7 +10741,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                    diff_cache_mode="disabled", diff_cache_ram_pct=0.5,
                    vram_budget=0.0, scoring_speed="full", scoring_formula="v2",
                    output_mode="merge", decision_smoothing=0.25,
-                   smooth_slerp_gate=False, memory_mode="disabled", selection=1):
+                   smooth_slerp_gate=False, memory_mode="disabled", selection=1,
+                   record_dataset="disabled"):
         evaluator_hash = ""
         if evaluator is not None:
             evaluator_hash = (cls._stable_data_hash(evaluator) + "|"
@@ -10654,7 +10752,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 architecture_preset,
                 vram_budget, community_cache, scoring_speed, scoring_formula, output_mode,
                 auto_strength_floor, decision_smoothing, smooth_slerp_gate, evaluator_hash,
-                memory_mode, selection)
+                memory_mode, selection, record_dataset)
 
     def _run_phase1_for_estimator(self, model, clip, lora_stack,
                                   normalize_keys="enabled",

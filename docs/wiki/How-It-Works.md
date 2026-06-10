@@ -799,7 +799,7 @@ Phase 2 is designed to avoid RAM exhaustion:
 
 ### Dataset Recording
 
-When `record_dataset=enabled`, the AutoTuner saves a JSONL entry to `lora_optimizer_reports/autotuner_dataset.jsonl` after each run. Each entry records:
+When `record_dataset=enabled`, the AutoTuner appends a JSONL entry to `<user dir>/lora_optimizer_reports/autotuner_dataset.jsonl` after each full sweep (cache and memory replays don't add entries). Each entry records:
 - Timestamp and detected architecture
 - LoRA names and analysis summary
 - Per-prefix strategy distribution
