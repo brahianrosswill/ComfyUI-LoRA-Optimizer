@@ -95,6 +95,19 @@ AUTOTUNER_MEMORY_VERSION = 1
 # selection, sampling) — not just on memory/config format changes. Stale
 # memory entries and community configs are rejected by this gate.
 AUTOTUNER_ALGO_VERSION = "1.7.0"
+
+
+def _warn_stale_tuner_data(tuner_data, context):
+    """Warn (don't block) when explicitly wired tuner_data was produced by a
+    different algo version — its ranking may not match current scoring."""
+    if not isinstance(tuner_data, dict):
+        return
+    version = tuner_data.get("algo_version")
+    if version is not None and version != AUTOTUNER_ALGO_VERSION:
+        logging.warning(
+            f"[{context}] tuner_data was produced by AutoTuner algo {version} "
+            f"(current: {AUTOTUNER_ALGO_VERSION}) — its ranking may be stale. "
+            f"Re-run the AutoTuner to refresh it.")
 ANALYSIS_CACHE_VERSION = "1.7.1"   # Bump when per-prefix conflict math changes (lora/pair/analysis caches)
 COMMUNITY_CACHE_REPO = "ethanfel/lora-optimizer-community-cache"
 COMMUNITY_CACHE_BASE_URL = (
@@ -6391,6 +6404,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             if tuner_data is None or "top_n" not in tuner_data or len(tuner_data["top_n"]) == 0:
                 logging.warning("[Tuner Data] No valid tuner_data — falling back to manual merge")
             else:
+                _warn_stale_tuner_data(tuner_data, "Tuner Data Bridge")
                 entry = tuner_data["top_n"][0]
                 config = entry["config"]
                 strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
@@ -7781,6 +7795,13 @@ class LoRAAutoTunerSettings:
                     "tooltip": "Which ranked configuration to apply (1 = top-ranked). "
                                "Change this to try a different config without re-running the full sweep."
                 }),
+                "record_dataset": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Append analysis metrics and all scored configs to "
+                               "user/lora_optimizer_reports/autotuner_dataset.jsonl for "
+                               "threshold-tuning research. Entries are recorded only when "
+                               "a full sweep runs (cache/memory replays don't add entries)."
+                }),
             },
             "optional": {
                 "merge_settings": ("MERGE_SETTINGS", {
@@ -7804,7 +7825,7 @@ class LoRAAutoTunerSettings:
     def build_settings(self, top_n, scoring_svd, scoring_device,
                        scoring_speed, scoring_formula,
                        diff_cache_mode, diff_cache_ram_pct, community_cache,
-                       memory_mode="disabled", selection=1,
+                       memory_mode="disabled", selection=1, record_dataset="disabled",
                        merge_settings=None, evaluator=None):
         ms = merge_settings if merge_settings is not None else LoRAMergeSettings._DEFAULTS
         return ({
@@ -7828,6 +7849,7 @@ class LoRAAutoTunerSettings:
             "evaluator": evaluator,
             "memory_mode": memory_mode,
             "selection": selection,
+            "record_dataset": record_dataset,
         },)
 
 
@@ -7962,6 +7984,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                     evaluator=settings.get("evaluator"),
                     memory_mode=settings.get("memory_mode", "disabled"),
                     selection=settings.get("selection", 1),
+                    record_dataset=settings.get("record_dataset", "disabled"),
                 )
                 # Map 6-value AutoTuner return to 5-value Simple return
                 # (model, clip, report, analysis_report, tuner_data, lora_data)
@@ -7979,6 +8002,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
 
         # Priority 2: tuner_data connected (no settings)
         if tuner_data is not None and "top_n" in tuner_data and len(tuner_data["top_n"]) > 0:
+            _warn_stale_tuner_data(tuner_data, "LoRA Optimizer")
             entry = tuner_data["top_n"][0]
             config = entry["config"]
             strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
@@ -8776,6 +8800,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 [(l["name"], l["strength"]) for l in active_loras], sort_keys=True)
             tuner_data = {
                 "version": 1,
+                "algo_version": AUTOTUNER_ALGO_VERSION,
                 "lora_hash": hashlib.sha256(_hash_input.encode()).hexdigest()[:16],
                 "source_loras": [{"name": l["name"], "strength": l["strength"]}
                                  for l in active_loras],
@@ -10359,6 +10384,7 @@ class LoRAAutoTuner(LoRAOptimizer):
         # Build TUNER_DATA (exclude model/clip objects)
         tuner_data = {
             "version": 1,
+            "algo_version": AUTOTUNER_ALGO_VERSION,
             "lora_hash": lora_hash,
             "source_loras": [{"name": l["name"], "strength": l["strength"]} for l in active_loras],
             "normalize_keys": normalize_keys,
@@ -10931,6 +10957,7 @@ class LoRAMergeSelector(LoRAOptimizer):
 
         if tuner_data is None or "top_n" not in tuner_data:
             return (model, clip, "Error: No valid TUNER_DATA provided.", None)
+        _warn_stale_tuner_data(tuner_data, "Merge Selector")
 
         # Validate lora_hash (filter zero-strength to match AutoTuner)
         nk = tuner_data.get("normalize_keys", "disabled")
@@ -11531,6 +11558,7 @@ class LoadTunerData:
             tuner_data = json.load(f)
         logging.info(f"[Load Tuner Data] Loaded from: {load_path} "
                      f"({len(tuner_data.get('top_n', []))} configs)")
+        _warn_stale_tuner_data(tuner_data, "Load Tuner Data")
 
         prompt = tuner_data.get("prompt", "")
         description = tuner_data.get("description", "")

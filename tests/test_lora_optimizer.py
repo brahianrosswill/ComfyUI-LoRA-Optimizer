@@ -894,6 +894,16 @@ class LoRASettingsNodeTests(unittest.TestCase):
         # Common settings should use defaults when merge_settings not connected
         self.assertEqual(settings["normalize_keys"], "enabled")
         self.assertEqual(settings["cache_patches"], "enabled")
+        self.assertEqual(settings["record_dataset"], "disabled")
+
+    def test_autotuner_settings_record_dataset_flows(self):
+        node = lora_optimizer.LoRAAutoTunerSettings()
+        inputs = lora_optimizer.LoRAAutoTunerSettings.INPUT_TYPES()
+        self.assertIn("record_dataset", inputs["required"])
+        defaults = self._build_defaults(inputs)
+        defaults["record_dataset"] = "enabled"
+        result = node.build_settings(**defaults)
+        self.assertEqual(result[0]["record_dataset"], "enabled")
 
     def test_autotuner_settings_with_evaluator(self):
         node = lora_optimizer.LoRAAutoTunerSettings()
