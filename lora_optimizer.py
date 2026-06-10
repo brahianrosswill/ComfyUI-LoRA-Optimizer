@@ -91,7 +91,10 @@ folder_paths.add_model_folder_path("tuner_data", TUNER_DATA_DIR)
 AUTOTUNER_MEMORY_DIR = os.path.join(folder_paths.models_dir, "autotuner_memory")
 os.makedirs(AUTOTUNER_MEMORY_DIR, exist_ok=True)
 AUTOTUNER_MEMORY_VERSION = 1
-AUTOTUNER_ALGO_VERSION = "1.6.0"   # Bump when scoring formula or memory/config format changes
+# Bump whenever ranking-relevant behavior changes (scoring formula, candidate
+# selection, sampling) — not just on memory/config format changes. Stale
+# memory entries and community configs are rejected by this gate.
+AUTOTUNER_ALGO_VERSION = "1.7.0"
 ANALYSIS_CACHE_VERSION = "1.7.1"   # Bump when per-prefix conflict math changes (lora/pair/analysis caches)
 COMMUNITY_CACHE_REPO = "ethanfel/lora-optimizer-community-cache"
 COMMUNITY_CACHE_BASE_URL = (
@@ -8792,9 +8795,14 @@ class LoRAAutoTuner(LoRAOptimizer):
             # omitted keys make the replay fall back to the user's local
             # values instead of silently overriding them with constants
             for key in ("auto_strength_floor", "decision_smoothing",
-                        "normalize_keys", "smooth_slerp_gate"):
+                        "normalize_keys", "smooth_slerp_gate",
+                        "scoring_formula"):
                 if key in data:
                     tuner_data[key] = data[key]
+            if data.get("uploaded_at") or data.get("scoring_formula"):
+                logging.info(f"[AutoTuner Community] Config uploaded "
+                             f"{data.get('uploaded_at', '?')} "
+                             f"(scoring_formula={data.get('scoring_formula', '?')})")
             if "decision_smoothing" in data:
                 tuner_data["analysis_summary"]["decision_smoothing"] = data["decision_smoothing"]
             return tuner_data
@@ -8864,12 +8872,14 @@ class LoRAAutoTuner(LoRAOptimizer):
             joined = "_".join(sorted_hashes)
             config_path = f"config/{joined}_{arch_preset}.config.json"
             existing_config = LoRAAutoTuner._community_download(config_path)
-            # Only defer to an existing config from the SAME algo version —
-            # scores across versions aren't comparable, and an old higher
-            # score would otherwise block uploads forever after a bump
-            # (downloaders reject mismatched versions, so it helps no one)
+            # Only defer to an existing config from the SAME algo version AND
+            # scoring formula — scores across versions/formulas aren't
+            # comparable, and an old higher score would otherwise block
+            # uploads forever (downloaders reject mismatched versions anyway)
+            local_formula = tuner_data.get("scoring_formula")
             if (existing_config
                     and existing_config.get("algo_version") == AUTOTUNER_ALGO_VERSION
+                    and existing_config.get("scoring_formula") == local_formula
                     and existing_config.get("score", 0.0) >= local_score):
                 logging.info(f"[AutoTuner Community] Config not uploaded — community score "
                              f"({existing_config.get('score', 0.0):.4f}) >= local ({local_score:.4f})")
@@ -8899,9 +8909,12 @@ class LoRAAutoTuner(LoRAOptimizer):
             # Record the tuning settings the sweep ran with so downloaders
             # can replay faithfully instead of guessing
             for key in ("auto_strength_floor", "decision_smoothing",
-                        "normalize_keys", "smooth_slerp_gate"):
+                        "normalize_keys", "smooth_slerp_gate",
+                        "scoring_formula"):
                 if key in tuner_data:
                     payload[key] = tuner_data[key]
+            from datetime import datetime as _dt
+            payload["uploaded_at"] = _dt.now().isoformat(timespec="seconds")
             pending.append((config_path, payload))
             LoRAAutoTuner._community_upload_batch(pending, token)
             logging.info(f"[AutoTuner Community] Upload complete — {n_lora_uploaded} lora, "
@@ -9045,6 +9058,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                              f"< requested={requested_top_n}, ignoring")
                 return None
 
+            # Provenance in the log so "why did it reuse saved data?" is
+            # answerable without opening the file
+            logging.info(f"[AutoTuner Memory] Entry created {data.get('created_at', '?')} "
+                         f"(algo {data.get('algo_version', '?')})")
             return tuner_data
         except Exception:
             logging.warning(f"[AutoTuner Memory] Corrupt memory file, ignoring: {path}")
@@ -9472,10 +9489,22 @@ class LoRAAutoTuner(LoRAOptimizer):
             if len(_community_tuner_data["top_n"]) > top_n:
                 _community_tuner_data["top_n"] = _community_tuner_data["top_n"][:top_n]
             _sel_idx = min(selection, len(_community_tuner_data["top_n"])) - 1
+            _comm_formula = _community_tuner_data.get("scoring_formula")
+            _formula_note = ""
+            if _comm_formula is not None and _comm_formula != scoring_formula:
+                _formula_note = (
+                    f"  NOTE: ranked with scoring_formula={_comm_formula} "
+                    f"(local widget: {scoring_formula}).\n"
+                )
+                logging.info(f"[AutoTuner Community] Config was ranked with "
+                             f"scoring_formula={_comm_formula}, local setting is "
+                             f"{scoring_formula} — set community_cache='disabled' "
+                             f"to re-rank locally")
             _comm_banner = (
                 "=" * 54 + "\n"
                 "  COMMUNITY CACHE HIT — Results from HF community cache\n"
                 "  Set community_cache='disabled' to run locally.\n"
+                + _formula_note +
                 "=" * 54 + "\n\n"
             )
             _comm_report = _comm_banner + self._build_autotuner_report(
@@ -10337,6 +10366,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             "auto_strength_floor": auto_strength_floor,
             "decision_smoothing": decision_smoothing,
             "smooth_slerp_gate": smooth_slerp_gate,
+            "scoring_formula": scoring_formula,
             "analysis_summary": analysis_summary,
             "top_n": [{
                 "rank": r["rank"],
