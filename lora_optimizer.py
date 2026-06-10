@@ -1734,8 +1734,10 @@ class _LoRAMergeBase:
         return torch.Size(target_shape)
 
     @staticmethod
-    def _resolve_branch_strength(item, is_clip, clip_strength_multiplier):
-        """Base per-LoRA strength for the target branch before auto-scaling."""
+    def _resolve_branch_strength(item, is_clip):
+        """Base per-LoRA strength for the target branch before auto-scaling.
+        The global clip_strength_multiplier is deliberately NOT applied here —
+        it scales the merged clip patches once at add_patches time."""
         if is_clip:
             if item["clip_strength"] is not None:
                 return item["clip_strength"]
@@ -1923,7 +1925,7 @@ class _LoRAMergeBase:
                 continue
             filtered[i] = diff
             eff_strengths[i] = self._resolve_branch_strength(
-                active_loras[i], is_clip, clip_strength_multiplier
+                active_loras[i], is_clip
             ) * auto_scale
             rank_sums[i] = ranks.get(i, 0)
 
@@ -3819,12 +3821,10 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
     """
     if _baseline is not None:
         norms = list(_baseline["norms"])
-        importance_values = list(_baseline["importance_values"])
         effective_ranks = list(_baseline["effective_ranks"])
         sparsities = list(_baseline["sparsities"])
     else:
         norms = []
-        importance_values = []
         effective_ranks = []
         sparsities = []
     _svd_tasks = []  # (gram_up [rank,rank], rank_int) — batched after loop
@@ -3866,7 +3866,6 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
             scale = alpha / dim if (alpha is not None and dim is not None) else 1.0
             fro_norm = (w1.float().norm().item() * w2.float().norm().item() * abs(scale))
             norms.append(fro_norm)
-            importance_values.append(fro_norm)
             del w1, w2
             continue
         elif isinstance(patch, LoHaAdapter):
@@ -3875,7 +3874,6 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
                 diff = diff.to(score_device)
             fro_norm = diff.norm().item()
             norms.append(fro_norm)
-            importance_values.append(fro_norm)
             max_val = diff.abs().max().item()
             threshold = max_val * 0.01
             if threshold > 0:
@@ -3901,7 +3899,6 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
                 gram_down = torch.mm(down_flat, down_flat.T)
                 fro_norm = (torch.trace(gram_up @ gram_down).clamp(min=0) ** 0.5 * abs(scale)).item()
                 norms.append(fro_norm)
-                importance_values.append(fro_norm)
                 # Estimate element-wise sparsity by sampling columns of the product.
                 # Seeded per target key: unseeded sampling made composite scores
                 # (and thus candidate rankings) vary run-to-run.
@@ -3936,7 +3933,6 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
         # Frobenius norm — avoid full fp32 copy for non-float32 tensors
         fro_norm = tensor.to(dtype=torch.float32).norm().item() if tensor.dtype != torch.float32 else tensor.norm().item()
         norms.append(fro_norm)
-        importance_values.append(fro_norm)
 
         # Sparsity — compute before SVD to free tensor sooner
         threshold = tensor.abs().max().item() * 0.01
@@ -4004,14 +4000,10 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
         metrics["norm_mean"] = 0.0
         metrics["norm_cv"] = 1.0
 
-    if importance_values:
-        metrics["importance_mean"] = sum(importance_values) / len(importance_values)
-        metrics["importance_std"] = (sum((n - metrics["importance_mean"])**2 for n in importance_values)
-                                     / len(importance_values)) ** 0.5
-        metrics["importance_cv"] = metrics["importance_std"] / (metrics["importance_mean"] + 1e-10)
-    else:
-        metrics["importance_mean"] = 0.0
-        metrics["importance_cv"] = metrics["norm_cv"]
+    # importance_* mirrored norm_* exactly (every append site pushed the same
+    # value) — keep the metric keys for report/consumer compatibility
+    metrics["importance_mean"] = metrics["norm_mean"]
+    metrics["importance_cv"] = metrics["norm_cv"]
 
     if effective_ranks:
         metrics["effective_rank_mean"] = sum(effective_ranks) / len(effective_ranks)
@@ -4052,7 +4044,6 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
     if _return_raw:
         metrics["_raw"] = {
             "norms": norms,
-            "importance_values": importance_values,
             "effective_ranks": effective_ranks,
             "sparsities": sparsities,
         }
@@ -4149,6 +4140,13 @@ def _run_autotuner_evaluator(evaluator, model, clip, lora_data, config, analysis
     except (TypeError, ValueError):
         logging.warning(f"[LoRA AutoTuner] External evaluator returned invalid score: {score!r}")
         return {"score": None, "details": details}
+
+    if score < 0.0 or score > 1.0:
+        # Silent clamping saturates everything to 1.0 for evaluators on a
+        # 0-100/logit scale — with external_only the ranking then collapses
+        logging.warning(f"[LoRA AutoTuner] External evaluator score {score:.4g} "
+                        f"outside [0, 1] — clamping. Normalize your evaluator's "
+                        f"output to keep candidate ranking meaningful.")
 
     return {
         "score": max(0.0, min(1.0, score)),
@@ -5191,12 +5189,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             "model": {
                 "norm_sq": [0.0] * len(active_loras),
                 "dot": {(i, j): 0.0 for i, j in pairs},
-                "importance": [0.0] * len(active_loras),
             },
             "clip": {
                 "norm_sq": [0.0] * len(active_loras),
                 "dot": {(i, j): 0.0 for i, j in pairs},
-                "importance": [0.0] * len(active_loras),
             },
         }
         pair_accum = {
@@ -5324,6 +5320,26 @@ class LoRAOptimizer(_LoRAMergeBase):
                     pair_entries[(i, j)] = cache[prefix]
             return lora_entries, pair_entries
 
+        def _backfill_pair_lora(prefix, result):
+            """A prefix served from the stack-level analysis cache is exactly
+            the tuple the per-LoRA/pair extractors consume — backfill caches
+            that lack it so the same LoRA hits in other stacks (and the
+            estimator/community layers see it) without re-analysis."""
+            if not track_new_entries:
+                return
+            if lora_caches is not None:
+                for i in range(len(active_loras)):
+                    if prefix not in (lora_caches.get(i) or {}):
+                        new_lora_entries[i][prefix] = self._extract_for_lora_cache(
+                            result, i, active_loras, clip_strength_multiplier)
+            if pair_caches is not None and lora_hashes is not None:
+                for (i, j) in pairs:
+                    if prefix not in (pair_caches.get((i, j)) or {}):
+                        pair_entry = self._extract_for_pair_cache(
+                            result, i, j, lora_hashes[i], lora_hashes[j])
+                        if pair_entry is not None:
+                            new_pair_entries[(i, j)][prefix] = pair_entry
+
         group_items = list(target_groups.values())
         if use_gpu:
             for target_group in group_items:
@@ -5332,6 +5348,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 if cached_analysis is not None and prefix in cached_analysis:
                     result = self._reconstruct_from_analysis_cache(
                         prefix, cached_analysis[prefix], active_loras)
+                    if result is not None:
+                        _backfill_pair_lora(prefix, result)
                 if result is None:
                     hit = _pair_lora_cache_hit(prefix)
                     if hit is not None:
@@ -5373,6 +5391,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         result = self._reconstruct_from_analysis_cache(
                             prefix, cached_analysis[prefix], active_loras)
                         if result is not None:
+                            _backfill_pair_lora(prefix, result)
                             _collect_analysis_result(result)
                             if progress_cb is not None:
                                 progress_cb()
@@ -5931,6 +5950,45 @@ class LoRAOptimizer(_LoRAMergeBase):
             sign_method = "frequency"  # unused, default for completeness
 
         return (mode, density, sign_method, reasoning)
+
+    def _decide_prefix_mode(self, pf, strategy_set, arch_preset, smooth_slerp_gate,
+                            is_full_rank, fr_preset):
+        """
+        Per-prefix merge mode decision for per_prefix mode (n_loras >= 2).
+        Single source of truth shared by Pass 2 and the AutoTuner's
+        candidate deduplication — keep ALL mode gating here.
+        Returns (mode, density, sign_method, orthogonal, opposing).
+        """
+        pf_mode, pf_density, pf_sign, _ = self._auto_select_params(
+            pf["conflict_ratio"], pf.get("decision_magnitude_ratio", pf["magnitude_ratio"]),
+            magnitude_samples=pf.get("magnitude_samples"),
+            avg_cos_sim=pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)),
+            avg_excess_conflict=pf.get("decision_conflict", pf.get("excess_conflict", pf.get("conflict_ratio", 0.0))),
+            avg_subspace_overlap=pf.get("decision_subspace_overlap", pf.get("avg_subspace_overlap", 0.0)),
+            strategy_set=strategy_set,
+            arch_preset=arch_preset,
+            precomputed_density=pf.get("precomputed_density"),
+        )
+        # Upgrade weighted_average → slerp for 2+ non-opposing LoRAs.
+        # SLERP preserves magnitude better than weighted_average's /N reduction,
+        # which is critical for video LoRAs where motion energy matters.
+        # Skip for opposing LoRAs (cos < 0): SLERP interpolates between opposing
+        # directions while preserving magnitude, amplifying artifacts.
+        pf_raw_cos = pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)) if smooth_slerp_gate else pf.get("avg_cos_sim", 0.0)
+        pf_orthogonal = abs(pf_raw_cos) < arch_preset["orthogonal_cos_sim_max"]
+        pf_opposing = pf_raw_cos < 0
+        # Full-rank gate: skip SLERP upgrade — for full-rank patches the
+        # information is spread across all dimensions, and SLERP's
+        # hypersphere interpolation loses signal from both LoRAs.
+        if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
+                and strategy_set == "full"
+                and not pf_opposing
+                and not (is_full_rank and fr_preset.get("disable_slerp_upgrade", False))):
+            pf_mode = "slerp"
+        if (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)
+                and pf_mode == "weighted_average" and pf_orthogonal):
+            pf_mode = "weighted_sum"
+        return pf_mode, pf_density, pf_sign, pf_orthogonal, pf_opposing
 
     def _build_report(self, lora_stats, pairwise_conflicts, collection_stats,
                       mode, density, sign_method, reasoning, merge_summary,
@@ -6847,35 +6905,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     pf_density = 0.5
                     pf_sign = "frequency"
                 else:
-                    pf_mode, pf_density, pf_sign, _ = self._auto_select_params(
-                        pf["conflict_ratio"], pf.get("decision_magnitude_ratio", pf["magnitude_ratio"]),
-                        magnitude_samples=pf.get("magnitude_samples"),
-                        avg_cos_sim=pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)),
-                        avg_excess_conflict=pf.get("decision_conflict", pf.get("excess_conflict", pf.get("conflict_ratio", 0.0))),
-                        avg_subspace_overlap=pf.get("decision_subspace_overlap", pf.get("avg_subspace_overlap", 0.0)),
-                        strategy_set=strategy_set,
-                        arch_preset=arch_preset,
-                        precomputed_density=pf.get("precomputed_density"),
-                    )
-                    # Upgrade weighted_average → slerp for 2+ non-opposing LoRAs.
-                    # SLERP preserves magnitude better than weighted_average's /N reduction,
-                    # which is critical for video LoRAs where motion energy matters.
-                    # Skip for opposing LoRAs (cos < 0): SLERP interpolates between opposing
-                    # directions while preserving magnitude, amplifying artifacts.
-                    pf_raw_cos = pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)) if smooth_slerp_gate else pf.get("avg_cos_sim", 0.0)
-                    pf_orthogonal = abs(pf_raw_cos) < arch_preset["orthogonal_cos_sim_max"]
-                    pf_opposing = pf_raw_cos < 0
-                    # Full-rank gate: skip SLERP upgrade — for full-rank patches the
-                    # information is spread across all dimensions, and SLERP's
-                    # hypersphere interpolation loses signal from both LoRAs.
-                    if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
-                            and strategy_set == "full"
-                            and not pf_opposing
-                            and not (is_full_rank and fr_preset.get("disable_slerp_upgrade", False))):
-                        pf_mode = "slerp"
-                    if (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)
-                            and pf_mode == "weighted_average" and pf_orthogonal):
-                        pf_mode = "weighted_sum"
+                    pf_mode, pf_density, pf_sign, pf_orthogonal, pf_opposing = (
+                        self._decide_prefix_mode(
+                            pf, strategy_set, arch_preset, smooth_slerp_gate,
+                            is_full_rank, fr_preset))
 
             # Apply merge strategy override from Conflict Editor (takes priority over auto-selection)
             # Skip when user explicitly chose additive (protects DPO/edit LoRAs)
@@ -8222,6 +8255,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             if per_prefix is not None and active_loras is not None:
                 per_prefix = LoRAAutoTuner._remap_analysis_indices(
                     per_prefix, data.get("source_loras"), active_loras)
+            if per_prefix is not None:
+                LoRAAutoTuner._touch(path)
             return per_prefix
         except Exception as e:
             logging.warning(f"[AutoTuner Analysis Cache] Failed to load: {e}")
@@ -8332,22 +8367,87 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     # --- Community cache: content-based hashing ---
 
+    _gc_done = False
+
+    @staticmethod
+    def _gc_autotuner_memory(max_age_days=90):
+        """Best-effort GC of re-derivable cache files. Identity-hash keyed
+        files (.lora/.pair/.analysis) are orphaned forever by any retrain or
+        touch of the source LoRA, so the directory grows without bound.
+        Files touched on cache hits stay alive; runs once per process.
+        Memory entries (*.memory.json) are kept — small and user-facing."""
+        if LoRAAutoTuner._gc_done:
+            return
+        LoRAAutoTuner._gc_done = True
+        try:
+            cutoff = time.time() - max_age_days * 86400
+            n_removed = 0
+            for pattern in ("*.lora.json", "*.pair.json", "*.analysis.json",
+                            "*.analysis.partial.json"):
+                for path in glob.glob(os.path.join(AUTOTUNER_MEMORY_DIR, pattern)):
+                    try:
+                        if os.path.getmtime(path) < cutoff:
+                            os.unlink(path)
+                            n_removed += 1
+                    except OSError:
+                        pass
+            # Prune content-hash entries whose file is gone or has changed
+            cache = LoRAAutoTuner._load_content_hash_cache()
+            pruned = {}
+            for key, value in cache.items():
+                try:
+                    path_part, mtime_s, size_s = key.rsplit("|", 2)
+                    st = os.stat(path_part)
+                    if f"{st.st_mtime}" == mtime_s and f"{st.st_size}" == size_s:
+                        pruned[key] = value
+                except (OSError, ValueError):
+                    continue
+            n_pruned = len(cache) - len(pruned)
+            if n_pruned:
+                LoRAAutoTuner._save_content_hash_cache(pruned)
+            if n_removed or n_pruned:
+                logging.info(f"[AutoTuner GC] Removed {n_removed} stale cache file(s), "
+                             f"pruned {n_pruned} dead content-hash entries")
+        except Exception as e:
+            logging.warning(f"[AutoTuner GC] Failed: {e}")
+
+    @staticmethod
+    def _touch(path):
+        """Refresh a cache file's mtime on hit so GC keeps live entries."""
+        try:
+            os.utime(path, None)
+        except OSError:
+            pass
+
     @staticmethod
     def _content_hash_cache_path():
         return os.path.join(AUTOTUNER_MEMORY_DIR, ".content_hashes.json")
 
+    # Per-process memo of the content-hash file: rerun scans call
+    # _lora_content_hash hundreds of times and re-parsing the JSON each
+    # call dominated the cost. Keyed by path so a relocated cache dir
+    # (e.g. in tests) invalidates it.
+    _content_hash_mem = None  # (path, dict)
+
     @staticmethod
     def _load_content_hash_cache():
+        path = LoRAAutoTuner._content_hash_cache_path()
+        mem = LoRAAutoTuner._content_hash_mem
+        if mem is not None and mem[0] == path:
+            return mem[1]
         try:
-            with open(LoRAAutoTuner._content_hash_cache_path(), "r") as f:
-                return json.load(f)
+            with open(path, "r") as f:
+                cache = json.load(f)
         except Exception:
-            return {}
+            cache = {}
+        LoRAAutoTuner._content_hash_mem = (path, cache)
+        return cache
 
     @staticmethod
     def _save_content_hash_cache(cache):
+        path = LoRAAutoTuner._content_hash_cache_path()
+        LoRAAutoTuner._content_hash_mem = (path, cache)
         try:
-            path = LoRAAutoTuner._content_hash_cache_path()
             tmp = path + ".tmp"
             with open(tmp, "w") as f:
                 json.dump(cache, f, separators=(",", ":"))
@@ -8383,10 +8483,17 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     # --- Community cache: network I/O ---
 
+    # When a download fails for connectivity reasons (timeout, DNS, refused),
+    # skip further downloads until this monotonic-ish deadline — otherwise a
+    # 3-LoRA run stalls ~70s on serial 10s timeouts before falling back local
+    _community_offline_until = 0.0
+
     @staticmethod
     def _community_download(path_in_repo):
         """Download a JSON file from the community cache repo. Returns dict or None."""
         import urllib.request, urllib.error
+        if time.time() < LoRAAutoTuner._community_offline_until:
+            return None
         url = f"{COMMUNITY_CACHE_BASE_URL}/{path_in_repo}"
         try:
             with urllib.request.urlopen(url, timeout=10) as resp:
@@ -8397,38 +8504,72 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.warning(f"[AutoTuner Community] Download failed ({e.code}): {url}")
             return None
         except Exception as e:
-            logging.warning(f"[AutoTuner Community] Download error: {e}")
+            LoRAAutoTuner._community_offline_until = time.time() + 300
+            logging.warning(f"[AutoTuner Community] Download error: {e} — "
+                            "skipping community downloads for 5 minutes")
             return None
 
     @staticmethod
     def _community_upload(path_in_repo, data, token):
         """Upload a JSON file to the community cache repo. Returns True on success."""
+        return LoRAAutoTuner._community_upload_batch([(path_in_repo, data)], token) == 1
+
+    @staticmethod
+    def _community_upload_batch(files, token, commit_message="AutoTuner community cache update"):
+        """Upload multiple JSON files in a single commit. files: [(path, dict)].
+        Returns the number of files uploaded (all-or-nothing per commit)."""
+        if not files:
+            return 0
         try:
-            from huggingface_hub import HfApi
+            from huggingface_hub import HfApi, CommitOperationAdd
         except ImportError:
             logging.warning("[AutoTuner Community] huggingface_hub not installed — "
                             "skipping upload. Install it with: pip install huggingface_hub")
-            return False
+            return 0
         try:
             import io
-            content = json.dumps(data, separators=(",", ":")).encode()
-            HfApi(token=token).upload_file(
-                path_or_fileobj=io.BytesIO(content),
-                path_in_repo=path_in_repo,
+            operations = [
+                CommitOperationAdd(
+                    path_in_repo=path,
+                    path_or_fileobj=io.BytesIO(
+                        json.dumps(data, separators=(",", ":")).encode()),
+                )
+                for path, data in files
+            ]
+            HfApi(token=token).create_commit(
                 repo_id=COMMUNITY_CACHE_REPO,
                 repo_type="dataset",
+                operations=operations,
+                commit_message=commit_message,
             )
-            logging.info(f"[AutoTuner Community] Uploaded: {path_in_repo}")
-            return True
+            logging.info(f"[AutoTuner Community] Uploaded {len(operations)} file(s) "
+                         f"in one commit")
+            return len(operations)
         except Exception as e:
-            logging.warning(f"[AutoTuner Community] Upload failed for {path_in_repo}: {e}")
-            return False
+            logging.warning(f"[AutoTuner Community] Upload failed: {e}")
+            return 0
+
+    @staticmethod
+    def _swap_pair_norms(per_prefix):
+        """Copy of pair entries with norm_a_sq/norm_b_sq swapped — used to
+        convert between local identity-hash orientation and the content-hash
+        orientation used by community pair files."""
+        out = {}
+        for k, m in per_prefix.items():
+            m2 = dict(m)
+            if "norm_a_sq" in m2 and "norm_b_sq" in m2:
+                m2["norm_a_sq"], m2["norm_b_sq"] = m2["norm_b_sq"], m2["norm_a_sq"]
+            out[k] = m2
+        return out
 
     @staticmethod
     def _community_download_caches(active_loras, content_hashes, lora_caches,
-                                    pair_caches, arch_preset, top_n):
+                                    pair_caches, arch_preset, top_n,
+                                    lora_hashes=None):
         """Download community pair/lora caches and config. Mutates lora_caches and
-        pair_caches in place (fill-missing-only — local data always wins).
+        pair_caches in place (fill-missing-only — local data always wins) and
+        persists merged entries to the local cache files so the next run does
+        not re-download them.
         Returns reconstructed tuner_data if a config hit occurs, else None."""
         n_loras = len(active_loras)
         n_pairs = n_loras * (n_loras - 1) // 2
@@ -8443,10 +8584,14 @@ class LoRAAutoTuner(LoRAOptimizer):
                 data = LoRAAutoTuner._community_download(f"lora/{ch}.lora.json")
                 if (data and data.get("algo_version") == ANALYSIS_CACHE_VERSION
                         and "per_prefix" in data):
+                    merged_any = False
                     for k, v in data["per_prefix"].items():
                         if k not in lora_caches[i]:
                             lora_caches[i][k] = v
+                            merged_any = True
                     n_lora_hits += 1
+                    if merged_any and lora_hashes is not None:
+                        LoRAAutoTuner._lora_cache_save(lora_hashes[i], lora_caches[i])
             except Exception as e:
                 logging.warning(f"[AutoTuner Community] Error merging lora cache {i}: {e}")
 
@@ -8460,12 +8605,26 @@ class LoRAAutoTuner(LoRAOptimizer):
                     data = LoRAAutoTuner._community_download(f"pair/{ha}_{hb}.pair.json")
                     if (data and data.get("algo_version") == ANALYSIS_CACHE_VERSION
                             and "per_prefix" in data):
+                        entries = data["per_prefix"]
+                        # Community files orient norm_a to the smaller CONTENT
+                        # hash; local caches orient to the smaller IDENTITY
+                        # hash. Re-orient when the two conventions disagree.
+                        if lora_hashes is not None:
+                            content_min_is_i = content_hashes[i] <= content_hashes[j]
+                            identity_min_is_i = lora_hashes[i] <= lora_hashes[j]
+                            if content_min_is_i != identity_min_is_i:
+                                entries = LoRAAutoTuner._swap_pair_norms(entries)
                         cache = pair_caches.get((i, j), {})
-                        for k, v in data["per_prefix"].items():
+                        merged_any = False
+                        for k, v in entries.items():
                             if k not in cache:
                                 cache[k] = v
+                                merged_any = True
                         pair_caches[(i, j)] = cache
                         n_pair_hits += 1
+                        if merged_any and lora_hashes is not None:
+                            LoRAAutoTuner._pair_cache_save(
+                                lora_hashes[i], lora_hashes[j], cache)
                 except Exception as e:
                     logging.warning(f"[AutoTuner Community] Error merging pair cache ({i},{j}): {e}")
 
@@ -8497,6 +8656,38 @@ class LoRAAutoTuner(LoRAOptimizer):
                 return None
             logging.info(f"[AutoTuner Community] Config HIT — score={score:.4f}, "
                          f"arch={arch_preset}")
+            # Rebuild the full candidate list when the uploader recorded one,
+            # so selection/top_n > 1 work on community hits
+            top_entries = []
+            for idx, cand in enumerate(data.get("candidates") or []):
+                if not isinstance(cand, dict):
+                    continue
+                cfg = cand.get("config")
+                if not isinstance(cfg, dict) or any(k not in cfg for k in required):
+                    continue
+                top_entries.append({
+                    "rank": cand.get("rank", idx + 1),
+                    "score_heuristic": cand.get("score_heuristic", 0.0),
+                    "score_measured": cand.get("score_measured", 0.0),
+                    "score_external": None,
+                    "score_final": cand.get("score_final", 0.0),
+                    "config": cfg,
+                    "metrics": {},
+                    "external_details": None,
+                    "per_prefix_decisions": cand.get("per_prefix_decisions", {}),
+                })
+            top_entries.sort(key=lambda e: e["rank"])
+            if not top_entries:
+                top_entries = [{
+                    "rank": 1,
+                    "score_heuristic": 0.0,
+                    "score_measured": score,
+                    "score_external": None,
+                    "score_final": score,
+                    "config": config,
+                    "metrics": {},
+                    "external_details": None,
+                }]
             # Match auto_tune's lora_hash so downstream consumers (Selector)
             # can verify the stack hasn't changed
             _hash_input = json.dumps(
@@ -8516,16 +8707,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "avg_cosine_sim": 0.0,
                     "magnitude_ratio": 1.0,
                 },
-                "top_n": [{
-                    "rank": 1,
-                    "score_heuristic": 0.0,
-                    "score_measured": score,
-                    "score_external": None,
-                    "score_final": score,
-                    "config": config,
-                    "metrics": {},
-                    "external_details": None,
-                }],
+                "top_n": top_entries,
             }
             # Only carry tuning settings the uploader actually recorded —
             # omitted keys make the replay fall back to the user's local
@@ -8545,11 +8727,13 @@ class LoRAAutoTuner(LoRAOptimizer):
     def _community_upload_results(new_lora_entries, new_pair_entries, content_hashes,
                                    lora_hashes, tuner_data, arch_preset, token,
                                    base_model_family=None):
-        """Upload newly computed lora/pair caches and (if best) a winning config."""
+        """Upload newly computed lora/pair caches and (if best) a winning config.
+        All files go up in a single commit to avoid commit spam on the repo."""
         logging.info("[AutoTuner Community] Uploading results...")
+        pending = []  # (path_in_repo, payload) — committed in one batch below
         n_lora_uploaded = 0
         n_pair_uploaded = 0
-        # Upload new lora caches
+        # Collect new lora caches
         for i, new_entries in new_lora_entries.items():
             if not new_entries or i not in content_hashes:
                 continue
@@ -8558,16 +8742,15 @@ class LoRAAutoTuner(LoRAOptimizer):
                 existing = LoRAAutoTuner._lora_cache_load(lora_hashes[i]) or {}
                 existing.update({k: v for k, v in new_entries.items() if v is not None})
                 if existing:
-                    if LoRAAutoTuner._community_upload(
+                    pending.append((
                         f"lora/{ch}.lora.json",
                         {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": existing},
-                        token,
-                    ):
-                        n_lora_uploaded += 1
+                    ))
+                    n_lora_uploaded += 1
             except Exception as e:
-                logging.warning(f"[AutoTuner Community] Error uploading lora cache {i}: {e}")
+                logging.warning(f"[AutoTuner Community] Error preparing lora cache {i}: {e}")
 
-        # Upload new pair caches
+        # Collect new pair caches
         for (i, j), new_entries in new_pair_entries.items():
             if not new_entries or i not in content_hashes or j not in content_hashes:
                 continue
@@ -8576,18 +8759,25 @@ class LoRAAutoTuner(LoRAOptimizer):
                 existing = LoRAAutoTuner._pair_cache_load(lora_hashes[i], lora_hashes[j]) or {}
                 existing.update(new_entries)
                 if existing:
-                    if LoRAAutoTuner._community_upload(
+                    # Local entries orient norm_a to the smaller IDENTITY hash;
+                    # community files orient to the smaller CONTENT hash
+                    content_min_is_i = content_hashes[i] <= content_hashes[j]
+                    identity_min_is_i = lora_hashes[i] <= lora_hashes[j]
+                    upload_entries = (LoRAAutoTuner._swap_pair_norms(existing)
+                                      if content_min_is_i != identity_min_is_i
+                                      else existing)
+                    pending.append((
                         f"pair/{ha}_{hb}.pair.json",
-                        {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": existing},
-                        token,
-                    ):
-                        n_pair_uploaded += 1
+                        {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": upload_entries},
+                    ))
+                    n_pair_uploaded += 1
             except Exception as e:
-                logging.warning(f"[AutoTuner Community] Error uploading pair cache ({i},{j}): {e}")
+                logging.warning(f"[AutoTuner Community] Error preparing pair cache ({i},{j}): {e}")
 
         # Upload config if local score beats community
         try:
             if not tuner_data.get("top_n"):
+                LoRAAutoTuner._community_upload_batch(pending, token)
                 return
             best = tuner_data["top_n"][0]
             local_score = best.get("score_final", 0.0)
@@ -8604,6 +8794,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     and existing_config.get("score", 0.0) >= local_score):
                 logging.info(f"[AutoTuner Community] Config not uploaded — community score "
                              f"({existing_config.get('score', 0.0):.4f}) >= local ({local_score:.4f})")
+                LoRAAutoTuner._community_upload_batch(pending, token)
                 return
             candidates = [
                 {
@@ -8632,11 +8823,15 @@ class LoRAAutoTuner(LoRAOptimizer):
                         "normalize_keys", "smooth_slerp_gate"):
                 if key in tuner_data:
                     payload[key] = tuner_data[key]
-            LoRAAutoTuner._community_upload(config_path, payload, token)
+            pending.append((config_path, payload))
+            LoRAAutoTuner._community_upload_batch(pending, token)
             logging.info(f"[AutoTuner Community] Upload complete — {n_lora_uploaded} lora, "
                          f"{n_pair_uploaded} pair, config score={local_score:.4f}")
         except Exception as e:
             logging.warning(f"[AutoTuner Community] Error uploading config: {e}")
+            # Still commit the lora/pair files prepared above
+            if pending:
+                LoRAAutoTuner._community_upload_batch(pending, token)
 
     @staticmethod
     def _lora_cache_path(lora_hash):
@@ -8654,6 +8849,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if data.get("algo_version") != ANALYSIS_CACHE_VERSION:
                 logging.info("[AutoTuner Lora Cache] Stale algo version, ignoring")
                 return None
+            LoRAAutoTuner._touch(path)
             return data.get("per_prefix")
         except Exception as e:
             logging.warning(f"[AutoTuner Lora Cache] Failed to load: {e}")
@@ -8699,6 +8895,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if data.get("algo_version") != ANALYSIS_CACHE_VERSION:
                 logging.info("[AutoTuner Pair Cache] Stale algo version, ignoring")
                 return None
+            LoRAAutoTuner._touch(path)
             return data.get("per_prefix")
         except Exception as e:
             logging.warning(f"[AutoTuner Pair Cache] Failed to load: {e}")
@@ -8884,6 +9081,9 @@ class LoRAAutoTuner(LoRAOptimizer):
                   memory_mode="disabled", selection=1,
                   _is_sub_merge=False, _suppress_pbar=False):
         import hashlib, json
+
+        # Best-effort cleanup of orphaned cache files (once per process)
+        self._gc_autotuner_memory()
 
         # Free stale cached models when the input model changes
         current_mid = id(model) if model is not None else None
@@ -9080,16 +9280,63 @@ class LoRAAutoTuner(LoRAOptimizer):
             f"|spd={scoring_speed}|mid={id(model)}|cid={id(clip)}"
             f"|asf={auto_strength_floor}|ds={decision_smoothing}|eh={evaluator_hash}"
             f"|sf={scoring_formula}|ssg={smooth_slerp_gate}"
-            f"|mm={memory_mode}|sel={selection}".encode()
+            f"|mm={memory_mode}".encode()
         ).hexdigest()[:16]
+        # selection is deliberately NOT in the key: changing it replays the
+        # selected config from the cached sweep instead of re-sweeping
         if cache_patches == "enabled" and hasattr(self, '_autotuner_cache') and at_cache_key in self._autotuner_cache:
-            cached_result, cached_mode = self._autotuner_cache[at_cache_key]
+            cached_result, cached_mode, cached_selection = self._autotuner_cache[at_cache_key]
+            cached_tuner = cached_result[4]
+            top_list = cached_tuner.get("top_n") if isinstance(cached_tuner, dict) else None
             if output_mode == "tuning_only":
                 logging.info("[LoRA AutoTuner] Using cached result (tuning_only passthrough)")
-                return (model, clip, cached_result[2], "", cached_result[4], None)
-            if cached_mode == "merge":
+                report = cached_result[2]
+                if selection != cached_selection and top_list:
+                    sel_idx = min(selection, len(top_list)) - 1
+                    report = self._build_autotuner_report(
+                        top_list, cached_tuner["analysis_summary"], output_strength,
+                        scoring_speed=scoring_speed, applied_rank=sel_idx + 1)
+                return (model, clip, report, "", cached_tuner, None)
+            if cached_mode == "merge" and selection == cached_selection:
                 logging.info("[LoRA AutoTuner] Using cached result")
                 return cached_result
+            if top_list:
+                # Cached sweep exists but a different selection (or a merge
+                # after a tuning_only run) is requested — replay the selected
+                # config without re-running analysis or Phase 2
+                sel_idx = min(selection, len(top_list)) - 1
+                sel_config = top_list[sel_idx]["config"]
+                logging.info(f"[LoRA AutoTuner] Cached sweep hit — replaying "
+                             f"config #{sel_idx + 1} without re-sweeping")
+                strategy_override = (sel_config["merge_mode"]
+                                     if sel_config["optimization_mode"] == "global" else "")
+                replay_model, replay_clip, replay_report, _, replay_lora_data = super().optimize_merge(
+                    model, lora_stack, output_strength,
+                    clip=clip,
+                    clip_strength_multiplier=clip_strength_multiplier,
+                    auto_strength=sel_config["auto_strength"],
+                    auto_strength_floor=cached_tuner.get("auto_strength_floor", auto_strength_floor),
+                    optimization_mode=sel_config["optimization_mode"],
+                    sparsification=sel_config["sparsification"],
+                    sparsification_density=sel_config["sparsification_density"],
+                    dare_dampening=sel_config["dare_dampening"],
+                    merge_refinement=sel_config["merge_refinement"],
+                    merge_strategy_override=strategy_override,
+                    strategy_set=sel_config.get("strategy_set", "full"),
+                    normalize_keys=cached_tuner.get("normalize_keys", normalize_keys),
+                    architecture_preset=cached_tuner.get("architecture_preset", architecture_preset),
+                    decision_smoothing=cached_tuner.get("decision_smoothing", decision_smoothing),
+                    smooth_slerp_gate=cached_tuner.get("smooth_slerp_gate", smooth_slerp_gate),
+                    cache_patches=cache_patches,
+                    vram_budget=vram_budget,
+                )
+                report = self._build_autotuner_report(
+                    top_list, cached_tuner["analysis_summary"], output_strength,
+                    scoring_speed=scoring_speed, applied_rank=sel_idx + 1)
+                result = (replay_model, replay_clip, report,
+                          replay_report, cached_tuner, replay_lora_data)
+                self._autotuner_cache[at_cache_key] = (result, "merge", selection)
+                return result
 
         # Load pair/lora caches and run community cache check before any early returns
         pairs_for_cache = [(i, j) for i in range(len(active_loras))
@@ -9123,7 +9370,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                 if community_cache == "upload_and_download":
                     _community_tuner_data = self._community_download_caches(
                         active_loras, content_hashes, lora_caches, pair_caches,
-                        arch_preset=_arch_key_for_community, top_n=top_n)
+                        arch_preset=_arch_key_for_community, top_n=top_n,
+                        lora_hashes=lora_hashes)
             else:
                 content_hashes = {}
 
@@ -9149,7 +9397,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 if cache_patches == "enabled":
                     if not hasattr(self, '_autotuner_cache'):
                         self._autotuner_cache = {}
-                    self._autotuner_cache[at_cache_key] = (_comm_result, "tuning_only")
+                    self._autotuner_cache[at_cache_key] = (_comm_result, "tuning_only", selection)
                 return _comm_result
 
             _comm_config = _community_tuner_data["top_n"][_sel_idx]["config"]
@@ -9183,7 +9431,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if cache_patches == "enabled":
                 if not hasattr(self, '_autotuner_cache'):
                     self._autotuner_cache = {}
-                self._autotuner_cache[at_cache_key] = (_comm_result, "merge")
+                self._autotuner_cache[at_cache_key] = (_comm_result, "merge", selection)
             return _comm_result
 
         # --- Persistent memory lookup ---
@@ -9269,7 +9517,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                         if cache_patches == "enabled":
                             if not hasattr(self, '_autotuner_cache'):
                                 self._autotuner_cache = {}
-                            self._autotuner_cache[at_cache_key] = (result, "tuning_only")
+                            self._autotuner_cache[at_cache_key] = (result, "tuning_only", selection)
                         return result
 
                     # Replay the selected config via optimize_merge
@@ -9306,7 +9554,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     if cache_patches == "enabled":
                         if not hasattr(self, '_autotuner_cache'):
                             self._autotuner_cache = {}
-                        self._autotuner_cache[at_cache_key] = (result, "merge")
+                        self._autotuner_cache[at_cache_key] = (result, "merge", selection)
 
                     # Upload config from memory hit — lora/pair entries not available here
                     # but the winning config + score can still be contributed
@@ -9569,8 +9817,63 @@ class LoRAAutoTuner(LoRAOptimizer):
             _diff_cache = _DiffCache(mode=diff_cache_mode, ram_pct=diff_cache_ram_pct)
             logging.info(f"[LoRA AutoTuner] Diff cache enabled (mode={diff_cache_mode})")
 
+        # --- Candidate dedup ---
+        # per_prefix configs differing only in strategy_set produce identical
+        # merges whenever every multi-LoRA prefix resolves to the same
+        # (mode, density, sign) decision (common for orthogonal stacks, where
+        # all three sets tie in the heuristic). Predict the decision maps from
+        # prefix_stats — the same inputs Pass 2 uses — and skip duplicates so
+        # Phase 2 slots go to behaviorally distinct configs.
+        _avg_ranks = [(sum(s["ranks"]) / len(s["ranks"]) if s["ranks"] else 0)
+                      for s in per_lora_stats]
+        _global_avg_rank = (sum(_avg_ranks) / len(_avg_ranks)) if _avg_ranks else 0
+        _fr_preset = tuner_arch_preset.get("full_rank", {})
+        _is_full_rank = _global_avg_rank >= _fr_preset.get("rank_threshold", 512)
+        _strategy_signatures = {}
+
+        def _strategy_signature(strat_set):
+            if strat_set in _strategy_signatures:
+                return _strategy_signatures[strat_set]
+            sig = []
+            try:
+                for pfx in sorted(prefix_stats):
+                    pf = prefix_stats[pfx]
+                    if pf.get("n_loras", 0) <= 1:
+                        continue
+                    mode, dens, sign, _, _ = self._decide_prefix_mode(
+                        pf, strat_set, tuner_arch_preset, smooth_slerp_gate,
+                        _is_full_rank, _fr_preset)
+                    sig.append((pfx, mode, round(dens, 4), sign))
+                signature = tuple(sig)
+            except Exception as e:
+                logging.warning(f"[LoRA AutoTuner] Decision-map precompute failed: {e}")
+                signature = ("unique", strat_set)  # disable dedup for this set
+            _strategy_signatures[strat_set] = signature
+            return signature
+
         # Only keep the current best in memory to avoid accumulating ~40GB per candidate.
-        top_candidates = scored[:top_n]
+        top_candidates = []
+        _seen_behaviors = set()
+        _n_dedup_skipped = 0
+        for h_score, config in scored:
+            if len(top_candidates) >= top_n:
+                break
+            shared = (config["sparsification"], config["sparsification_density"],
+                      config["dare_dampening"], config["merge_refinement"],
+                      config["auto_strength"])
+            if config["optimization_mode"] == "per_prefix":
+                behavior = shared + ("per_prefix",
+                                     _strategy_signature(config.get("strategy_set", "full")))
+            else:
+                behavior = shared + ("global", config["merge_mode"])
+            if behavior in _seen_behaviors:
+                _n_dedup_skipped += 1
+                continue
+            _seen_behaviors.add(behavior)
+            top_candidates.append((h_score, config))
+        if _n_dedup_skipped:
+            logging.info(f"[LoRA AutoTuner] Skipped {_n_dedup_skipped} duplicate candidate(s) "
+                         f"with identical per-prefix decisions — slots given to distinct configs")
         results = []
         best_model = None
         best_clip = None
@@ -10019,7 +10322,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.info("[LoRA AutoTuner] tuning_only mode — returning base model (no merge)")
             result = (model, clip, report, "", tuner_data, None)
             if cache_patches == "enabled" and not _is_sub_merge:
-                self._autotuner_cache = {at_cache_key: (result, "tuning_only")}
+                self._autotuner_cache = {at_cache_key: (result, "tuning_only", selection)}
             elif not _is_sub_merge:
                 self._autotuner_cache = {}
             return result
@@ -10078,7 +10381,7 @@ class LoRAAutoTuner(LoRAOptimizer):
 
         result = (ret_model, ret_clip, report, ret_analysis_report, tuner_data, ret_lora_data)
         if cache_patches == "enabled" and not _is_sub_merge:
-            self._autotuner_cache = {at_cache_key: (result, "merge")}
+            self._autotuner_cache = {at_cache_key: (result, "merge", selection)}
         elif not _is_sub_merge:
             self._autotuner_cache = {}
             logging.info("[LoRA AutoTuner] Patch cache disabled — RAM freed after merge")

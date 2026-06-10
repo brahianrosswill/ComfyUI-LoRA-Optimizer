@@ -4,6 +4,7 @@ import math
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest import mock
@@ -124,6 +125,10 @@ if torch is not None:
     SPEC = importlib.util.spec_from_file_location("lora_optimizer_under_test", MODULE_PATH)
     lora_optimizer = importlib.util.module_from_spec(SPEC)
     SPEC.loader.exec_module(lora_optimizer)
+    # Register under the plain name too — otherwise mock.patch("lora_optimizer.X")
+    # imports a SECOND module instance and patches that one, silently making
+    # every such patch (e.g. AUTOTUNER_MEMORY_DIR tmpdir redirects) a no-op
+    sys.modules["lora_optimizer"] = lora_optimizer
 else:
     lora_optimizer = None
 
@@ -3150,6 +3155,98 @@ class TestCommunityCacheUploadOnly(unittest.TestCase):
             "arch-key assignment is gated on upload_and_download only — "
             "upload_only will hit UnboundLocalError at upload time.",
         )
+
+
+class TestCommunityPairOrientation(unittest.TestCase):
+    """Community pair files are content-hash oriented; local caches are
+    identity-hash oriented. The swap helper must flip only norm_a/b."""
+
+    def test_swap_pair_norms(self):
+        entries = {"p": {"norm_a_sq": 1.0, "norm_b_sq": 2.0, "dot": 0.5}}
+        swapped = lora_optimizer.LoRAAutoTuner._swap_pair_norms(entries)
+        self.assertEqual(swapped["p"]["norm_a_sq"], 2.0)
+        self.assertEqual(swapped["p"]["norm_b_sq"], 1.0)
+        self.assertEqual(swapped["p"]["dot"], 0.5)
+        # Original untouched (must be a copy)
+        self.assertEqual(entries["p"]["norm_a_sq"], 1.0)
+
+
+class TestCommunityOfflineBackoff(unittest.TestCase):
+
+    def test_download_short_circuits_when_offline(self):
+        old = lora_optimizer.LoRAAutoTuner._community_offline_until
+        try:
+            lora_optimizer.LoRAAutoTuner._community_offline_until = time.time() + 60
+            # Must return None without attempting any network I/O
+            with mock.patch("urllib.request.urlopen",
+                            side_effect=AssertionError("network call attempted")):
+                self.assertIsNone(
+                    lora_optimizer.LoRAAutoTuner._community_download("config/x.json"))
+        finally:
+            lora_optimizer.LoRAAutoTuner._community_offline_until = old
+
+
+class TestCommunityCandidatesDownload(unittest.TestCase):
+    """A config with a recorded candidates list must rebuild the full top_n
+    so selection/top_n>1 work on community hits."""
+
+    def test_candidates_rebuild_top_n(self):
+        cfg = {"merge_mode": "ties", "optimization_mode": "global",
+               "auto_strength": "enabled", "sparsification": "disabled",
+               "sparsification_density": 0.7, "dare_dampening": 0.0,
+               "merge_refinement": "none"}
+        cfg2 = dict(cfg, merge_mode="weighted_average")
+        config_data = {
+            "algo_version": lora_optimizer.AUTOTUNER_ALGO_VERSION,
+            "config": cfg, "score": 0.9,
+            "candidates": [
+                {"rank": 1, "config": cfg, "score_final": 0.9},
+                {"rank": 2, "config": cfg2, "score_final": 0.8},
+                {"rank": 3, "config": {"malformed": True}},  # skipped
+            ],
+        }
+
+        def fake_download(path):
+            return config_data if path.startswith("config/") else None
+
+        active = [{"name": "a.safetensors", "strength": 1.0},
+                  {"name": "b.safetensors", "strength": 0.5}]
+        with mock.patch.object(lora_optimizer.LoRAAutoTuner, "_community_download",
+                               side_effect=fake_download):
+            tuner_data = lora_optimizer.LoRAAutoTuner._community_download_caches(
+                active, {0: "aaaa", 1: "bbbb"}, {0: {}, 1: {}}, {(0, 1): {}},
+                arch_preset="dit", top_n=3)
+        self.assertIsNotNone(tuner_data)
+        self.assertEqual(len(tuner_data["top_n"]), 2)
+        self.assertEqual(tuner_data["top_n"][0]["config"]["merge_mode"], "ties")
+        self.assertEqual(tuner_data["top_n"][1]["config"]["merge_mode"],
+                         "weighted_average")
+        self.assertNotEqual(tuner_data["lora_hash"], "")
+
+
+class TestAutotunerMemoryGC(unittest.TestCase):
+
+    def test_gc_removes_old_keeps_fresh(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                old_path = os.path.join(tmpdir, "deadbeef.lora.json")
+                new_path = os.path.join(tmpdir, "cafebabe.lora.json")
+                mem_path = os.path.join(tmpdir, "aaaa_bbbb.memory.json")
+                for p in (old_path, new_path, mem_path):
+                    with open(p, "w") as f:
+                        json.dump({}, f)
+                stale = time.time() - 200 * 86400
+                os.utime(old_path, (stale, stale))
+                os.utime(mem_path, (stale, stale))
+                lora_optimizer.LoRAAutoTuner._gc_done = False
+                try:
+                    lora_optimizer.LoRAAutoTuner._gc_autotuner_memory(max_age_days=90)
+                finally:
+                    lora_optimizer.LoRAAutoTuner._gc_done = False
+                self.assertFalse(os.path.exists(old_path))
+                self.assertTrue(os.path.exists(new_path))
+                # Memory entries are never GC'd
+                self.assertTrue(os.path.exists(mem_path))
 
 
 if __name__ == "__main__":

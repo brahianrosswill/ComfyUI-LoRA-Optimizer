@@ -118,14 +118,14 @@ class TestUploadPayloadIncludesPerPrefixDecisions(unittest.TestCase):
         }
         captured_uploads = []
 
-        def fake_upload(path_in_repo, data, token):
-            captured_uploads.append((path_in_repo, data))
-            return True
+        def fake_upload_batch(files, token, commit_message=None):
+            captured_uploads.extend(files)
+            return len(files)
 
         with mock.patch.object(lora_optimizer.LoRAAutoTuner, "_community_download",
                                return_value=None):
-            with mock.patch.object(lora_optimizer.LoRAAutoTuner, "_community_upload",
-                                   side_effect=fake_upload):
+            with mock.patch.object(lora_optimizer.LoRAAutoTuner, "_community_upload_batch",
+                                   side_effect=fake_upload_batch):
                 lora_optimizer.LoRAAutoTuner._community_upload_results(
                     new_lora_entries={},
                     new_pair_entries={},
