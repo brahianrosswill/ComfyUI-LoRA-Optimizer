@@ -2090,6 +2090,95 @@ class TestPairCacheIO(unittest.TestCase):
                 self.assertFalse(os.path.exists(path + ".tmp"))
 
 
+class TestClipStrengthCacheRoundTrip(unittest.TestCase):
+    """Clip prefixes scale/sign by the effective clip strength — extract and
+    reconstruct must agree, or clip magnitudes come back wrong."""
+
+    def _make_clip_result(self):
+        partial_stats = [(0, 16, 1.5, 2.25)]
+        magnitude_samples = [torch.tensor([0.5, 1.0])]  # scaled by |clip_strength|=0.5
+        return (
+            "clip_prefix", partial_stats, {}, magnitude_samples,
+            ("clip.layer.weight", True), 0, 1, {0: 2.25},
+        )
+
+    def test_analysis_cache_clip_rescale_uses_clip_strength(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": 0.5}]
+        entry = lora_optimizer.LoRAOptimizer._extract_for_analysis_cache(
+            self._make_clip_result(), active)
+        # Unscaled by |clip_strength|=0.5, not |strength|=1.0
+        self.assertEqual(entry["magnitude_samples_unscaled"]["0"], [1.0, 2.0])
+        result = lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "clip_prefix", entry, active)
+        self.assertIsNotNone(result)
+        # Round-trip restores the original clip-scaled samples
+        self.assertTrue(torch.allclose(result[3][0], torch.tensor([0.5, 1.0])))
+
+    def test_analysis_cache_clip_sign_flip_invalidates(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": 0.5}]
+        entry = lora_optimizer.LoRAOptimizer._extract_for_analysis_cache(
+            self._make_clip_result(), active)
+        # Model strength sign unchanged, clip sign flipped → must miss
+        flipped = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": -0.5}]
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "clip_prefix", entry, flipped))
+
+    def test_lora_cache_clip_ignores_multiplier(self):
+        # clip_strength=None → eff clip strength is the model strength, NOT
+        # strength * clip_strength_multiplier (the multiplier is applied
+        # globally at add_patches, never to the analyzed diffs)
+        active = [{"name": "a.safetensors", "strength": 2.0, "clip_strength": None}]
+        result = (
+            "clip_prefix", [(0, 16, 3.0, 9.0)], {},
+            [torch.tensor([2.0])],  # scaled by |strength|=2.0
+            ("clip.layer.weight", True), 0, 1, {0: 9.0},
+        )
+        entry = lora_optimizer.LoRAOptimizer._extract_for_lora_cache(
+            result, 0, active, clip_strength_multiplier=0.5)
+        self.assertEqual(entry["magnitude_samples_unscaled"], [1.0])
+
+
+class TestCacheValidationFallback(unittest.TestCase):
+    """Malformed cache entries (e.g. corrupt community downloads) must fall
+    back to fresh analysis, not crash the run."""
+
+    def test_analysis_reconstruct_malformed_returns_none(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": None}]
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "p", {"per_lora_norm_sq": {"0": "garbage"}}, active))
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "p", {}, active))
+
+    def test_pair_lora_reconstruct_malformed_returns_none(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": None}]
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_pair_lora_cache(
+            "p", {0: {"is_clip": False}}, {}, active, {0: "h0"}))
+
+
+class TestMemoryFindByNamesSigns(unittest.TestCase):
+    """auto_ignore_strength fallback must not replay entries tuned with
+    opposite strength signs — conflict data is sign-dependent."""
+
+    def _save_entry(self, strength):
+        tuner_data = {"top_n": [{"rank": 1, "config": {}, "score_final": 0.5}]}
+        lora_optimizer.LoRAAutoTuner._memory_save(
+            "hashx", "setty", {}, [{"name": "a.safetensors", "strength": strength}],
+            tuner_data)
+
+    def test_sign_mismatch_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                self._save_entry(strength=1.0)
+                found = lora_optimizer.LoRAAutoTuner._memory_find_by_names(
+                    ["a.safetensors"], "setty", 1,
+                    lora_signs_sorted=[("a.safetensors", -1)])
+                self.assertIsNone(found)
+                found = lora_optimizer.LoRAAutoTuner._memory_find_by_names(
+                    ["a.safetensors"], "setty", 1,
+                    lora_signs_sorted=[("a.safetensors", 1)])
+                self.assertIsNotNone(found)
+
+
 class TestCacheExtraction(unittest.TestCase):
 
     def _make_result(self):
