@@ -14,6 +14,44 @@ const SLOT_WIDGET_NAMES = [
     "key_filter",
 ];
 
+// --- Legacy workflow migration ---
+// The litegraph workflow format restores widget values POSITIONALLY. The
+// `enabled_{i}` toggle was added as the first widget of each slot after some
+// workflows were saved, so older saves have 7 values/slot instead of 8. Without
+// migration the positional restore shifts every per-slot value by one — the
+// LoRA path lands in the `enabled` toggle and each `lora_name` combo receives
+// "None", silently wiping the stack on load. Re-insert a default `enabled=true`
+// at each slot head so the saved values realign with the current widget order.
+const CONTROL_WIDGET_COUNT = 3;   // settings_visibility, input_mode, lora_count
+const TRAILING_WIDGET_COUNT = 1;  // base_model_filter
+const OLD_PER_SLOT = 7;           // before enabled_{i}
+const NEW_PER_SLOT = 8;           // with enabled_{i}
+
+function migrateWidgetsValues(wv) {
+    if (!Array.isArray(wv)) return wv;
+    const slotRegion = wv.length - CONTROL_WIDGET_COUNT - TRAILING_WIDGET_COUNT;
+    if (slotRegion <= 0) return wv;
+    // Current format already carries enabled (8/slot) — leave untouched.
+    if (slotRegion % NEW_PER_SLOT === 0) return wv;
+    // Legacy format (7/slot): insert enabled=true at each slot head.
+    if (slotRegion % OLD_PER_SLOT === 0) {
+        const nSlots = slotRegion / OLD_PER_SLOT;
+        const out = wv.slice(0, CONTROL_WIDGET_COUNT);
+        let p = CONTROL_WIDGET_COUNT;
+        for (let i = 0; i < nSlots; i++) {
+            out.push(true);
+            for (let k = 0; k < OLD_PER_SLOT; k++) out.push(wv[p++]);
+        }
+        for (; p < wv.length; p++) out.push(wv[p]); // trailing base_model_filter
+        console.log(
+            `[LoRAStackDynamic] Migrated legacy workflow (${wv.length} -> ${out.length} ` +
+            `widget values): re-inserted enabled toggles to restore LoRA names.`
+        );
+        return out;
+    }
+    return wv; // unrecognized layout — don't touch
+}
+
 function toggleWidget(node, widget, show, suffix = "") {
     if (!widget) return;
 
@@ -364,6 +402,16 @@ app.registerExtension({
     name: "LoRAOptimizer.LoRAStackDynamic",
     nodeCreated(node) {
         if (node.comfyClass !== "LoRAStackDynamic") return;
+
+        // Migrate legacy widgets_values (pre-enabled_{i}) BEFORE litegraph
+        // applies them positionally during workflow restore.
+        const origConfigure = node.configure;
+        node.configure = function (info) {
+            if (info && Array.isArray(info.widgets_values)) {
+                info.widgets_values = migrateWidgetsValues(info.widgets_values);
+            }
+            return origConfigure ? origConfigure.apply(this, arguments) : undefined;
+        };
 
         // Intercept settings_visibility, input_mode, and lora_count changes to update visibility
         for (const w of node.widgets || []) {
