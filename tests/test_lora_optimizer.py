@@ -3219,6 +3219,21 @@ class TestExcessConflictBaseline(unittest.TestCase):
         self.assertGreater(m["excess_conflict"], 0.10)
 
 
+class TestTiesSignElection(unittest.TestCase):
+    """Sign election is always the magnitude-weighted 'total' vote — the only
+    mechanism defined in the TIES paper (frequency is override-only)."""
+
+    def test_ties_mode_elects_total_regardless_of_magnitude_ratio(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        for mag_ratio in (1.0, 2.0, 10.0):
+            mode, _density, sign, _r = opt._auto_select_params(
+                0.6, mag_ratio, avg_cos_sim=0.5,
+                avg_excess_conflict=0.6, avg_subspace_overlap=0.8,
+                strategy_set="basic", precomputed_density=0.7)
+            self.assertEqual(mode, "ties")
+            self.assertEqual(sign, "total")
+
+
 class TestKarcherSlerp(unittest.TestCase):
     """N>=3 slerp mode is a weighted Karcher mean: order-independent,
     symmetric, magnitude-corrected. N=2 remains standard SLERP."""

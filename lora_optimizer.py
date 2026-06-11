@@ -94,7 +94,7 @@ AUTOTUNER_MEMORY_VERSION = 1
 # Bump whenever ranking-relevant behavior changes (scoring formula, candidate
 # selection, sampling) — not just on memory/config format changes. Stale
 # memory entries and community configs are rejected by this gate.
-AUTOTUNER_ALGO_VERSION = "1.8.0"
+AUTOTUNER_ALGO_VERSION = "1.9.0"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -2674,7 +2674,7 @@ class _LoRAMergeBase:
             logging.debug(f"[LoRA Optimizer] Updated model size: +{patch_bytes / (1024**2):.0f}MB patches")
 
     @staticmethod
-    def _ties_elect_sign(trimmed_diffs, method="frequency"):
+    def _ties_elect_sign(trimmed_diffs, method="total"):
         """
         TIES Step 2: Elect Sign — determine majority sign direction per weight position.
 
@@ -2702,7 +2702,7 @@ class _LoRAMergeBase:
         return majority_sign
 
     @staticmethod
-    def _columnwise_elect_sign(trimmed_diffs, method="frequency"):
+    def _columnwise_elect_sign(trimmed_diffs, method="total"):
         """
         Column-wise sign election: each output neuron (row) votes as a unit
         instead of each element voting independently. For Conv2d tensors,
@@ -3115,7 +3115,7 @@ class _LoRAMergeBase:
         return rank
 
     @torch.no_grad()
-    def _merge_diffs(self, diffs_with_weights, mode, density=0.5, majority_sign_method="frequency",
+    def _merge_diffs(self, diffs_with_weights, mode, density=0.5, majority_sign_method="total",
                      compute_device=None, sparsification="disabled",
                      sparsification_density=0.7, sparsification_generator=None,
                      merge_refinement="none", dare_dampening=0.0,
@@ -6056,18 +6056,17 @@ class LoRAOptimizer(_LoRAMergeBase):
         else:
             density = 0.5  # unused but set for completeness
 
-        # Sign method (only relevant for TIES mode)
+        # Sign method (only relevant for TIES mode).
+        # Always magnitude-weighted "total" voting: the TIES paper (NeurIPS
+        # 2023) defines sign election ONLY as gamma = sgn(sum of trimmed task
+        # vectors) — the sign with greater total magnitude wins. There is no
+        # frequency vote in the paper; it remains available as an explicit
+        # merge_strategy override only.
         if mode == "ties":
-            if magnitude_ratio > arch_preset["magnitude_ratio_total_sign"]:
-                sign_method = "total"
-                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x > {arch_preset['magnitude_ratio_total_sign']:.0f}x -> 'total' sign method (magnitude-weighted voting)")
-                reasoning.append("  Stronger LoRA gets more influence in sign election")
-            else:
-                sign_method = "frequency"
-                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x <= {arch_preset['magnitude_ratio_total_sign']:.0f}x -> 'frequency' sign method (equal voting)")
-                reasoning.append("  Similar-strength LoRAs get equal votes")
+            sign_method = "total"
+            reasoning.append("Sign election: 'total' (magnitude-weighted voting, TIES-canonical)")
         else:
-            sign_method = "frequency"  # unused, default for completeness
+            sign_method = "total"  # unused, default for completeness
 
         return (mode, density, sign_method, reasoning)
 
@@ -10031,6 +10030,10 @@ class LoRAAutoTuner(LoRAOptimizer):
         _avg_ranks = [(sum(s["ranks"]) / len(s["ranks"]) if s["ranks"] else 0)
                       for s in per_lora_stats]
         _global_avg_rank = (sum(_avg_ranks) / len(_avg_ranks)) if _avg_ranks else 0
+        # Achievable effective-rank budget for v2 scoring: a merged patch is a
+        # sum of per-LoRA low-rank updates, so its rank (and thus its
+        # Roy-Vetterli effective rank) is bounded by the summed source ranks
+        _rank_budget = max(sum(_avg_ranks), 1.0)
         _fr_preset = tuner_arch_preset.get("full_rank", {})
         _is_full_rank = _global_avg_rank >= _fr_preset.get("rank_threshold", 512)
         _strategy_signatures = {}
@@ -10278,8 +10281,13 @@ class LoRAAutoTuner(LoRAOptimizer):
                 # destructive merges even with scoring_svd=disabled (the default).
                 cv_s = max(0.0, 1.0 - measured["norm_cv"])
                 if measured.get("effective_rank_mean", 0) > 0:
-                    # SVD available: rank + consistency + energy + sparsity
-                    rank_s = min(measured["effective_rank_mean"] / 40.0, 1.0)
+                    # SVD available: rank + consistency + energy + sparsity.
+                    # Normalize effective rank by the stack's achievable rank
+                    # budget (sum of per-LoRA avg ranks): a merge of two
+                    # rank-16 LoRAs can never exceed erank 32, so a fixed /40
+                    # meant a different score per stack. Roy-Vetterli erank is
+                    # bounded by true rank <= sum of source ranks.
+                    rank_s = min(measured["effective_rank_mean"] / _rank_budget, 1.0)
                     measured["composite_score"] = (
                         rank_s * 0.30 + cv_s * 0.25
                         + energy_preservation * 0.20 + measured["sparsity_fit"] * 0.25
