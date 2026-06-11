@@ -94,7 +94,7 @@ AUTOTUNER_MEMORY_VERSION = 1
 # Bump whenever ranking-relevant behavior changes (scoring formula, candidate
 # selection, sampling) — not just on memory/config format changes. Stale
 # memory entries and community configs are rejected by this gate.
-AUTOTUNER_ALGO_VERSION = "1.7.0"
+AUTOTUNER_ALGO_VERSION = "1.8.0"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -108,7 +108,7 @@ def _warn_stale_tuner_data(tuner_data, context):
             f"[{context}] tuner_data was produced by AutoTuner algo {version} "
             f"(current: {AUTOTUNER_ALGO_VERSION}) — its ranking may be stale. "
             f"Re-run the AutoTuner to refresh it.")
-ANALYSIS_CACHE_VERSION = "1.7.1"   # Bump when per-prefix conflict math changes (lora/pair/analysis caches)
+ANALYSIS_CACHE_VERSION = "1.8.0"   # Bump when per-prefix conflict math changes (lora/pair/analysis caches)
 COMMUNITY_CACHE_REPO = "ethanfel/lora-optimizer-community-cache"
 COMMUNITY_CACHE_BASE_URL = (
     f"https://huggingface.co/datasets/{COMMUNITY_CACHE_REPO}/resolve/main"
@@ -2400,13 +2400,27 @@ class _LoRAMergeBase:
         weighted_total = weights.sum().item()
         mismatch = a_strong.sign() != b_strong.sign()
         weighted_conflict = weights[mismatch].sum().item() if weighted_total > 0 else 0.0
-
-        denom = math.sqrt(norm_a_sq * norm_b_sq) if norm_a_sq > 0 and norm_b_sq > 0 else 0.0
-        cos_sim = dot / denom if denom > 0 else 0.0
-        cos_sim = self._safe_unit_clamp(cos_sim)
-        expected_conflict = math.acos(cos_sim) / math.pi if denom > 0 else 0.0
         weighted_ratio = (weighted_conflict / weighted_total) if weighted_total > 0 else 0.0
-        excess_conflict = max(weighted_ratio - expected_conflict, 0.0)
+
+        # Excess conflict: measured sign-mismatch beyond the rate implied by the
+        # correlation. Sheppard's theorem / the degree-0 arc-cosine kernel give
+        # the UNWEIGHTED expectation P(mismatch) = arccos(rho)/pi — so both the
+        # measured fraction and the correlation must be the plain (unweighted)
+        # statistics of the SAME position set. The previous magnitude-weighted
+        # ratio sat systematically below this baseline for correlated LoRAs
+        # (mismatches concentrate on small-|min| positions; cf. Cho & Saul's
+        # J1 != J0 angular dependence), under-detecting real conflict.
+        n_strong = a_strong.numel()
+        strong_mismatch_frac = (mismatch.sum().item() / n_strong) if n_strong > 0 else 0.0
+        dot_strong = (a_strong * b_strong).sum().item()
+        na_strong = (a_strong * a_strong).sum().item()
+        nb_strong = (b_strong * b_strong).sum().item()
+        denom_strong = (math.sqrt(na_strong * nb_strong)
+                        if na_strong > 0 and nb_strong > 0 else 0.0)
+        cos_strong = (self._safe_unit_clamp(dot_strong / denom_strong)
+                      if denom_strong > 0 else 0.0)
+        expected_conflict = math.acos(cos_strong) / math.pi if denom_strong > 0 else 0.0
+        excess_conflict = max(strong_mismatch_frac - expected_conflict, 0.0)
 
         subspace_overlap = self._compute_subspace_overlap(basis_a, basis_b)
         subspace_weight = math.sqrt(norm_a_sq * norm_b_sq) if norm_a_sq > 0 and norm_b_sq > 0 else 0.0
@@ -3243,10 +3257,14 @@ class _LoRAMergeBase:
             return result.cpu() if to_cpu else result
 
         elif mode == "slerp":
-            # Iterative pairwise SLERP — magnitude-preserving blend for N diffs.
-            # For 2 diffs: equivalent to standard SLERP.
-            # For 3+ diffs: iteratively SLERPs accumulated result with next diff,
-            # sorted by descending |weight| so strongest LoRA anchors direction.
+            # Magnitude-preserving spherical blend for N diffs.
+            # For 2 diffs: standard SLERP (exact spherical geodesic — the
+            # Karcher mean reduces to it for N=2).
+            # For 3+ diffs: weighted Karcher (Fréchet) mean on the unit
+            # hypersphere. Iterative pairwise SLERP is order-dependent and
+            # collapses empirically for N>=3 (multi-SLERP scores below plain
+            # linear averaging at m=5 models; the Karcher mean is the
+            # order-independent spherical mean it tried to approximate).
             # Final norm corrected to match weighted average of input norms.
             n_diffs = len(diffs_with_weights)
 
@@ -3273,15 +3291,15 @@ class _LoRAMergeBase:
             # Pre-compute norms for later correction (before vectors are consumed)
             input_norms = [(v.norm().item(), w) for v, w in items]
 
-            # Iterative pairwise SLERP
-            acc_v, acc_w = items[0]
-            items[0] = None  # Free tensor reference
-            for k in range(1, n_diffs):
-                next_v, next_w = items[k]
-                items[k] = None  # Free tensor reference
+            if n_diffs == 2:
+                # Standard pairwise SLERP
+                acc_v, acc_w = items[0]
+                items[0] = None  # Free tensor reference
+                next_v, next_w = items[1]
+                items[1] = None  # Free tensor reference
                 frac = next_w / (acc_w + next_w) if (acc_w + next_w) > 0 else 0.5
 
-                # Compute angle between accumulated and next vector
+                # Compute angle between the two vectors
                 norm_acc = acc_v.norm()
                 norm_next = next_v.norm()
                 denom = norm_acc * norm_next
@@ -3299,10 +3317,52 @@ class _LoRAMergeBase:
                     a = torch.sin((1.0 - frac) * theta) / sin_theta
                     b = torch.sin(frac * theta) / sin_theta
                     acc_v = a * acc_v + b * next_v
+                del next_v, items
+            else:
+                # Weighted Karcher mean: iterate tangent-space (log-map)
+                # weighted average -> exp-map back, from the chordal mean.
+                # Converges in a few iterations for vectors in a half-space
+                # (the common case after negative-weight sign folding).
+                units = []
+                for idx in range(n_diffs):
+                    v, w = items[idx]
+                    items[idx] = None  # Free tensor reference
+                    vn = v.norm()
+                    if vn.item() > 1e-12:
+                        units.append((v / vn, w / total_w))
+                    del v
+                del items
+                if not units:
+                    z = torch.zeros(ref_diff.shape, device=dev, dtype=dtype)
+                    return z.cpu() if to_cpu else z
 
-                acc_w = acc_w + next_w
-                del next_v
-            del items
+                # Init: normalized weighted chordal (Euclidean) mean
+                m = None
+                for u, wn in units:
+                    m = u * wn if m is None else m.add_(u, alpha=wn)
+                m_norm = m.norm()
+                m = units[0][0].clone() if m_norm.item() < 1e-8 else m / m_norm
+
+                for _ in range(8):
+                    tangent = torch.zeros_like(m)
+                    for u, wn in units:
+                        # log_m(u) = theta/sin(theta) * (u - cos(theta)*m)
+                        # cos clamped away from ±1: theta -> 0 handled by skip,
+                        # antipodal (cut locus) kept finite
+                        cos_i = torch.dot(u, m).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+                        theta_i = torch.acos(cos_i)
+                        if theta_i.item() < 1e-7:
+                            continue
+                        coef = wn * (theta_i / torch.sin(theta_i))
+                        tangent.add_(u - cos_i * m, alpha=coef.item())
+                    t_norm = tangent.norm()
+                    if t_norm.item() < 1e-7:
+                        break
+                    # exp_m(t) = cos(|t|)*m + sin(|t|)*t/|t|
+                    m = torch.cos(t_norm) * m + (torch.sin(t_norm) / t_norm) * tangent
+                    m = m / m.norm().clamp(min=1e-12)
+                del units
+                acc_v = m
 
             # Norm correction: rescale to match weighted average of input norms
             target_norm = sum(n * w for n, w in input_norms) / total_w

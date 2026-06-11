@@ -3167,6 +3167,108 @@ class TestCommunityCacheUploadOnly(unittest.TestCase):
         )
 
 
+class TestExcessConflictBaseline(unittest.TestCase):
+    """excess_conflict must compare the UNWEIGHTED sign-mismatch fraction
+    against the unweighted arccos(rho)/pi baseline on the same position set
+    (Sheppard / degree-0 arc-cosine kernel)."""
+
+    def setUp(self):
+        self.opt = lora_optimizer.LoRAOptimizer()
+
+    def test_identical_vectors_no_excess(self):
+        g = torch.Generator().manual_seed(7)
+        a = torch.randn(20000, generator=g)
+        m = self.opt._sample_pair_metrics(a, a.clone())
+        self.assertAlmostEqual(m["excess_conflict"], 0.0, places=5)
+        self.assertAlmostEqual(m["expected_conflict"], 0.0, places=3)
+
+    def test_negated_vectors_no_excess(self):
+        g = torch.Generator().manual_seed(7)
+        a = torch.randn(20000, generator=g)
+        m = self.opt._sample_pair_metrics(a, -a)
+        # Mismatch fraction 1.0 is exactly what rho=-1 predicts
+        self.assertAlmostEqual(m["expected_conflict"], 1.0, places=3)
+        self.assertAlmostEqual(m["excess_conflict"], 0.0, places=3)
+
+    def test_independent_gaussians_no_excess(self):
+        g = torch.Generator().manual_seed(11)
+        a = torch.randn(50000, generator=g)
+        b = torch.randn(50000, generator=g)
+        m = self.opt._sample_pair_metrics(a, b)
+        # ~50% mismatch is the rho~0 base rate, not real conflict
+        self.assertLess(m["excess_conflict"], 0.03)
+
+    def test_count_conflict_detected_beyond_weighted_baseline(self):
+        """Mismatches concentrated on smaller (but above-noise-floor)
+        magnitudes: the old magnitude-weighted ratio sat BELOW the baseline
+        (excess clamped to 0); the unweighted fraction detects it."""
+        g = torch.Generator().manual_seed(3)
+        n = 20000
+        signs = torch.where(torch.rand(n, generator=g) < 0.5, 1.0, -1.0)
+        mag = torch.where(torch.arange(n) < n // 2,
+                          torch.full((n,), 2.0), torch.full((n,), 0.3))
+        a = signs * mag
+        b = a.clone()
+        # Flip half of the small-magnitude positions (25% of total count)
+        flip = torch.arange(n) >= (3 * n) // 4
+        b[flip] = -b[flip]
+        m = self.opt._sample_pair_metrics(a, b)
+        # Old weighted ratio: 0.25*0.3/(0.5*2+0.5*0.3) ~ 0.065 < baseline
+        # arccos(0.978)/pi ~ 0.067 -> old excess clamped to ~0.
+        # New unweighted: 0.25 - 0.067 ~ 0.18.
+        self.assertGreater(m["excess_conflict"], 0.10)
+
+
+class TestKarcherSlerp(unittest.TestCase):
+    """N>=3 slerp mode is a weighted Karcher mean: order-independent,
+    symmetric, magnitude-corrected. N=2 remains standard SLERP."""
+
+    def setUp(self):
+        self.opt = lora_optimizer.LoRAOptimizer()
+
+    def _merge(self, pairs):
+        return self.opt._merge_diffs([(t.clone(), w) for t, w in pairs], "slerp")
+
+    def test_two_vector_slerp_unchanged(self):
+        e1 = torch.zeros(8); e1[0] = 1.0
+        e2 = torch.zeros(8); e2[1] = 1.0
+        out = self._merge([(e1, 1.0), (e2, 1.0)])
+        expected = (e1 + e2) / math.sqrt(2.0)
+        self.assertTrue(torch.allclose(out, expected, atol=1e-5))
+
+    def test_three_orthogonal_symmetric_mean(self):
+        scale = 2.0
+        vecs = []
+        for i in range(3):
+            e = torch.zeros(8); e[i] = scale
+            vecs.append(e)
+        out = self._merge([(v, 1.0) for v in vecs])
+        # Direction: equal cosine to all three inputs; norm: weighted avg = 2.0
+        for v in vecs:
+            cos = torch.dot(out.flatten(), v.flatten()) / (out.norm() * v.norm())
+            self.assertAlmostEqual(cos.item(), 1.0 / math.sqrt(3.0), places=3)
+        self.assertAlmostEqual(out.norm().item(), scale, places=3)
+
+    def test_order_independence(self):
+        g = torch.Generator().manual_seed(5)
+        vs = [torch.randn(64, generator=g) for _ in range(4)]
+        ws = [1.0, 0.8, 0.6, 0.4]
+        out1 = self._merge(list(zip(vs, ws)))
+        perm = [2, 0, 3, 1]
+        out2 = self._merge([(vs[i], ws[i]) for i in perm])
+        self.assertTrue(torch.allclose(out1, out2, atol=1e-4),
+                        f"max diff {(out1 - out2).abs().max().item()}")
+
+    def test_weight_pulls_toward_heavier_vector(self):
+        e1 = torch.zeros(8); e1[0] = 1.0
+        e2 = torch.zeros(8); e2[1] = 1.0
+        e3 = torch.zeros(8); e3[2] = 1.0
+        out = self._merge([(e1, 10.0), (e2, 1.0), (e3, 1.0)])
+        u = out / out.norm()
+        self.assertGreater(torch.dot(u, e1).item(), torch.dot(u, e2).item())
+        self.assertGreater(torch.dot(u, e1).item(), 0.8)
+
+
 class TestMergeOnWrite(unittest.TestCase):
     """Concurrent ComfyUI processes do read-modify-write on shared cache
     files; saves merge with the on-disk state so neither loses entries."""
