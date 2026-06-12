@@ -663,7 +663,6 @@ class _DiffCache:
       - "auto": RAM up to ram_pct of free system memory, then spills to disk.
     """
 
-    _MAX_RAM_BYTES = 16 * 1024 * 1024 * 1024  # 16GB absolute cap
 
     def __init__(self, mode="auto", ram_pct=0.5):
         self.mode = mode
@@ -689,8 +688,11 @@ class _DiffCache:
         if mode == "auto":
             try:
                 import psutil
-                pct_limit = int(psutil.virtual_memory().available * ram_pct)
-                self._ram_limit = min(pct_limit, self._MAX_RAM_BYTES)
+                # ram_pct of AVAILABLE memory is the user's contract (widget
+                # tooltip: "how much of your free RAM the cache can use") —
+                # a former 16GB absolute cap silently overrode it on
+                # high-memory machines, making ram_pct appear ignored
+                self._ram_limit = int(psutil.virtual_memory().available * ram_pct)
             except ImportError:
                 self._ram_limit = 4 * 1024 * 1024 * 1024
 
@@ -10298,9 +10300,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                 if _plan:
                     # RAM budget: shared patches live until their last user, so
                     # without a cap the cache can hold ~a full patch set OUTSIDE
-                    # the diff-cache budget. Cap at 25% of available RAM (16GB
-                    # hard max, mirroring _DiffCache); when exhausted, further
-                    # keys simply re-merge per candidate.
+                    # the diff-cache budget. Cap at 25% of available RAM with a
+                    # 16GB hard max (no user knob — it stores at most ~one
+                    # shared patch set and skips gracefully when exhausted, so
+                    # further keys simply re-merge per candidate).
                     try:
                         import psutil
                         _gc_budget = min(int(psutil.virtual_memory().available * 0.25),

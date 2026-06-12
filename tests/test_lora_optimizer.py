@@ -3995,6 +3995,17 @@ class TestScoreDuringMerge(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestDiffCacheRamLimit(unittest.TestCase):
+    def test_auto_mode_honors_ram_pct_without_absolute_cap(self):
+        """Regression: a 16GB hard cap used to silently override ram_pct on
+        high-memory machines (128GB box + pct 0.5 -> limit stuck at 16GB)."""
+        fake_vm = types.SimpleNamespace(available=100 * 1024 ** 3)
+        with mock.patch("psutil.virtual_memory", return_value=fake_vm):
+            cache = lora_optimizer._DiffCache(mode="auto", ram_pct=0.5)
+        self.assertEqual(cache._ram_limit, 50 * 1024 ** 3)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestDiffCacheWarming(unittest.TestCase):
     """Pass 1 analysis warms the diff cache so Phase 2 candidate #1 skips
     recomputing the per-alias diffs analysis just produced."""
