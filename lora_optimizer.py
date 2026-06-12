@@ -94,7 +94,10 @@ AUTOTUNER_MEMORY_VERSION = 1
 # Bump whenever ranking-relevant behavior changes (scoring formula, candidate
 # selection, sampling) — not just on memory/config format changes. Stale
 # memory entries and community configs are rejected by this gate.
-AUTOTUNER_ALGO_VERSION = "1.9.0"
+# 1.9.1: Pass-1-warmed diff cache means candidate #1 is scored on the same
+# fp16-quantized cached diffs as candidates 2+ (uniform across candidates now;
+# scores shift at the ~1e-5 level when diff_cache_mode != "disabled")
+AUTOTUNER_ALGO_VERSION = "1.9.1"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -694,12 +697,15 @@ class _DiffCache:
     def put(self, key, tensor):
         if key in self._ram_store or key in self._disk_store:
             return
-        cached = tensor.detach().cpu()
+        cached = tensor.detach()
         if cached.dtype == torch.float32:
-            # Halve fp32 to bound memory; 16-bit dtypes are kept as-is so
+            # Halve fp32 to bound memory — cast on the source device so a GPU
+            # tensor transfers half the bytes (fp32→fp16 RN cast is
+            # bit-identical on GPU and CPU); 16-bit dtypes are kept as-is so
             # cached diffs stay bit-identical to fresh ones (bf16 -> fp16
             # would silently quantize)
             cached = cached.half()
+        cached = cached.cpu()
         tensor_bytes = cached.nelement() * cached.element_size()
         if self._use_disk(tensor_bytes) and not self._disk_failed:
             try:
@@ -3764,7 +3770,8 @@ def _generate_param_grid():
 
 def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
                             magnitude_ratio, prefix_stats, arch_preset=None,
-                            avg_excess_conflict=None, avg_subspace_overlap=0.0):
+                            avg_excess_conflict=None, avg_subspace_overlap=0.0,
+                            decision_conflicts=None):
     """
     Score a merge config against analysis metrics (no merge needed).
     Returns float score in [0, 1] where higher = better predicted quality.
@@ -3797,11 +3804,14 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
         if avg_subspace_overlap > 0:
             effective_conflict *= (0.5 + 0.5 * avg_subspace_overlap)
 
-    decision_conflicts = [
-        ps.get("decision_conflict", ps.get("excess_conflict", ps.get("conflict_ratio", 0.0)))
-        for ps in prefix_stats.values()
-        if ps.get("n_loras", 0) > 1
-    ] if prefix_stats else []
+    if decision_conflicts is None:
+        # Config-independent — callers scoring a whole grid should compute
+        # this once and pass it in instead of rebuilding it per config
+        decision_conflicts = [
+            ps.get("decision_conflict", ps.get("excess_conflict", ps.get("conflict_ratio", 0.0)))
+            for ps in prefix_stats.values()
+            if ps.get("n_loras", 0) > 1
+        ] if prefix_stats else []
 
     # --- Mode fit score (0-0.4) ---
     if opt_mode == "per_prefix":
@@ -4927,16 +4937,24 @@ class LoRAOptimizer(_LoRAMergeBase):
 
     @torch.no_grad()
     def _analyze_target_group(self, target_group, active_loras, model, clip, device,
-                              clip_strength_multiplier=1.0, merge_refinement="none", n_magnitude_samples=1000):
+                              clip_strength_multiplier=1.0, merge_refinement="none", n_magnitude_samples=1000,
+                              diff_cache=None):
         """
         Pass 1 analysis for one resolved target group. All aliases that hit the
         same underlying weight are aggregated per LoRA before statistics are
         computed, so mixed-trainer overlaps are analyzed as one merge unit.
+
+        diff_cache: optional _DiffCache to warm with the per-alias diffs
+        computed here (cache entries are raw pre-masking diffs, so they are
+        valid for any downstream merge_refinement/conflict_mode). The cache is
+        freshly created per AutoTuner run, so analysis never *reads* stale
+        entries — it only populates them for the Phase 2 candidates.
         """
         prepared = self._prepare_group_diffs(
             target_group, active_loras, model, clip, device,
             clip_strength_multiplier=clip_strength_multiplier,
             merge_refinement=merge_refinement,
+            diff_cache=diff_cache,
         )
         if prepared is None:
             return None
@@ -5291,7 +5309,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                             decision_smoothing=0.0, progress_cb=None,
                             cached_analysis=None, track_new_entries=False,
                             on_prefix_done=None,
-                            lora_caches=None, pair_caches=None, lora_hashes=None):
+                            lora_caches=None, pair_caches=None, lora_hashes=None,
+                            diff_cache=None):
         """
         Shared Pass 1 runner used by both the optimizer and AutoTuner.
         Returns the same lightweight accumulators both call sites need.
@@ -5484,6 +5503,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         target_group, active_loras, model, clip, compute_device,
                         clip_strength_multiplier=clip_strength_multiplier,
                         merge_refinement=merge_refinement,
+                        diff_cache=diff_cache,
                     )
                     if result is not None and track_new_entries:
                         entry = self._extract_for_analysis_cache(result, active_loras)
@@ -5532,7 +5552,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     futures[executor.submit(
                         self._analyze_target_group, target_group, active_loras,
                         model, clip, compute_device, clip_strength_multiplier,
-                        merge_refinement
+                        merge_refinement, diff_cache=diff_cache
                     )] = prefix
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
@@ -6676,21 +6696,6 @@ class LoRAOptimizer(_LoRAMergeBase):
         logging.info(f"[LoRA Optimizer] Starting analysis of {len(active_loras)} LoRAs")
         t_start = time.time()
 
-        # Get key maps
-        model_keys = self._get_model_keys(model)
-
-        clip_keys = {}
-        if clip is not None:
-            clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
-
-        # Build target groups so all aliases for the same underlying weight are
-        # analyzed and merged together.
-        all_lora_prefixes = self._collect_lora_prefixes(active_loras)
-        target_groups = self._build_target_groups(all_lora_prefixes, model_keys, clip_keys)
-        if not target_groups:
-            return (model, clip, "No compatible LoRA keys found. "
-                    "LoRAs may be incompatible with this model architecture.", None, None)
-
         compute_device = self._get_compute_device()
         use_gpu = compute_device.type != "cpu"
 
@@ -6723,6 +6728,22 @@ class LoRAOptimizer(_LoRAMergeBase):
             logging.info(f"[LoRA Optimizer] Using cached analysis ({prefix_count} target groups, skipping Pass 1)")
 
         else:
+            # Key maps + target groups are only built when Pass 1 actually runs —
+            # with cached analysis (AutoTuner candidates) they come from the cache,
+            # so building them here would be discarded work on every candidate.
+            model_keys = self._get_model_keys(model)
+            clip_keys = {}
+            if clip is not None:
+                clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
+
+            # Build target groups so all aliases for the same underlying weight
+            # are analyzed and merged together.
+            all_lora_prefixes = self._collect_lora_prefixes(active_loras)
+            target_groups = self._build_target_groups(all_lora_prefixes, model_keys, clip_keys)
+            if not target_groups:
+                return (model, clip, "No compatible LoRA keys found. "
+                        "LoRAs may be incompatible with this model architecture.", None, None)
+
             # =====================================================================
             # Pass 1 — Analysis (streaming: diffs computed, sampled, and discarded)
             # =====================================================================
@@ -6985,6 +7006,10 @@ class LoRAOptimizer(_LoRAMergeBase):
         strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "slerp": 0, "ties": 0, "consensus": 0}
         prefix_decisions = []  # list of (prefix, mode, conflict_ratio, n_loras) for block map
         has_virtual_loras = any(item.get("_precomputed_diffs") for item in active_loras)
+        # conflict_mode masking depends on merge_refinement, so Pass-1 norms
+        # (computed with refinement "none") can't be reused when any LoRA masks
+        stack_has_conflict_modes = any(
+            item.get("conflict_mode", "all") != "all" for item in active_loras)
 
         # VRAM budget for patch storage
         vram_budget_bytes = 0
@@ -7103,8 +7128,21 @@ class LoRAOptimizer(_LoRAMergeBase):
                 sp_gen = torch.Generator(device=gen_device)
                 sp_gen.manual_seed(seed)
 
-            input_norms_mean = (sum(d.float().norm().item() * abs(w) for d, w in diffs_list)
-                                / len(diffs_list)) if diffs_list else 0.0
+            # Reuse the exact per-LoRA norms from Pass 1 instead of re-reading
+            # every diff tensor here (a full pass + sync per diff per group per
+            # candidate). Fallback covers conflict-mode masking (differs by
+            # refinement) and prefixes missing from the analysis stats.
+            pf_norm_sq = pf.get("per_lora_norm_sq") or {}
+            diff_indices = sorted(prepared["diffs"].keys())
+            if (diff_indices and not stack_has_conflict_modes
+                    and all(i in pf_norm_sq for i in diff_indices)):
+                input_norms_mean = (
+                    sum(math.sqrt(max(pf_norm_sq[i], 0.0)) * abs(prepared["eff_strengths"][i])
+                        for i in diff_indices) / len(diff_indices)
+                )
+            else:
+                input_norms_mean = (sum(d.float().norm().item() * abs(w) for d, w in diffs_list)
+                                    / len(diffs_list)) if diffs_list else 0.0
 
             # For orthogonal/opposing weighted_average, force standard quality.
             # TALL-masks classifies most positions as "selfish" for orthogonal
@@ -7127,7 +7165,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                 sparsification_generator=sp_gen,
                 merge_refinement=pf_quality,
                 dare_dampening=dare_dampening,
-                keep_on_gpu=should_keep,
+                # Keep the result on the compute device: the norm and dtype
+                # downcast below run there, so the CPU transfer (when needed)
+                # moves half the bytes and skips a full CPU-side read
+                keep_on_gpu=True,
             )
             merged_norm = merged_diff.float().norm().item() if merged_diff is not None else 0.0
             diffs_list.clear()  # Free input diffs from GPU
@@ -7141,6 +7182,11 @@ class LoRAOptimizer(_LoRAMergeBase):
             # to halve memory — ComfyUI handles dtype conversion when applying
             if storage_dtype is not None and merged_diff.dtype != storage_dtype:
                 merged_diff = merged_diff.to(storage_dtype)
+            # Move off-GPU now unless the VRAM budget keeps it there or a
+            # GPU-side SVD is about to consume it anyway
+            if (merged_diff.is_cuda and not should_keep
+                    and not (should_compress and resolved_svd_device is not None)):
+                merged_diff = merged_diff.cpu()
             if should_compress:
                 patch = self._compress_to_lowrank(merged_diff, compress_rank, svd_device=resolved_svd_device)
                 del merged_diff
@@ -7314,7 +7360,11 @@ class LoRAOptimizer(_LoRAMergeBase):
         if _analysis_cache is None:
             prefix_stats.clear()
             self.loaded_loras.clear()
-        if use_gpu:
+        if use_gpu and _analysis_cache is None:
+            # Skipped during AutoTuner candidate merges: releasing the
+            # allocator's cached blocks here forces cudaFree/cudaMalloc churn
+            # on every candidate; auto_tune empties the cache once after the
+            # sweep instead.
             torch.cuda.empty_cache()
 
         # Re-fuse Z-Image QKV patches if architecture normalization was used
@@ -9801,6 +9851,14 @@ class LoRAAutoTuner(LoRAOptimizer):
         compute_device = self._get_compute_device()
         use_gpu = compute_device.type != "cpu"
 
+        # Diff cache for Phase 2 — created before Pass 1 so analysis warms it:
+        # the per-alias diffs computed for analysis are exactly the ones
+        # candidate #1 would otherwise recompute from scratch.
+        _diff_cache = None
+        if diff_cache_mode != "disabled":
+            _diff_cache = _DiffCache(mode=diff_cache_mode, ram_pct=diff_cache_ram_pct)
+            logging.info(f"[LoRA AutoTuner] Diff cache enabled (mode={diff_cache_mode})")
+
         logging.info(f"[LoRA AutoTuner] Pass 1: Analyzing {len(target_groups)} target groups...")
         t_start = time.time()
         # Progress bar: analysis groups + top_n merges (+ 1 final merge when subsampling)
@@ -9838,6 +9896,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             lora_caches=lora_caches,
             pair_caches=pair_caches,
             lora_hashes=lora_hashes,
+            diff_cache=_diff_cache,
         )
         all_key_targets = analysis_data["all_key_targets"]
         target_groups = analysis_data["target_groups"]
@@ -9948,13 +10007,20 @@ class LoRAAutoTuner(LoRAOptimizer):
         # --- Phase 1: Score all parameter combos (heuristic, fast) ---
         logging.info("[LoRA AutoTuner] Phase 1: Scoring parameter grid...")
         grid = _generate_param_grid()
+        # Identical for every config — hoisted out of the ~1k-config loop
+        _decision_conflicts = [
+            ps.get("decision_conflict", ps.get("excess_conflict", ps.get("conflict_ratio", 0.0)))
+            for ps in prefix_stats.values()
+            if ps.get("n_loras", 0) > 1
+        ] if prefix_stats else []
         scored = []
         for config in grid:
             h_score = _score_config_heuristic(
                 config, avg_conflict_ratio, avg_cos_sim,
                 magnitude_ratio, prefix_stats, arch_preset=tuner_arch_preset,
                 avg_excess_conflict=avg_excess_conflict,
-                avg_subspace_overlap=avg_subspace_overlap)
+                avg_subspace_overlap=avg_subspace_overlap,
+                decision_conflicts=_decision_conflicts)
             scored.append((h_score, config))
         scored.sort(key=lambda x: x[0], reverse=True)
         logging.info(f"[LoRA AutoTuner] Scored {len(grid)} combos in {time.time() - t_start:.1f}s")
@@ -10018,11 +10084,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                          f"{len(subsampled_multi)}/{len(multi_lora_targets)} multi-LoRA)")
 
         # --- Phase 2: Merge top-N and measure ---
-        # Initialize diff cache for Phase 2
-        _diff_cache = None
-        if diff_cache_mode != "disabled":
-            _diff_cache = _DiffCache(mode=diff_cache_mode, ram_pct=diff_cache_ram_pct)
-            logging.info(f"[LoRA AutoTuner] Diff cache enabled (mode={diff_cache_mode})")
+        # (diff cache already created before Pass 1, warmed during analysis)
 
         # --- Candidate dedup ---
         # per_prefix configs differing only in strategy_set produce identical
@@ -10108,6 +10170,57 @@ class LoRAAutoTuner(LoRAOptimizer):
         # candidate-dependent factor for single-LoRA prefixes.
         _sl_patch_cache = {} if len(single_lora_keys) > 0 else None
 
+        # --- Scoring invariants (identical for every candidate — hoisted) ---
+        is_ortho_score = (
+            abs(avg_cos_sim) < tuner_arch_preset["orthogonal_cos_sim_max"]
+            and avg_subspace_overlap < 0.35
+        )
+        # Skip SVD for orthogonal LoRAs — SLERP vs average produce different
+        # rank profiles that don't correlate with generation quality
+        compute_svd = scoring_svd in ("merge_quality", "full") and not is_ortho_score
+        compute_lora_svd = scoring_svd in ("lora_rank", "full")
+        score_dev = torch.device("cuda") if scoring_device == "gpu" and torch.cuda.is_available() else None
+        score_arch = tuner_arch_preset if scoring_formula == "v2" else None
+
+        # v2 expected-energy baseline (weighted_average expectation from
+        # branch_energy) — depends only on the stack and analysis, not the
+        # candidate config. Auto-strength cancels in WA normalization, so the
+        # same baseline applies to all candidates.
+        _expected_energy = 0.0
+        if scoring_formula == "v2":
+            _v2_model_strengths = [item["strength"] for item in active_loras]
+            _v2_clip_strengths = [
+                item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
+                for item in active_loras
+            ]
+            _v2_total_model_w = sum(abs(s) for s in _v2_model_strengths)
+            _v2_total_clip_w = sum(abs(s) for s in _v2_clip_strengths)
+            expected_model_sq = sum(
+                _v2_model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
+                for i in range(len(active_loras))
+            )
+            expected_clip_sq = sum(
+                _v2_clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                for i in range(len(active_loras))
+            )
+            if not is_ortho_score:
+                # Non-orthogonal: include cross-terms (orthogonal stacks are
+                # Pythagorean — no cross-terms)
+                for (i, j), dot in branch_energy["model"]["dot"].items():
+                    expected_model_sq += 2.0 * _v2_model_strengths[i] * _v2_model_strengths[j] * dot
+                for (i, j), dot in branch_energy["clip"]["dot"].items():
+                    expected_clip_sq += 2.0 * _v2_clip_strengths[i] * _v2_clip_strengths[j] * dot
+            # Divide by total_weight^2 per branch for weighted_average baseline
+            if _v2_total_model_w > 0:
+                expected_model_sq = max(expected_model_sq, 0.0) / (_v2_total_model_w ** 2)
+            if _v2_total_clip_w > 0:
+                expected_clip_sq = max(expected_clip_sq, 0.0) / (_v2_total_clip_w ** 2)
+            _expected_energy = math.sqrt(expected_model_sq + expected_clip_sq)
+            # Scale expected energy by prefix fraction when subsampling
+            if use_subsampling and prefix_count > 0:
+                prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
+                _expected_energy *= math.sqrt(prefix_fraction)
+
         for rank_idx, (h_score, config) in enumerate(top_candidates):
             logging.info(f"[LoRA AutoTuner]   Candidate {rank_idx + 1}/{len(top_candidates)}: "
                          f"{config['merge_mode']}, {config['merge_refinement']}"
@@ -10159,17 +10272,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             cand_per_prefix_decisions = (
                 dict(lora_data.get("per_prefix_decisions", {})) if lora_data else {}
             )
-            is_ortho_score = (
-                abs(avg_cos_sim) < tuner_arch_preset["orthogonal_cos_sim_max"]
-                and avg_subspace_overlap < 0.35
-            )
-            # Skip SVD for orthogonal LoRAs — SLERP vs average produce different
-            # rank profiles that don't correlate with generation quality
-            compute_svd = scoring_svd in ("merge_quality", "full") and not is_ortho_score
-            compute_lora_svd = scoring_svd in ("lora_rank", "full")
-            score_dev = torch.device("cuda") if scoring_device == "gpu" and torch.cuda.is_available() else None
             t_score = time.time()
-            score_arch = tuner_arch_preset if scoring_formula == "v2" else None
 
             if single_lora_keys:
                 m_multi = {k: v for k, v in m_patches.items()
@@ -10222,54 +10325,13 @@ class LoRAAutoTuner(LoRAOptimizer):
                         cv_s * 0.5 + measured["sparsity_fit"] * 0.5
                     )
             else:
-                # v2: energy-aware scoring with arch-aware sparsity baseline
-                # Compute energy_preservation from branch_energy (model + clip).
-                # Baseline = weighted_average expected energy (not weighted_sum).
-                # Auto-strength cancels in WA normalization, so same formula for all.
+                # v2: energy-aware scoring with arch-aware sparsity baseline.
+                # The weighted_average expected-energy baseline is hoisted
+                # above the candidate loop (_expected_energy) — only the
+                # measured side is per-candidate.
                 measured_energy_sq = measured.get("norm_energy_sq", 0.0)
                 measured_energy = math.sqrt(max(measured_energy_sq, 0.0))
-                model_strengths = [item["strength"] for item in active_loras]
-                clip_strengths = [
-                    item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
-                    for item in active_loras
-                ]
-                total_model_w = sum(abs(s) for s in model_strengths)
-                total_clip_w = sum(abs(s) for s in clip_strengths)
-                if is_ortho_score:
-                    # Orthogonal: Pythagorean — no cross-terms
-                    expected_model_sq = sum(
-                        model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                    expected_clip_sq = sum(
-                        clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                else:
-                    # Non-orthogonal: include cross-terms
-                    expected_model_sq = sum(
-                        model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                    for (i, j), dot in branch_energy["model"]["dot"].items():
-                        expected_model_sq += 2.0 * model_strengths[i] * model_strengths[j] * dot
-                    expected_clip_sq = sum(
-                        clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                    for (i, j), dot in branch_energy["clip"]["dot"].items():
-                        expected_clip_sq += 2.0 * clip_strengths[i] * clip_strengths[j] * dot
-                # Divide by total_weight^2 per branch for weighted_average baseline
-                if total_model_w > 0:
-                    expected_model_sq = max(expected_model_sq, 0.0) / (total_model_w ** 2)
-                if total_clip_w > 0:
-                    expected_clip_sq = max(expected_clip_sq, 0.0) / (total_clip_w ** 2)
-                expected_energy = math.sqrt(expected_model_sq + expected_clip_sq)
-                # Scale expected energy by prefix fraction when subsampling
-                if use_subsampling and prefix_count > 0:
-                    prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
-                    expected_energy *= math.sqrt(prefix_fraction)
-                energy_ratio = measured_energy / expected_energy if expected_energy > 0 else 1.0
+                energy_ratio = measured_energy / _expected_energy if _expected_energy > 0 else 1.0
                 # One-sided: only penalize energy loss below WA baseline (ratio < 1)
                 # SLERP legitimately boosts energy above WA — don't penalize that
                 energy_preservation = min(energy_ratio, 1.0)

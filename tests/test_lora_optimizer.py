@@ -3482,5 +3482,52 @@ class TestAutotunerMemoryGC(unittest.TestCase):
                 self.assertTrue(os.path.exists(mem_path))
 
 
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestDiffCacheWarming(unittest.TestCase):
+    """Pass 1 analysis warms the diff cache so Phase 2 candidate #1 skips
+    recomputing the per-alias diffs analysis just produced."""
+
+    def test_run_group_analysis_populates_diff_cache(self):
+        optimizer = lora_optimizer.LoRAOptimizer()
+        model = _make_model()
+        active_loras = [
+            _make_lora_entry({"alias_a": 1.0}, name="A"),
+            _make_lora_entry({"alias_a": 2.0}, name="B"),
+        ]
+        target_groups = optimizer._build_target_groups(
+            ["alias_a"], {"alias_a": "layer.weight"}, {})
+        cache = lora_optimizer._DiffCache(mode="ram")
+        analysis = optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, torch.device("cpu"),
+            diff_cache=cache)
+        self.assertEqual(analysis["prefix_count"], 1)
+        # Per-alias diffs for both LoRAs were cached during analysis
+        self.assertIn(("alias_a", 0), cache)
+        self.assertIn(("alias_a", 1), cache)
+
+    def test_analysis_results_identical_with_and_without_cache(self):
+        """The cache is write-only during analysis — results must not drift."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        model = _make_model()
+        active_loras = [
+            _make_lora_entry({"alias_a": 1.0}, name="A"),
+            _make_lora_entry({"alias_a": -0.5}, name="B"),
+        ]
+        target_groups = optimizer._build_target_groups(
+            ["alias_a"], {"alias_a": "layer.weight"}, {})
+        plain = optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, torch.device("cpu"))
+        cache = lora_optimizer._DiffCache(mode="ram")
+        warmed = optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, torch.device("cpu"),
+            diff_cache=cache)
+        self.assertEqual(
+            plain["prefix_stats"]["alias_a"]["per_lora_norm_sq"],
+            warmed["prefix_stats"]["alias_a"]["per_lora_norm_sq"])
+        self.assertEqual(
+            plain["prefix_stats"]["alias_a"]["conflict_ratio"],
+            warmed["prefix_stats"]["alias_a"]["conflict_ratio"])
+
+
 if __name__ == "__main__":
     unittest.main()
