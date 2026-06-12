@@ -2460,8 +2460,12 @@ class _LoRAMergeBase:
         """
         DARE sparsification: randomly drop parameters and rescale survivors.
         Each element is kept with probability `density`, then rescaled by 1/q.
-        With dampening=0: q=density (standard DARE). With dampening>0: q is
-        interpolated toward 1.0, reducing noise amplification (DAREx, ICLR 2025).
+        With dampening=0: q=density (standard DARE, exact 1/(1-p) rescale).
+        With dampening>0: q is interpolated toward 1.0, a data-free heuristic
+        INSPIRED BY DAREx-q (ICLR 2025) — the paper itself selects q>1-p
+        empirically (validation grid search / output-difference minimization),
+        not via this closed form. Dampening>0 intentionally biases the
+        estimator low (E[out] = density/q < 1) to tame variance blow-up.
         """
         if density >= 1.0:
             return tensor
