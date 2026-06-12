@@ -248,7 +248,7 @@ _ARCH_PRESETS = {
         "alignment_threshold": 0.1,
         "suggested_max_strength_cap": 5.0,
         "auto_strength_orthogonal_floor": 0.85,
-        "display_name": "DiT (Flux/WAN/Z-Image/LTX/HunyuanVideo)",
+        "display_name": "DiT (Flux/WAN/Z-Image/LTX/Ideogram-4/HunyuanVideo)",
         "full_rank": {
             "rank_threshold": 512,
             "disable_slerp_upgrade": True,
@@ -317,6 +317,7 @@ _VIDEO_ARCH_ORTHOGONAL_FLOOR = {"wan": 1.0, "ltx": 1.0, "acestep": 1.0}
 _ARCH_TO_PRESET = {
     "sdxl": "sd_unet", "sd15": "sd_unet", "unknown": "sd_unet",
     "flux": "dit", "wan": "dit", "zimage": "dit", "ltx": "dit",
+    "ideogram4": "dit",
     "acestep": "acestep_dit",
     "qwen_image": "llm",
 }
@@ -861,10 +862,32 @@ class _LoRAMergeBase:
     def _detect_architecture(lora_sd):
         """
         Detect model architecture from LoRA key patterns.
-        Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'sd15', 'ltx', 'qwen_image', or 'unknown'.
+        Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'sd15', 'ltx',
+        'qwen_image', 'ideogram4', or 'unknown'.
         """
         keys = list(lora_sd.keys())
         keys_str = ' '.join(k.lower() for k in keys)
+
+        # Ideogram 4: NextDiT-family single-stream DiT with the same
+        # layers.N.attention.qkv pattern as Z-Image (Lumina2) — MUST be
+        # checked first. Discriminators: attention output proj is
+        # "attention.o" (Z-Image: "attention.out"), modulation is lowercase
+        # "adaln_modulation" (Z-Image: "adaLN_modulation"), the fal trainer
+        # uses a conditional_transformer. prefix, and the fused qkv up/B
+        # matrix has 13824 rows (3x4608; Z-Image Turbo: 6912 = 3x2304).
+        if any('conditional_transformer.layers.' in k for k in keys):
+            return 'ideogram4'
+        if any(re.search(r'layers[._]\d+[._]attention[._]o(?=[._])', k) for k in keys):
+            return 'ideogram4'
+        if (any('adaln_modulation' in k for k in keys)
+                and any('feed_forward' in k for k in keys)):
+            return 'ideogram4'
+        for k in keys:
+            if (re.search(r'layers[._]\d+[._]attention[._]qkv', k)
+                    and ('lora_B' in k or 'lora_up' in k or '.lora.up.' in k)):
+                shape = getattr(lora_sd.get(k), 'shape', None)
+                if shape is not None and len(shape) >= 1 and shape[0] == 13824:
+                    return 'ideogram4'
 
         # Z-Image Turbo (Lumina2): layers.N with attention patterns
         # Handles: diffusion_model.layers.N, single_transformer_blocks.N (non-FLUX),
@@ -1450,6 +1473,54 @@ class _LoRAMergeBase:
             normalized[new_k] = v
         return normalized
 
+    @classmethod
+    def _normalize_keys_ideogram4(cls, lora_sd):
+        """
+        Normalize Ideogram 4 LoRA keys to the canonical ComfyUI form:
+        diffusion_model.layers.N.{attention.{qkv,o}, feed_forward.{w1,w2,w3},
+        adaln_modulation}.
+
+        Handles:
+        - ai-toolkit native: diffusion_model.layers.N.... (passthrough)
+        - fal trainer: conditional_transformer.layers.N....
+        - PEFT/diffusers-style prefixes: base_model.model., transformer.,
+          bare layers.
+        - Kohya-style underscores: lora_unet_layers_N_attention_qkv
+
+        Unlike Z-Image, the native ComfyUI weight layout keeps qkv FUSED and
+        every known trainer targets the fused weight — no split/re-fuse
+        needed. Split-attention (to_q/to_k/to_v) diffusers-layout LoRAs are
+        passed through unchanged: none exist in the wild and ComfyUI itself
+        has no key mapping for them on this model.
+
+        Returns new dict with normalized keys. Original dict is not modified.
+        """
+        normalized = {}
+        for k, v in lora_sd.items():
+            new_k = k
+
+            # Strip PEFT prefix
+            if new_k.startswith("base_model.model."):
+                new_k = new_k[len("base_model.model."):]
+
+            # Kohya underscore format -> dotted
+            if new_k.startswith("lora_unet_"):
+                rest = new_k[len("lora_unet_"):]
+                rest = re.sub(r"^layers_(\d+)_", r"layers.\1.", rest)
+                rest = re.sub(r"attention_(qkv|o)(?=[._])", r"attention.\1", rest)
+                rest = re.sub(r"feed_forward_(w\d)(?=[._])", r"feed_forward.\1", rest)
+                new_k = f"diffusion_model.{rest}"
+
+            # fal trainer wraps the conditional model; PEFT exports use
+            # transformer. — both map to ComfyUI's diffusion_model. prefix
+            new_k = re.sub(r"^conditional_transformer\.", "diffusion_model.", new_k)
+            new_k = re.sub(r"^transformer\.", "diffusion_model.", new_k)
+            if new_k.startswith("layers."):
+                new_k = "diffusion_model." + new_k
+
+            normalized[new_k] = v
+        return normalized
+
     _ACESTEP_COMPOUND_NAMES = sorted([
         "self_attn", "cross_attn",
         "q_proj", "k_proj", "v_proj", "o_proj",
@@ -1565,6 +1636,8 @@ class _LoRAMergeBase:
             return cls._normalize_keys_ltx(lora_sd)
         elif architecture == 'qwen_image':
             return cls._normalize_keys_qwen_image(lora_sd)
+        elif architecture == 'ideogram4':
+            return cls._normalize_keys_ideogram4(lora_sd)
         return lora_sd  # unknown — pass through unchanged
 
     @staticmethod

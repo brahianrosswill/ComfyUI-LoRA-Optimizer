@@ -2639,6 +2639,117 @@ class TestPairLoraCacheAutoTune(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestIdeogram4Support(unittest.TestCase):
+    """Ideogram 4 detection (must beat the Z-Image check — both are NextDiT
+    with layers.N.attention.qkv), key normalization, and preset routing."""
+
+    def _detect(self, sd):
+        return lora_optimizer._LoRAMergeBase._detect_architecture(sd)
+
+    @staticmethod
+    def _zeros_sd(keys):
+        return {k: torch.zeros(1) for k in keys}
+
+    def test_ai_toolkit_native_format_detected(self):
+        sd = self._zeros_sd([
+            "diffusion_model.layers.0.attention.qkv.lora_A.weight",
+            "diffusion_model.layers.0.attention.qkv.lora_B.weight",
+            "diffusion_model.layers.0.attention.o.lora_A.weight",
+            "diffusion_model.layers.0.attention.o.lora_B.weight",
+            "diffusion_model.layers.0.feed_forward.w1.lora_A.weight",
+            "diffusion_model.layers.0.feed_forward.w1.lora_B.weight",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_fal_conditional_transformer_prefix_detected(self):
+        sd = self._zeros_sd([
+            "conditional_transformer.layers.3.attention.qkv.lora_A.weight",
+            "conditional_transformer.layers.3.attention.qkv.lora_B.weight",
+            "conditional_transformer.layers.3.attention.qkv.alpha",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_lokr_output_proj_detected(self):
+        sd = self._zeros_sd([
+            "diffusion_model.layers.7.attention.o.lokr_w1",
+            "diffusion_model.layers.7.attention.o.lokr_w2",
+            "diffusion_model.layers.7.attention.o.alpha",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_lowercase_adaln_plus_ffn_detected(self):
+        sd = self._zeros_sd([
+            "diffusion_model.layers.2.adaln_modulation.lora_A.weight",
+            "diffusion_model.layers.2.feed_forward.w2.lora_A.weight",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_qkv_only_disambiguated_by_fused_width(self):
+        # qkv-only LoRA: no o/adaln markers — the 13824-row (3x4608) fused
+        # up matrix is the Ideogram tell; 6912 (3x2304) is Z-Image Turbo
+        ideo = {
+            "diffusion_model.layers.0.attention.qkv.lora_A.weight": torch.zeros(8, 4608),
+            "diffusion_model.layers.0.attention.qkv.lora_B.weight": torch.zeros(13824, 8),
+        }
+        self.assertEqual(self._detect(ideo), "ideogram4")
+        zim = {
+            "diffusion_model.layers.0.attention.qkv.lora_A.weight": torch.zeros(8, 2304),
+            "diffusion_model.layers.0.attention.qkv.lora_B.weight": torch.zeros(6912, 8),
+        }
+        self.assertEqual(self._detect(zim), "zimage")
+
+    def test_zimage_keys_still_detect_zimage(self):
+        """Regression: Z-Image markers (attention.out, adaLN_modulation) must
+        not be claimed by the Ideogram 4 checks."""
+        sd = self._zeros_sd([
+            "diffusion_model.layers.0.attention.qkv.lora_up.weight",
+            "diffusion_model.layers.0.attention.qkv.lora_down.weight",
+            "diffusion_model.layers.0.attention.out.lora_up.weight",
+            "diffusion_model.layers.0.attention.out.lora_down.weight",
+            "diffusion_model.layers.0.adaLN_modulation.1.lora_up.weight",
+        ])
+        self.assertEqual(self._detect(sd), "zimage")
+
+    def test_normalize_fal_and_peft_prefixes(self):
+        norm = lora_optimizer._LoRAMergeBase._normalize_keys_ideogram4
+        sd = self._zeros_sd([
+            "conditional_transformer.layers.3.attention.qkv.lora_A.weight",
+            "transformer.layers.4.feed_forward.w3.lora_B.weight",
+            "base_model.model.layers.5.attention.o.lora_A.weight",
+            "layers.6.adaln_modulation.lora_B.weight",
+            "diffusion_model.layers.7.attention.qkv.lora_A.weight",  # passthrough
+        ])
+        out = norm(sd)
+        self.assertIn("diffusion_model.layers.3.attention.qkv.lora_A.weight", out)
+        self.assertIn("diffusion_model.layers.4.feed_forward.w3.lora_B.weight", out)
+        self.assertIn("diffusion_model.layers.5.attention.o.lora_A.weight", out)
+        self.assertIn("diffusion_model.layers.6.adaln_modulation.lora_B.weight", out)
+        self.assertIn("diffusion_model.layers.7.attention.qkv.lora_A.weight", out)
+        self.assertEqual(len(out), len(sd))
+
+    def test_normalize_kohya_underscores(self):
+        norm = lora_optimizer._LoRAMergeBase._normalize_keys_ideogram4
+        sd = self._zeros_sd([
+            "lora_unet_layers_0_attention_qkv.lora_down.weight",
+            "lora_unet_layers_12_feed_forward_w2.lora_up.weight",
+            "lora_unet_layers_3_adaln_modulation.alpha",
+        ])
+        out = norm(sd)
+        self.assertIn("diffusion_model.layers.0.attention.qkv.lora_down.weight", out)
+        self.assertIn("diffusion_model.layers.12.feed_forward.w2.lora_up.weight", out)
+        self.assertIn("diffusion_model.layers.3.adaln_modulation.alpha", out)
+
+    def test_preset_routes_to_dit(self):
+        key, preset = lora_optimizer._resolve_arch_preset("auto", "ideogram4")
+        self.assertEqual(key, "dit")
+
+    def test_normalize_dispatch(self):
+        sd = {"conditional_transformer.layers.0.attention.o.lora_A.weight": torch.zeros(1)}
+        out = lora_optimizer._LoRAMergeBase._normalize_keys(sd, "ideogram4")
+        self.assertIn("diffusion_model.layers.0.attention.o.lora_A.weight", out)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestAceStepDetection(unittest.TestCase):
     """Test _detect_architecture for ACE-Step v1.0 and v1.5 key patterns."""
 

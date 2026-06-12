@@ -321,6 +321,7 @@ Key normalization auto-detects the model architecture from LoRA key patterns and
 | Architecture | Detected From | Normalization |
 |-------------|--------------|---------------|
 | **Z-Image** (Lumina2) | `diffusion_model.layers.N.attention`, `single_transformer_blocks` | Prefix standardization, QKV split for per-component analysis, re-fuse after merge |
+| **Ideogram 4** | `layers.N.attention.qkv`/`attention.o`, `feed_forward.w1-w3`, fal `conditional_transformer.` prefix | ai-toolkit / fal / PEFT prefixes unified; qkv stays fused (native ComfyUI layout) |
 | **FLUX** | `double_blocks`/`single_blocks`, `transformer.transformer_blocks` | AI-Toolkit / Kohya / diffusers unified to canonical format |
 | **Wan** 2.1/2.2 | `blocks.N` with `self_attn`/`cross_attn`/`ffn` | LyCORIS / diffusers / Musubi Tuner unified, RS-LoRA alpha fix |
 | **SDXL** | `lora_te1_`/`lora_te2_`, `input_blocks`/`down_blocks` | Text encoder + UNet key unification |
