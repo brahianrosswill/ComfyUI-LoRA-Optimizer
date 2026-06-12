@@ -3483,6 +3483,75 @@ class TestAutotunerMemoryGC(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestBatchedKarcher(unittest.TestCase):
+    """The batched Karcher implementation must match the per-unit reference
+    loop it replaced (same math, different reduction order)."""
+
+    @staticmethod
+    def _reference_karcher(vecs, weights):
+        """The pre-1.9.3 per-unit implementation, kept as the oracle."""
+        total_w = sum(weights)
+        units = []
+        for v, w in zip(vecs, weights):
+            vn = v.norm()
+            if vn.item() > 1e-12:
+                units.append((v / vn, w / total_w))
+        m = None
+        for u, wn in units:
+            m = u * wn if m is None else m.add_(u, alpha=wn)
+        m_norm = m.norm()
+        m = units[0][0].clone() if m_norm.item() < 1e-8 else m / m_norm
+        for _ in range(8):
+            tangent = torch.zeros_like(m)
+            for u, wn in units:
+                cos_i = torch.dot(u, m).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+                theta_i = torch.acos(cos_i)
+                if theta_i.item() < 1e-7:
+                    continue
+                coef = wn * (theta_i / torch.sin(theta_i))
+                tangent.add_(u - cos_i * m, alpha=coef.item())
+            t_norm = tangent.norm()
+            if t_norm.item() < 1e-7:
+                break
+            m = torch.cos(t_norm) * m + (torch.sin(t_norm) / t_norm) * tangent
+            m = m / m.norm().clamp(min=1e-12)
+        # norm correction as in _merge_diffs
+        input_norms = [(v.norm().item(), w) for v, w in zip(vecs, weights)]
+        target_norm = sum(n * w for n, w in input_norms) / total_w
+        cur = m.norm().item()
+        if cur > 1e-8:
+            m = m * (target_norm / cur)
+        return m
+
+    def test_batched_matches_reference(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        g = torch.Generator().manual_seed(11)
+        for n in (3, 4, 5):
+            vecs = [torch.randn(256, generator=g) for _ in range(n)]
+            weights = [1.0, 0.8, 0.6, 0.4, 0.9][:n]
+            ref = self._reference_karcher([v.clone() for v in vecs], weights)
+            out = opt._merge_diffs(list(zip([v.clone() for v in vecs], weights)), "slerp")
+            self.assertTrue(torch.allclose(out, ref, atol=1e-5),
+                            f"n={n} max diff {(out - ref).abs().max().item()}")
+
+    def test_zero_norm_vector_is_filtered(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        g = torch.Generator().manual_seed(12)
+        vecs = [torch.randn(64, generator=g), torch.zeros(64), torch.randn(64, generator=g)]
+        weights = [1.0, 0.7, 0.5]
+        out = opt._merge_diffs(list(zip([v.clone() for v in vecs], weights)), "slerp")
+        ref = self._reference_karcher([v.clone() for v in vecs], weights)
+        self.assertTrue(torch.allclose(out, ref, atol=1e-5))
+
+    def test_all_zero_vectors_return_zero(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        out = opt._merge_diffs(
+            [(torch.zeros(16), 1.0), (torch.zeros(16), 0.5), (torch.zeros(16), 0.3)],
+            "slerp")
+        self.assertTrue(torch.equal(out, torch.zeros(16)))
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestScoreDuringMerge(unittest.TestCase):
     """Score-during-merge: inline stats must be exactly what
     _score_merge_result would have measured itself."""

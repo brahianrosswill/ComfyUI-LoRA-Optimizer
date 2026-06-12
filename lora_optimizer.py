@@ -104,7 +104,9 @@ AUTOTUNER_MEMORY_VERSION = 1
 # 1.9.2: score-during-merge (stats measured on the compute device at merge
 # time) + exact count_nonzero sparsity + vector_norm — per-patch metrics can
 # shift at reduction-order/ulp level vs 1.9.1
-AUTOTUNER_ALGO_VERSION = "1.9.2"
+# 1.9.3: batched Karcher mean for N>=3 slerp (matvec instead of per-unit
+# accumulation — same math, reduction-order fp drift ~1e-10)
+AUTOTUNER_ALGO_VERSION = "1.9.3"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -3314,10 +3316,10 @@ class _LoRAMergeBase:
                 z = torch.zeros(ref_diff.shape, device=dev, dtype=dtype)
                 return z.cpu() if to_cpu else z
 
-            # Pre-compute norms for later correction (before vectors are consumed)
-            input_norms = [(v.norm().item(), w) for v, w in items]
-
             if n_diffs == 2:
+                # Pre-compute norm-correction target before vectors are consumed
+                input_norms = [(v.norm().item(), w) for v, w in items]
+                target_norm = sum(n * w for n, w in input_norms) / total_w
                 # Standard pairwise SLERP
                 acc_v, acc_w = items[0]
                 items[0] = None  # Free tensor reference
@@ -3345,53 +3347,65 @@ class _LoRAMergeBase:
                     acc_v = a * acc_v + b * next_v
                 del next_v, items
             else:
-                # Weighted Karcher mean: iterate tangent-space (log-map)
-                # weighted average -> exp-map back, from the chordal mean.
-                # Converges in a few iterations for vectors in a half-space
-                # (the common case after negative-weight sign folding).
-                units = []
+                # Weighted Karcher mean, BATCHED: all unit vectors live in one
+                # [N, D] matrix so each iteration is two matvecs instead of
+                # per-unit kernels with .item() syncs (measured 1.7-2.9x
+                # faster at 4-16M elements). Iterates tangent-space (log-map)
+                # weighted average -> exp-map back, from the chordal-mean
+                # init. Converges in a few iterations for vectors in a
+                # half-space (the common case after negative-weight folding).
+                numel = items[0][0].numel()
+                U = torch.empty((n_diffs, numel), device=dev, dtype=torch.float32)
+                w_raw = []
                 for idx in range(n_diffs):
                     v, w = items[idx]
                     items[idx] = None  # Free tensor reference
-                    vn = v.norm()
-                    if vn.item() > 1e-12:
-                        units.append((v / vn, w / total_w))
+                    U[idx].copy_(v)
+                    w_raw.append(w)
                     del v
                 del items
-                if not units:
+                row_norms = U.norm(dim=1)  # [N]
+                w_raw = torch.tensor(w_raw, device=dev, dtype=torch.float32)
+                keep = row_norms > 1e-12
+                if not bool(keep.any()):
+                    del U
                     z = torch.zeros(ref_diff.shape, device=dev, dtype=dtype)
                     return z.cpu() if to_cpu else z
+                # Norm-correction target from the same row norms (zero-norm
+                # rows contribute ~0, matching the old per-vector reads)
+                target_norm = ((row_norms * w_raw).sum() / total_w).item()
+                if not bool(keep.all()):
+                    U = U[keep]
+                    row_norms = row_norms[keep]
+                    w_raw = w_raw[keep]
+                U.div_(row_norms.unsqueeze(1))  # unit rows
+                w_t = w_raw / total_w
 
                 # Init: normalized weighted chordal (Euclidean) mean
-                m = None
-                for u, wn in units:
-                    m = u * wn if m is None else m.add_(u, alpha=wn)
+                m = U.t().mv(w_t)
                 m_norm = m.norm()
-                m = units[0][0].clone() if m_norm.item() < 1e-8 else m / m_norm
+                m = U[0].clone() if m_norm.item() < 1e-8 else m / m_norm
 
                 for _ in range(8):
-                    tangent = torch.zeros_like(m)
-                    for u, wn in units:
-                        # log_m(u) = theta/sin(theta) * (u - cos(theta)*m)
-                        # cos clamped away from ±1: theta -> 0 handled by skip,
-                        # antipodal (cut locus) kept finite
-                        cos_i = torch.dot(u, m).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
-                        theta_i = torch.acos(cos_i)
-                        if theta_i.item() < 1e-7:
-                            continue
-                        coef = wn * (theta_i / torch.sin(theta_i))
-                        tangent.add_(u - cos_i * m, alpha=coef.item())
+                    # log_m(u_i) = theta_i/sin(theta_i) * (u_i - cos_i*m)
+                    # cos clamped away from ±1: theta -> 0 contributes ~0,
+                    # antipodal (cut locus) kept finite
+                    cos = (U @ m).clamp(-1.0 + 1e-7, 1.0 - 1e-7)  # [N]
+                    theta = torch.acos(cos)
+                    coef = torch.where(theta < 1e-7,
+                                       torch.zeros_like(theta),
+                                       w_t * theta / torch.sin(theta))
+                    tangent = U.t().mv(coef) - (coef * cos).sum() * m
                     t_norm = tangent.norm()
                     if t_norm.item() < 1e-7:
                         break
                     # exp_m(t) = cos(|t|)*m + sin(|t|)*t/|t|
                     m = torch.cos(t_norm) * m + (torch.sin(t_norm) / t_norm) * tangent
                     m = m / m.norm().clamp(min=1e-12)
-                del units
+                del U
                 acc_v = m
 
             # Norm correction: rescale to match weighted average of input norms
-            target_norm = sum(n * w for n, w in input_norms) / total_w
             current_norm = acc_v.norm().item()
             if current_norm > 1e-8:
                 acc_v = acc_v * (target_norm / current_norm)
@@ -3697,8 +3711,10 @@ class _LoRAMergeBase:
         Compute sign conflict ratio and cosine similarity components between
         two diff tensors. Samples up to 100k positions for large tensors.
         Returns (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq).
+        Used by the Conflict Editor (the optimizer/AutoTuner path uses
+        _sample_pair_metrics).
         """
-        # Avoid unnecessary .float() copies — diffs from _analyze_prefix are already float32
+        # Avoid unnecessary .float() copies — caller diffs are already float32
         flat_a = diff_a.flatten()
         flat_b = diff_b.flatten()
         if device is not None:
@@ -3713,9 +3729,12 @@ class _LoRAMergeBase:
 
         n = flat_a.numel()
         if n > 100000:
+            # randint (with replacement), like _sample_pair_metrics — randperm
+            # materialized a full n-element int64 permutation (128MB at 16M
+            # elements) per pair just to take the first 100k entries
             target_device = flat_a.device
             g = torch.Generator(device=target_device).manual_seed(42)
-            indices = torch.randperm(n, device=target_device, generator=g)[:100000]
+            indices = torch.randint(0, n, (100000,), device=target_device, generator=g)
             flat_a = flat_a[indices]
             flat_b = flat_b[indices]
 
@@ -4683,303 +4702,6 @@ class LoRAOptimizer(_LoRAMergeBase):
         except Exception as e:
             logging.warning(f"[LoRA Optimizer] Failed to save report: {e}")
             return None
-
-    def _process_prefix(self, lora_prefix, active_loras, model_keys, clip_keys,
-                        model, clip, device):
-        """
-        Process a single LoRA key prefix: resolve target key, compute diffs for
-        each active LoRA against the target shape. Thread-safe — all writes go
-        to local variables, reads from shared immutable data.
-
-        Returns (lora_prefix, diffs_for_key, lora_diffs_for_key, partial_stats,
-                 target_info, skip_count) or None if prefix should be skipped.
-        partial_stats is a list of (lora_index, rank, l2_norm) tuples.
-        """
-        target_key = None
-        is_clip = False
-
-        if lora_prefix in model_keys:
-            target_key = model_keys[lora_prefix]
-        elif lora_prefix in clip_keys:
-            target_key = clip_keys[lora_prefix]
-            is_clip = True
-
-        if target_key is None:
-            return None
-
-        # Handle tuple keys (for sliced weights, e.g. Flux linear1_qkv)
-        offset = None
-        if isinstance(target_key, tuple):
-            actual_key = target_key[0]
-            if len(target_key) > 1:
-                offset = target_key[1]
-        else:
-            actual_key = target_key
-
-        # Get target weight shape (use sliced shape when offset present)
-        try:
-            if is_clip:
-                target_weight = comfy.utils.get_attr(clip.cond_stage_model, actual_key)
-            else:
-                target_weight = comfy.utils.get_attr(model.model, actual_key)
-            target_shape = list(target_weight.shape)
-            if offset is not None:
-                target_shape[offset[0]] = offset[2]
-            target_shape = torch.Size(target_shape)
-        except (AttributeError, RuntimeError, IndexError):
-            return None
-
-        diffs_for_key = []
-        lora_diffs_for_key = {}
-        partial_stats = []
-        skip_count = 0
-        for i, item in enumerate(active_loras):
-            # Virtual LoRAs from sub-merges store pre-computed diffs keyed by target key
-            if item.get("_precomputed_diffs"):
-                tkey = target_key
-                raw = item["lora"].get(tkey)
-                if raw is None and isinstance(tkey, tuple):
-                    raw = item["lora"].get(tkey[0])
-                if raw is not None:
-                    if isinstance(raw, torch.Tensor):
-                        diff = raw.float()
-                    else:
-                        diff = self._expand_patch_to_diff(raw)
-                    if device is not None and diff.device != device:
-                        diff = diff.to(device)
-                    try:
-                        diff = diff.reshape(target_shape)
-                    except RuntimeError:
-                        diff = None
-                    rank = 1
-                else:
-                    continue
-            elif (lora_info := self._get_lora_key_info(item["lora"], lora_prefix)) is not None:
-                mat_up, mat_down, alpha, mid = lora_info
-                rank = mat_down.shape[0]
-                diff = self._compute_lora_diff(mat_up, mat_down, alpha, mid, target_shape, device=device)
-            else:
-                # Try LoKr / LoHa formats
-                alt = self._get_lokr_diff(item["lora"], lora_prefix, device=device)
-                if alt is None:
-                    alt = self._get_loha_diff(item["lora"], lora_prefix, device=device)
-                if alt is not None:
-                    diff, rank, _ = alt
-                    try:
-                        diff = diff.reshape(target_shape)
-                    except RuntimeError:
-                        diff = None
-                        rank = 0
-                else:
-                    continue
-
-            if diff is not None:
-                # For CLIP keys, use per-LoRA clip_strength when available
-                if is_clip and item["clip_strength"] is not None:
-                    eff_strength = item["clip_strength"]
-                else:
-                    eff_strength = item["strength"]
-                diffs_for_key.append((diff, eff_strength, i))
-                # Store sign-corrected diff for conflict analysis;
-                # negative strength inverts the LoRA's direction
-                lora_diffs_for_key[i] = diff if eff_strength >= 0 else -diff
-                # Always use model strength for l2_norms so _compute_auto_strengths
-                # can correctly undo the weighting (it divides by model strength)
-                l2 = diff.float().norm().item() * abs(item["strength"])
-                partial_stats.append((i, rank, l2))
-            else:
-                skip_count += 1
-
-        if len(diffs_for_key) == 0:
-            if skip_count > 0:
-                return (lora_prefix, [], {}, [], (target_key, is_clip), skip_count)
-            return None
-
-        return (lora_prefix, diffs_for_key, lora_diffs_for_key, partial_stats,
-                (target_key, is_clip), skip_count)
-
-    @torch.no_grad()
-    def _analyze_prefix(self, lora_prefix, active_loras, model_keys, clip_keys,
-                        model, clip, device, n_magnitude_samples=1000):
-        """
-        Pass 1 per-prefix analysis: compute diffs, sample conflicts and
-        magnitudes, then discard diffs. Returns lightweight scalars/samples
-        so the caller never accumulates full-rank diff tensors.
-
-        All GPU work (diff computation, conflict sampling, magnitude sampling)
-        stays on GPU until the final small results are copied to CPU, avoiding
-        the GPU→CPU→GPU bounce that kills pipelining.
-
-        Returns (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
-                 target_info, skip_count) or None if prefix should be skipped.
-
-        partial_stats: list of (lora_index, rank, l2_norm)
-        pair_conflicts: dict mapping (i, j) -> (overlap, conflict, dot, norm_a_sq, norm_b_sq)
-        magnitude_samples: list of small 1D CPU float tensors
-        """
-        # --- Resolve target key and shape (same as _process_prefix) ---
-        target_key = None
-        is_clip = False
-
-        if lora_prefix in model_keys:
-            target_key = model_keys[lora_prefix]
-        elif lora_prefix in clip_keys:
-            target_key = clip_keys[lora_prefix]
-            is_clip = True
-
-        if target_key is None:
-            return None
-
-        offset = None
-        if isinstance(target_key, tuple):
-            actual_key = target_key[0]
-            if len(target_key) > 1:
-                offset = target_key[1]
-        else:
-            actual_key = target_key
-
-        try:
-            if is_clip:
-                target_weight = comfy.utils.get_attr(clip.cond_stage_model, actual_key)
-            else:
-                target_weight = comfy.utils.get_attr(model.model, actual_key)
-            target_shape = list(target_weight.shape)
-            if offset is not None:
-                target_shape[offset[0]] = offset[2]
-            target_shape = torch.Size(target_shape)
-        except (AttributeError, RuntimeError, IndexError):
-            return None
-
-        # --- Compute diffs for all active LoRAs ---
-        # Keep diffs on GPU (device) for conflict + magnitude analysis.
-        # _compute_lora_diff normally returns CPU when device=cuda, so we
-        # call it with device=None and manually move matrices to GPU.
-        use_gpu = device is not None and device.type != "cpu"
-        diffs = {}  # lora_index -> diff tensor (on device)
-        eff_strengths = {}  # lora_index -> effective strength
-        partial_stats = []
-        skip_count = 0
-
-        for i, item in enumerate(active_loras):
-            # Virtual LoRAs from sub-merges store pre-computed diffs keyed by target key
-            if item.get("_precomputed_diffs"):
-                tkey = target_key
-                raw = item["lora"].get(tkey)
-                if raw is None and isinstance(tkey, tuple):
-                    raw = item["lora"].get(tkey[0])
-                if raw is None:
-                    continue
-                if isinstance(raw, torch.Tensor):
-                    diff = raw.float()
-                else:
-                    diff = self._expand_patch_to_diff(raw)
-                if device is not None and diff.device != device:
-                    diff = diff.to(device)
-                try:
-                    diff = diff.reshape(target_shape)
-                except RuntimeError:
-                    skip_count += 1
-                    continue
-                if use_gpu and diff.device.type == "cpu":
-                    diff = diff.to(device)
-                rank = 1  # unknown rank for virtual LoRAs
-            elif (lora_info := self._get_lora_key_info(item["lora"], lora_prefix)) is not None:
-                mat_up, mat_down, alpha, mid = lora_info
-                rank = mat_down.shape[0]
-
-                # Compute diff on GPU but DON'T copy back to CPU yet
-                if use_gpu:
-                    mat_up = mat_up.to(device)
-                    mat_down = mat_down.to(device)
-                    if mid is not None:
-                        mid = mid.to(device)
-                scale = alpha / rank
-
-                if mid is not None:
-                    final_shape = [mat_down.shape[1], mat_down.shape[0], mid.shape[2], mid.shape[3]]
-                    mat_down = (
-                        torch.mm(
-                            mat_down.transpose(0, 1).flatten(start_dim=1).float(),
-                            mid.transpose(0, 1).flatten(start_dim=1).float(),
-                        )
-                        .reshape(final_shape)
-                        .transpose(0, 1)
-                    )
-
-                diff = torch.mm(
-                    mat_up.flatten(start_dim=1).float(),
-                    mat_down.flatten(start_dim=1).float()
-                )
-                del mat_up, mat_down  # Free LoRA matrices from GPU
-                try:
-                    diff = diff.reshape(target_shape)
-                except RuntimeError:
-                    skip_count += 1
-                    continue
-
-                diff = diff * scale
-            else:
-                # Try LoKr / LoHa formats
-                alt = self._get_lokr_diff(
-                    item["lora"], lora_prefix,
-                    device=device if use_gpu else None, to_cpu=False,
-                )
-                if alt is None:
-                    alt = self._get_loha_diff(
-                        item["lora"], lora_prefix,
-                        device=device if use_gpu else None, to_cpu=False,
-                    )
-                if alt is None:
-                    continue
-                diff, rank, _ = alt
-                try:
-                    diff = diff.reshape(target_shape)
-                except RuntimeError:
-                    skip_count += 1
-                    continue
-
-            if is_clip and item["clip_strength"] is not None:
-                eff_strength = item["clip_strength"]
-            else:
-                eff_strength = item["strength"]
-            diffs[i] = diff
-            eff_strengths[i] = eff_strength
-            l2 = diff.float().norm().item() * abs(item["strength"])
-            partial_stats.append((i, rank, l2))
-
-        if len(diffs) == 0:
-            if skip_count > 0:
-                return (lora_prefix, [], {}, [], (target_key, is_clip), skip_count)
-            return None
-
-        # --- Pairwise conflict analysis (sign-corrected, stays on device) ---
-        pair_conflicts = {}
-        lora_indices = sorted(diffs.keys())
-        for ai in range(len(lora_indices)):
-            for bi in range(ai + 1, len(lora_indices)):
-                i, j = lora_indices[ai], lora_indices[bi]
-                diff_i = diffs[i] if eff_strengths[i] >= 0 else -diffs[i]
-                diff_j = diffs[j] if eff_strengths[j] >= 0 else -diffs[j]
-                ov, conf, dot, na_sq, nb_sq = self._sample_conflict(diff_i, diff_j, device=device)
-                pair_conflicts[(i, j)] = (ov, conf, dot, na_sq, nb_sq)
-
-        # --- Magnitude sampling (sample on device, free each diff eagerly) ---
-        magnitude_samples = []
-        # zlib.crc32: stable across processes (hash() varies with PYTHONHASHSEED)
-        seed = zlib.crc32(lora_prefix.encode("utf-8")) & 0xFFFFFFFF
-        sample_dev = diffs[lora_indices[0]].device
-        mag_g = torch.Generator(device=sample_dev).manual_seed(seed)
-        for i in lora_indices:
-            flat = diffs[i].flatten().abs().float() * abs(eff_strengths[i])
-            del diffs[i]  # Free this diff's GPU memory immediately
-            n = flat.numel()
-            if n > n_magnitude_samples:
-                indices = torch.randint(0, n, (n_magnitude_samples,),
-                                        device=sample_dev, generator=mag_g)
-                flat = flat[indices]
-            magnitude_samples.append(flat.cpu())
-        return (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
-                (target_key, is_clip), skip_count)
 
     @torch.no_grad()
     def _analyze_target_group(self, target_group, active_loras, model, clip, device,
