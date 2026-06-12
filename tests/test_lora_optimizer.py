@@ -3681,6 +3681,15 @@ class TestGroupPatchCache(unittest.TestCase):
         for rc, ru in zip(cached, uncached):
             self.assertAlmostEqual(rc["score_final"], ru["score_final"], places=9)
 
+        # Exhausted RAM budget: storage skipped gracefully, results unchanged
+        fake_vm = types.SimpleNamespace(available=0)
+        with mock.patch("psutil.virtual_memory", return_value=fake_vm):
+            zero_budget = run(disable_cache=False)
+        self.assertEqual([r["config"] for r in cached],
+                         [r["config"] for r in zero_budget])
+        for rc, rz in zip(cached, zero_budget):
+            self.assertAlmostEqual(rc["score_final"], rz["score_final"], places=9)
+
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestGlobalModeMergesWithDeclaredMode(unittest.TestCase):

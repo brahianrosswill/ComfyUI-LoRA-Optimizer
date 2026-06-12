@@ -6920,7 +6920,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         def _gc_store(key, result_tuple, is_clip_key):
             """Store a group merge for cross-candidate replay (CPU patches only —
-            CUDA entries would pin VRAM across candidates)."""
+            CUDA entries would pin VRAM across candidates; RAM-budget capped)."""
             if key is None or _group_patch_cache is None:
                 return
             planned = _group_patch_cache["plan"].get(key, 0)
@@ -6932,10 +6932,18 @@ class LoRAOptimizer(_LoRAMergeBase):
             for _t in (tensors if isinstance(tensors, (tuple, list)) else ()):
                 if isinstance(_t, torch.Tensor) and _t.is_cuda:
                     return
+            p_bytes = self._estimate_single_patch_bytes(patch)
+            if _group_patch_cache["bytes"] + p_bytes > _group_patch_cache["budget"]:
+                _group_patch_cache["budget_skips"] += 1
+                return
+            _group_patch_cache["bytes"] += p_bytes
+            _group_patch_cache["peak_bytes"] = max(
+                _group_patch_cache["peak_bytes"], _group_patch_cache["bytes"])
             _group_patch_cache["store"][key] = {
                 "result": result_tuple,
                 "auto_scale": 1.0 if is_clip_key else model_auto_scale,
                 "remaining": planned - 1,
+                "bytes": p_bytes,
             }
 
         def _merge_one_group(label_prefix, target_group):
@@ -7010,6 +7018,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     result = _entry["result"]
                     if _entry["remaining"] <= 0:
                         _group_patch_cache["store"].pop(_gc_key, None)
+                        _group_patch_cache["bytes"] -= _entry.get("bytes", 0)
                     _cur_scale = 1.0 if is_clip_key else model_auto_scale
                     if _entry["auto_scale"] != _cur_scale:
                         # Scale-invariant entry replayed under a different
@@ -7501,7 +7510,11 @@ class LoRAOptimizer(_LoRAMergeBase):
             self._merge_cache = {cache_key: (model_patches, clip_patches, report, clip_strength_out, lora_data)}
         else:
             self._merge_cache = {}
-            logging.info("[LoRA Optimizer] Patch cache disabled — RAM freed after merge")
+            if _analysis_cache is None:
+                # Only log on standalone merges: AutoTuner candidate merges
+                # always run with cache_patches="disabled" by design, and the
+                # message reads as if the USER's setting were being ignored
+                logging.info("[LoRA Optimizer] Patch cache disabled — RAM freed after merge")
 
         # Save report to disk for later reference
         lora_combo = [[item["name"], item["strength"]] for item in active_loras]
@@ -9870,7 +9883,10 @@ class LoRAAutoTuner(LoRAOptimizer):
         _diff_cache = None
         if diff_cache_mode != "disabled":
             _diff_cache = _DiffCache(mode=diff_cache_mode, ram_pct=diff_cache_ram_pct)
-            logging.info(f"[LoRA AutoTuner] Diff cache enabled (mode={diff_cache_mode})")
+            _dc_limit = getattr(_diff_cache, "_ram_limit", None)
+            logging.info(f"[LoRA AutoTuner] Diff cache enabled (mode={diff_cache_mode}"
+                         + (f", RAM limit {_dc_limit / (1024**3):.1f} GB"
+                            if _dc_limit else "") + ")")
 
         logging.info(f"[LoRA AutoTuner] Pass 1: Analyzing {len(target_groups)} target groups...")
         t_start = time.time()
@@ -10280,12 +10296,26 @@ class LoRAAutoTuner(LoRAOptimizer):
                         _plan[_k] = _plan.get(_k, 0) + 1
                 _plan = {k: c for k, c in _plan.items() if c >= 2}
                 if _plan:
-                    _group_cache = {"plan": _plan, "store": {}, "hits": 0, "misses": 0}
+                    # RAM budget: shared patches live until their last user, so
+                    # without a cap the cache can hold ~a full patch set OUTSIDE
+                    # the diff-cache budget. Cap at 25% of available RAM (16GB
+                    # hard max, mirroring _DiffCache); when exhausted, further
+                    # keys simply re-merge per candidate.
+                    try:
+                        import psutil
+                        _gc_budget = min(int(psutil.virtual_memory().available * 0.25),
+                                         16 * 1024 ** 3)
+                    except ImportError:
+                        _gc_budget = 4 * 1024 ** 3
+                    _group_cache = {"plan": _plan, "store": {}, "hits": 0, "misses": 0,
+                                    "bytes": 0, "budget": _gc_budget, "budget_skips": 0,
+                                    "peak_bytes": 0}
                     logging.info(
                         f"[LoRA AutoTuner] Group cache: {len(_plan)} shared group "
                         f"merges planned, up to "
                         f"{sum(_plan.values()) - len(_plan)} replays across "
-                        f"{len(top_candidates)} candidates")
+                        f"{len(top_candidates)} candidates "
+                        f"(RAM budget {_gc_budget / (1024**3):.1f} GB)")
             except Exception as e:
                 logging.warning(f"[LoRA AutoTuner] Group-cache planning failed "
                                 f"(sweep continues uncached): {e}")
@@ -10577,9 +10607,13 @@ class LoRAAutoTuner(LoRAOptimizer):
             pbar.update(1)
 
         if _group_cache is not None:
+            _gc_skip_note = (f", {_group_cache['budget_skips']} skipped (RAM budget)"
+                             if _group_cache.get("budget_skips") else "")
             logging.info(f"[LoRA AutoTuner] Group cache: {_group_cache['hits']} replayed, "
                          f"{_group_cache['misses']} merged, "
-                         f"{len(_group_cache['store'])} entries left unclaimed")
+                         f"peak {_group_cache.get('peak_bytes', 0) / (1024**2):.0f} MB, "
+                         f"{len(_group_cache['store'])} entries left unclaimed"
+                         f"{_gc_skip_note}")
             _group_cache["store"].clear()
             _group_cache = None
         if _diff_cache is not None:
