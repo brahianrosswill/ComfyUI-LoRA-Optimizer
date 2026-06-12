@@ -6836,7 +6836,12 @@ class LoRAOptimizer(_LoRAMergeBase):
         if merge_strategy_override and optimization_mode != "additive":
             if merge_strategy_override in ("ties", "weighted_average", "weighted_sum", "consensus", "slerp"):
                 mode = merge_strategy_override
-                reasoning.append(f"Merge mode overridden to '{mode}' by Conflict Editor")
+                if _analysis_cache is not None:
+                    # AutoTuner reuses the override parameter to apply a
+                    # global-mode winning config — not a user override
+                    reasoning.append(f"Merge mode '{mode}' selected by AutoTuner (winning global config)")
+                else:
+                    reasoning.append(f"Merge mode overridden to '{mode}' by Conflict Editor")
             else:
                 logging.warning(f"[LoRA Optimizer] Invalid merge_strategy_override '{merge_strategy_override}' — ignoring")
 
