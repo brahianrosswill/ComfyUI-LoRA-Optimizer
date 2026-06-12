@@ -9669,8 +9669,33 @@ class LoRAAutoTuner(LoRAOptimizer):
             _comm_score = _community_tuner_data["top_n"][0].get("score_final", 0.0)
             logging.info(f"[AutoTuner Community] COMMUNITY CACHE HIT — "
                          f"replaying config (score={_comm_score:.4f}), skipping full sweep")
+            # Keep the full candidate list for the local-memory promotion below
+            _comm_full = dict(_community_tuner_data)
+            _comm_full["top_n"] = list(_community_tuner_data["top_n"])
             if len(_community_tuner_data["top_n"]) > top_n:
                 _community_tuner_data["top_n"] = _community_tuner_data["top_n"][:top_n]
+
+            # Promote the community result into local persistent memory:
+            # without this, community-hit runs never write a local entry, so
+            # later runs with community_cache=disabled re-sweep from scratch
+            # even though the result was already known.
+            if (memory_mode in ("auto", "auto_ignore_strength", "clear_and_run")
+                    and not _is_sub_merge):
+                _mem_settings = {
+                    "normalize_keys": normalize_keys,
+                    "scoring_svd": scoring_svd,
+                    "scoring_device": scoring_device,
+                    "architecture_preset": architecture_preset,
+                    "auto_strength_floor": auto_strength_floor,
+                    "scoring_speed": scoring_speed,
+                    "scoring_formula": scoring_formula,
+                    "decision_smoothing": decision_smoothing,
+                    "smooth_slerp_gate": smooth_slerp_gate,
+                    "evaluator_hash": evaluator_hash,
+                }
+                self._memory_save(
+                    memory_lora_hash, self._memory_settings_hash(_mem_settings),
+                    _mem_settings, active_loras, _comm_full)
             _sel_idx = min(selection, len(_community_tuner_data["top_n"])) - 1
             _comm_formula = _community_tuner_data.get("scoring_formula")
             _formula_note = ""

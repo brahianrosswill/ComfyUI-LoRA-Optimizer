@@ -3595,6 +3595,100 @@ class TestAutotunerMemoryGC(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestCommunityHitPromotesToLocalMemory(unittest.TestCase):
+    """A community-cache hit must also write the local memory entry —
+    otherwise later runs with community_cache=disabled re-sweep from
+    scratch despite the result being known."""
+
+    @staticmethod
+    def _make_setup():
+        class FakePatcher:
+            def __init__(self, model):
+                self.model = model
+
+            def clone(self):
+                return FakePatcher(self.model)
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        inner = types.SimpleNamespace(
+            layer=types.SimpleNamespace(weight=torch.zeros(16, 16)),
+            layer2=types.SimpleNamespace(weight=torch.zeros(16, 16)))
+
+        def make_lora(seed):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in ("alias_a", "alias_b"):
+                d[f"{prefix}.lora_up.weight"] = torch.randn(16, 4, generator=g) * 0.1
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, 16, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        stack = [{"name": "A", "lora": make_lora(1), "strength": 1.0},
+                 {"name": "B", "lora": make_lora(2), "strength": 0.8}]
+        return FakePatcher(inner), stack
+
+    def test_community_hit_writes_memory_and_local_run_hits_it(self):
+        fake_tuner_data = {
+            "version": 1, "algo_version": lora_optimizer.AUTOTUNER_ALGO_VERSION,
+            "lora_hash": "x",
+            "source_loras": [{"name": "A", "strength": 1.0}, {"name": "B", "strength": 0.8}],
+            "normalize_keys": "disabled", "architecture_preset": "auto",
+            "auto_strength_floor": -1.0, "decision_smoothing": 0.25,
+            "smooth_slerp_gate": False, "scoring_formula": "v2",
+            "analysis_summary": {
+                "n_loras": 2, "prefix_count": 2, "avg_conflict_ratio": 0.4,
+                "avg_excess_conflict": 0.0, "avg_subspace_overlap": 0.0,
+                "avg_cosine_sim": 0.0, "magnitude_ratio": 1.0,
+                "decision_smoothing": 0.25},
+            "top_n": [{
+                "rank": 1, "score_heuristic": 0.8, "score_measured": 0.7,
+                "score_external": None, "score_final": 0.7,
+                "config": {"merge_mode": "per_prefix_auto",
+                           "sparsification": "disabled",
+                           "sparsification_density": 0.7, "dare_dampening": 0.0,
+                           "merge_refinement": "none", "auto_strength": "disabled",
+                           "optimization_mode": "per_prefix", "strategy_set": "full"},
+                "metrics": {}, "external_details": None,
+                "per_prefix_decisions": {}}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+            model, stack = self._make_setup()
+            tuner = lora_optimizer.LoRAAutoTuner()
+            tuner._get_model_keys = lambda m: {
+                "alias_a": "layer.weight", "alias_b": "layer2.weight"}
+            with mock.patch.object(tuner, "_lora_content_hash",
+                                   side_effect=lambda l: "h_" + l["name"]), \
+                    mock.patch.object(tuner, "_community_download_caches",
+                                      return_value=fake_tuner_data):
+                res1 = tuner.auto_tune(
+                    model, stack, 1.0, clip=None, top_n=1,
+                    community_cache="upload_and_download", memory_mode="auto",
+                    cache_patches="disabled", record_dataset="disabled",
+                    diff_cache_mode="disabled")
+            self.assertIn("COMMUNITY CACHE HIT", res1[2])
+            mem_files = [f for f in os.listdir(tmpdir) if f.endswith(".memory.json")]
+            self.assertEqual(len(mem_files), 1, "community hit did not write local memory")
+
+            # Second run: community disabled, fresh node — must hit local memory
+            model2, stack2 = self._make_setup()
+            tuner2 = lora_optimizer.LoRAAutoTuner()
+            tuner2._get_model_keys = lambda m: {
+                "alias_a": "layer.weight", "alias_b": "layer2.weight"}
+            with self.assertLogs(level="INFO") as captured:
+                res2 = tuner2.auto_tune(
+                    model2, stack2, 1.0, clip=None, top_n=1,
+                    community_cache="disabled", memory_mode="auto",
+                    cache_patches="disabled", record_dataset="disabled",
+                    diff_cache_mode="disabled")
+            self.assertTrue(any("[AutoTuner Memory] HIT" in m for m in captured.output),
+                            captured.output[-8:])
+            self.assertEqual(res2[4]["top_n"][0]["score_final"], 0.7)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestGroupPatchCache(unittest.TestCase):
     """Cross-candidate group patch cache: identical sweep results with the
     cache active vs disabled, and sound key semantics."""
