@@ -10,6 +10,11 @@ import math
 import os
 import json
 import hashlib
+import zlib
+import functools
+import weakref
+import itertools
+import random
 import time
 import re
 import gc
@@ -21,6 +26,7 @@ import folder_paths
 import comfy.utils
 import comfy.sd
 import comfy.lora
+import comfy.model_management
 from comfy.weight_adapter.lora import LoRAAdapter
 try:
     from comfy.weight_adapter.lokr import LoKrAdapter
@@ -82,17 +88,97 @@ TUNER_DATA_DIR = os.path.join(folder_paths.models_dir, "tuner_data")
 os.makedirs(TUNER_DATA_DIR, exist_ok=True)
 folder_paths.add_model_folder_path("tuner_data", TUNER_DATA_DIR)
 
+# Same pattern _refuse_zimage_patches matches on patch keys — used to detect
+# QKV component patches whose scoring stats must wait for the fused tensor
+_ZIMAGE_QKV_KEY_RE = re.compile(r'(layers\.\d+\.attention)\.to_(q|k|v)(?:\.|$)')
+
+# Merge modes whose output is invariant to a uniform positive scaling of all
+# branch strengths (their math normalizes total weight away). weighted_sum
+# and ties scale linearly instead, and refinement pipelines add selfish
+# (scaled) components on top of normalized bases — so cross-auto_strength
+# sharing requires per-group refinement "none".
+_SCALE_INVARIANT_MODES = frozenset({"weighted_average", "normalize", "slerp", "consensus"})
+
+
+def _group_merge_cache_key(label_prefix, is_clip, pf_mode, pf_density, pf_sign,
+                           pf_quality, sparsification, sparsification_density,
+                           dare_dampening, merge_refinement, auto_strength_setting):
+    """Cache key for one group's merge within an AutoTuner sweep.
+
+    Captures every candidate-config input that can change the merged patch;
+    analysis-side inputs (diffs, conflict modes, base strengths, decision
+    smoothing, arch preset) are fixed for the whole sweep. CLIP groups never
+    see the auto-strength scale, and scale-invariant model groups produce
+    identical patches for both settings — both share entries across
+    auto_strength via the "any" token. Used by BOTH auto_tune's planning
+    pass and _merge_one_group, so planned and runtime keys agree by
+    construction.
+    """
+    if is_clip or (pf_mode in _SCALE_INVARIANT_MODES and pf_quality == "none"):
+        scale_token = "any"
+    else:
+        scale_token = auto_strength_setting
+    return (label_prefix, bool(is_clip), pf_mode, round(pf_density, 6), pf_sign,
+            pf_quality, sparsification, sparsification_density, dare_dampening,
+            merge_refinement, scale_token)
+
 AUTOTUNER_MEMORY_DIR = os.path.join(folder_paths.models_dir, "autotuner_memory")
 os.makedirs(AUTOTUNER_MEMORY_DIR, exist_ok=True)
 AUTOTUNER_MEMORY_VERSION = 1
-AUTOTUNER_ALGO_VERSION = "1.5.0"   # Bump when scoring formula or memory/config format changes
-ANALYSIS_CACHE_VERSION = "1.6.0"   # Bump when per-prefix conflict math changes (lora/pair/analysis caches)
+# Bump whenever ranking-relevant behavior changes (scoring formula, candidate
+# selection, sampling) — not just on memory/config format changes. Stale
+# memory entries and community configs are rejected by this gate.
+# 1.9.1: Pass-1-warmed diff cache means candidate #1 is scored on the same
+# fp16-quantized cached diffs as candidates 2+ (uniform across candidates now;
+# scores shift at the ~1e-5 level when diff_cache_mode != "disabled")
+# 1.9.2: score-during-merge (stats measured on the compute device at merge
+# time) + exact count_nonzero sparsity + vector_norm — per-patch metrics can
+# shift at reduction-order/ulp level vs 1.9.1
+# 1.9.3: batched Karcher mean for N>=3 slerp (matvec instead of per-unit
+# accumulation — same math, reduction-order fp drift ~1e-10)
+# 1.10.0: FIX global-mode candidates merging every group as weighted_sum
+# (pf_n_loras stayed 0 outside additive/per_prefix, tripping the single-
+# contributor fallback) — global slerp/ties/consensus/WA candidates are now
+# genuinely distinct in Phase 2 for the first time since 2026-03
+# 1.10.1: cross-candidate group patch cache — replayed group merges are
+# bit-identical to their first computation; candidates that would have
+# recomputed them under a different auto-strength scale (scale-invariant
+# modes) can shift at ulp level
+# 1.10.2: explicit auto_strength_floor now bounds the reduction on aligned/
+# opposing stacks too (the orthogonality gate only applies to -1 defaults)
+AUTOTUNER_ALGO_VERSION = "1.10.2"
+
+
+def _warn_stale_tuner_data(tuner_data, context):
+    """Warn (don't block) when explicitly wired tuner_data was produced by a
+    different algo version — its ranking may not match current scoring."""
+    if not isinstance(tuner_data, dict):
+        return
+    version = tuner_data.get("algo_version")
+    if version is not None and version != AUTOTUNER_ALGO_VERSION:
+        logging.warning(
+            f"[{context}] tuner_data was produced by AutoTuner algo {version} "
+            f"(current: {AUTOTUNER_ALGO_VERSION}) — its ranking may be stale. "
+            f"Re-run the AutoTuner to refresh it.")
+ANALYSIS_CACHE_VERSION = "1.8.0"   # Bump when per-prefix conflict math changes (lora/pair/analysis caches)
 COMMUNITY_CACHE_REPO = "ethanfel/lora-optimizer-community-cache"
 COMMUNITY_CACHE_BASE_URL = (
     f"https://huggingface.co/datasets/{COMMUNITY_CACHE_REPO}/resolve/main"
 )
 
+try:
+    from huggingface_hub import HfApi
+except Exception:
+    HfApi = None
 
+
+
+
+def _json_to_tuples(obj):
+    """Recursively convert JSON lists back to tuples (for cache round-trips)."""
+    if isinstance(obj, list):
+        return tuple(_json_to_tuples(x) for x in obj)
+    return obj
 
 
 def _read_safetensors_metadata(filepath):
@@ -164,7 +250,7 @@ _ARCH_PRESETS = {
         "alignment_threshold": 0.1,
         "suggested_max_strength_cap": 5.0,
         "auto_strength_orthogonal_floor": 0.85,
-        "display_name": "DiT (Flux/WAN/Z-Image/LTX/HunyuanVideo)",
+        "display_name": "DiT (Flux/WAN/Z-Image/LTX/Ideogram-4/HunyuanVideo)",
         "full_rank": {
             "rank_threshold": 512,
             "disable_slerp_upgrade": True,
@@ -194,14 +280,47 @@ _ARCH_PRESETS = {
             "auto_strength_floor": 1.0,
         },
     },
+    # ACE-Step v1.5: 24-block Linear DiT for music generation.
+    # Cross-attention is the primary voice-identity pathway — it always uses
+    # full/global attention (never sliding window) to attend to concatenated
+    # [text + lyrics + timbre] conditioning.  Self-attention alternates:
+    # odd layers = sliding window (local timbre/transients), even layers =
+    # global GQA (long-range musical structure).
+    # Vocal + music LoRAs typically produce orthogonal updates in cross-attn
+    # (encoding voice vs genre conditioning), so TIES trimming is destructive.
+    # Tuned for: wider orthogonal band (→ more SLERP), higher TIES threshold
+    # (→ less aggressive trimming), full magnitude preservation.
+    "acestep_dit": {
+        "density_noise_floor_ratio": 0.05,
+        "density_clamp_min": 0.4,
+        "density_clamp_max": 0.95,
+        "dare_ideal_density": 0.85,
+        "consensus_cos_sim_min": 0.5,
+        "consensus_conflict_max": 0.15,
+        "orthogonal_cos_sim_max": 0.30,
+        "orthogonal_conflict_max": 0.65,
+        "ties_conflict_threshold": 0.35,
+        "magnitude_ratio_total_sign": 2.0,
+        "alignment_threshold": 0.1,
+        "suggested_max_strength_cap": 5.0,
+        "auto_strength_orthogonal_floor": 1.0,
+        "display_name": "ACE-Step (Music DiT)",
+        "full_rank": {
+            "rank_threshold": 512,
+            "disable_slerp_upgrade": True,
+            "prefer_sum_orthogonal": True,
+            "auto_strength_floor": 1.0,
+        },
+    },
 }
 
-_VIDEO_ARCH_ORTHOGONAL_FLOOR = {"wan": 1.0, "ltx": 1.0}
+_VIDEO_ARCH_ORTHOGONAL_FLOOR = {"wan": 1.0, "ltx": 1.0, "acestep": 1.0}
 
 _ARCH_TO_PRESET = {
     "sdxl": "sd_unet", "sd15": "sd_unet", "unknown": "sd_unet",
     "flux": "dit", "wan": "dit", "zimage": "dit", "ltx": "dit",
-    "acestep": "dit",
+    "ideogram4": "dit",
+    "acestep": "acestep_dit",
     "qwen_image": "llm",
 }
 
@@ -546,7 +665,6 @@ class _DiffCache:
       - "auto": RAM up to ram_pct of free system memory, then spills to disk.
     """
 
-    _MAX_RAM_BYTES = 16 * 1024 * 1024 * 1024  # 16GB absolute cap
 
     def __init__(self, mode="auto", ram_pct=0.5):
         self.mode = mode
@@ -572,8 +690,11 @@ class _DiffCache:
         if mode == "auto":
             try:
                 import psutil
-                pct_limit = int(psutil.virtual_memory().available * ram_pct)
-                self._ram_limit = min(pct_limit, self._MAX_RAM_BYTES)
+                # ram_pct of AVAILABLE memory is the user's contract (widget
+                # tooltip: "how much of your free RAM the cache can use") —
+                # a former 16GB absolute cap silently overrode it on
+                # high-memory machines, making ram_pct appear ignored
+                self._ram_limit = int(psutil.virtual_memory().available * ram_pct)
             except ImportError:
                 self._ram_limit = 4 * 1024 * 1024 * 1024
 
@@ -628,14 +749,24 @@ class _DiffCache:
     def put(self, key, tensor):
         if key in self._ram_store or key in self._disk_store:
             return
-        cached = tensor.detach().half().cpu()
+        cached = tensor.detach()
+        if cached.dtype == torch.float32:
+            # Halve fp32 to bound memory — cast on the source device so a GPU
+            # tensor transfers half the bytes (fp32→fp16 RN cast is
+            # bit-identical on GPU and CPU); 16-bit dtypes are kept as-is so
+            # cached diffs stay bit-identical to fresh ones (bf16 -> fp16
+            # would silently quantize)
+            cached = cached.half()
+        cached = cached.cpu()
         tensor_bytes = cached.nelement() * cached.element_size()
         if self._use_disk(tensor_bytes) and not self._disk_failed:
             try:
                 import hashlib, numpy as np
                 name_hash = hashlib.sha256(f"{key[0]}_{key[1]}".encode()).hexdigest()[:16]
                 path = os.path.join(self._cache_dir, f"{name_hash}.npy")
-                np.save(path, cached.numpy())
+                # numpy can't serialize bfloat16 — convert for disk only
+                disk_t = cached.half() if cached.dtype == torch.bfloat16 else cached
+                np.save(path, disk_t.numpy())
                 self._disk_store[key] = path
                 return
             except Exception as e:
@@ -683,6 +814,47 @@ class _LoRAMergeBase:
 
     def __init__(self):
         self.loaded_loras = {}
+        self._lora_format_cache = {}  # id(lora_dict) -> format_index (0-3)
+
+    def _track_model_identity(self, model, clip=None):
+        """
+        Returns True when the cached model/clip identity no longer matches the
+        given objects, then records the new identity. Uses weakrefs on top of
+        id(): a bare id() comparison can alias a NEW object that happens to
+        reuse a freed object's address, silently serving stale cached merges.
+        """
+        current_mid = id(model) if model is not None else None
+        current_cid = id(clip) if clip is not None else None
+        prev_mid = getattr(self, '_cached_model_id', None)
+        prev_cid = getattr(self, '_cached_clip_id', None)
+        prev_mref = getattr(self, '_cached_model_ref', None)
+        prev_cref = getattr(self, '_cached_clip_ref', None)
+
+        changed = False
+        if prev_mid is not None:
+            if current_mid != prev_mid:
+                changed = True
+            elif prev_mref is not None and prev_mref() is not model:
+                changed = True  # same id, old object gone — address reuse
+        if not changed and prev_cid is not None:
+            if current_cid != prev_cid:
+                changed = True
+            elif prev_cref is not None and prev_cref() is not clip:
+                changed = True
+
+        def _ref(obj):
+            if obj is None:
+                return None
+            try:
+                return weakref.ref(obj)
+            except TypeError:
+                return None
+
+        self._cached_model_id = current_mid
+        self._cached_clip_id = current_cid
+        self._cached_model_ref = _ref(model)
+        self._cached_clip_ref = _ref(clip)
+        return changed
 
     @staticmethod
     def _get_compute_device():
@@ -694,10 +866,32 @@ class _LoRAMergeBase:
     def _detect_architecture(lora_sd):
         """
         Detect model architecture from LoRA key patterns.
-        Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'sd15', 'ltx', 'qwen_image', or 'unknown'.
+        Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'sd15', 'ltx',
+        'qwen_image', 'ideogram4', or 'unknown'.
         """
         keys = list(lora_sd.keys())
         keys_str = ' '.join(k.lower() for k in keys)
+
+        # Ideogram 4: NextDiT-family single-stream DiT with the same
+        # layers.N.attention.qkv pattern as Z-Image (Lumina2) — MUST be
+        # checked first. Discriminators: attention output proj is
+        # "attention.o" (Z-Image: "attention.out"), modulation is lowercase
+        # "adaln_modulation" (Z-Image: "adaLN_modulation"), the fal trainer
+        # uses a conditional_transformer. prefix, and the fused qkv up/B
+        # matrix has 13824 rows (3x4608; Z-Image Turbo: 6912 = 3x2304).
+        if any('conditional_transformer.layers.' in k for k in keys):
+            return 'ideogram4'
+        if any(re.search(r'layers[._]\d+[._]attention[._]o(?=[._])', k) for k in keys):
+            return 'ideogram4'
+        if (any('adaln_modulation' in k for k in keys)
+                and any('feed_forward' in k for k in keys)):
+            return 'ideogram4'
+        for k in keys:
+            if (re.search(r'layers[._]\d+[._]attention[._]qkv', k)
+                    and ('lora_B' in k or 'lora_up' in k or '.lora.up.' in k)):
+                shape = getattr(lora_sd.get(k), 'shape', None)
+                if shape is not None and len(shape) >= 1 and shape[0] == 13824:
+                    return 'ideogram4'
 
         # Z-Image Turbo (Lumina2): layers.N with attention patterns
         # Handles: diffusion_model.layers.N, single_transformer_blocks.N (non-FLUX),
@@ -743,17 +937,29 @@ class _LoRAMergeBase:
         if any('double_blocks' in k or 'single_blocks' in k for k in keys):
             return 'flux'
 
-        # Wan: blocks.N with self_attn/cross_attn/ffn
-        if any(('blocks.' in k or 'blocks_' in k) and
-               any(x in k for x in ['self_attn', 'cross_attn', 'ffn'])
-               for k in keys):
-            return 'wan'
-
-        # ACE-Step: layers.N with self_attn/cross_attn using q_proj/k_proj/v_proj
+        # ACE-Step v1.5: layers.N with self_attn/cross_attn using q_proj/k_proj/v_proj
         if any('layers.' in k and ('self_attn' in k or 'cross_attn' in k)
                and any(x in k for x in ['q_proj', 'k_proj', 'v_proj', 'o_proj'])
                for k in keys):
             return 'acestep'
+
+        # ACE-Step v1.0: transformer_blocks.N with attn/cross_attn and to_q/to_k/to_v,
+        # or unique keys like speaker_embedder / lyric_encoder
+        if any('speaker_embedder' in k or 'lyric_encoder' in k for k in keys):
+            return 'acestep'
+        if any(re.search(r'transformer_blocks\.\d+\.(?:attn|cross_attn)\.to_(?:q|k|v|out)', k)
+               for k in keys):
+            return 'acestep'
+
+        # Wan: blocks.N with self_attn/cross_attn/ffn (exclude transformer_blocks which is ACE-Step v1.0)
+        def _is_wan_key(k):
+            if 'transformer_blocks' in k:
+                return False
+            return ('blocks.' in k or 'blocks_' in k) and any(
+                x in k for x in ['self_attn', 'cross_attn', 'ffn']
+            )
+        if any(_is_wan_key(k) for k in keys):
+            return 'wan'
 
         # LTX Video: transformer_blocks with attn1/attn2 and adaln_single
         if any('adaln_single' in k for k in keys):
@@ -1271,11 +1477,62 @@ class _LoRAMergeBase:
             normalized[new_k] = v
         return normalized
 
+    @classmethod
+    def _normalize_keys_ideogram4(cls, lora_sd):
+        """
+        Normalize Ideogram 4 LoRA keys to the canonical ComfyUI form:
+        diffusion_model.layers.N.{attention.{qkv,o}, feed_forward.{w1,w2,w3},
+        adaln_modulation}.
+
+        Handles:
+        - ai-toolkit native: diffusion_model.layers.N.... (passthrough)
+        - fal trainer: conditional_transformer.layers.N....
+        - PEFT/diffusers-style prefixes: base_model.model., transformer.,
+          bare layers.
+        - Kohya-style underscores: lora_unet_layers_N_attention_qkv
+
+        Unlike Z-Image, the native ComfyUI weight layout keeps qkv FUSED and
+        every known trainer targets the fused weight — no split/re-fuse
+        needed. Split-attention (to_q/to_k/to_v) diffusers-layout LoRAs are
+        passed through unchanged: none exist in the wild and ComfyUI itself
+        has no key mapping for them on this model.
+
+        Returns new dict with normalized keys. Original dict is not modified.
+        """
+        normalized = {}
+        for k, v in lora_sd.items():
+            new_k = k
+
+            # Strip PEFT prefix
+            if new_k.startswith("base_model.model."):
+                new_k = new_k[len("base_model.model."):]
+
+            # Kohya underscore format -> dotted
+            if new_k.startswith("lora_unet_"):
+                rest = new_k[len("lora_unet_"):]
+                rest = re.sub(r"^layers_(\d+)_", r"layers.\1.", rest)
+                rest = re.sub(r"attention_(qkv|o)(?=[._])", r"attention.\1", rest)
+                rest = re.sub(r"feed_forward_(w\d)(?=[._])", r"feed_forward.\1", rest)
+                new_k = f"diffusion_model.{rest}"
+
+            # fal trainer wraps the conditional model; PEFT exports use
+            # transformer. — both map to ComfyUI's diffusion_model. prefix
+            new_k = re.sub(r"^conditional_transformer\.", "diffusion_model.", new_k)
+            new_k = re.sub(r"^transformer\.", "diffusion_model.", new_k)
+            if new_k.startswith("layers."):
+                new_k = "diffusion_model." + new_k
+
+            normalized[new_k] = v
+        return normalized
+
     _ACESTEP_COMPOUND_NAMES = sorted([
         "self_attn", "cross_attn",
         "q_proj", "k_proj", "v_proj", "o_proj",
         "gate_proj", "up_proj", "down_proj",
         "lora_up", "lora_down", "lora_A", "lora_B", "lora_mid",
+        "speaker_embedder", "lyric_encoder",
+        "linear_q", "linear_k", "linear_v",
+        "to_out", "to_q", "to_k", "to_v",
     ], key=len, reverse=True)
 
     @classmethod
@@ -1297,28 +1554,66 @@ class _LoRAMergeBase:
     def _normalize_keys_acestep(cls, lora_sd):
         """
         Normalize ACE-Step LoRA keys to canonical
-        diffusion_model.layers.N.{self,cross}_attn.* form.
+        diffusion_model.layers.N.{self,cross}_attn.{q,k,v,o}_proj form.
+
+        Handles:
+        - v1.5 PEFT: base_model.model.layers.N.{self,cross}_attn.{q,k,v,o}_proj
+        - v1.5 Kohya: lora_unet_layers_N_self_attn_q_proj
+        - v1.0 diffusers: transformer_blocks.N.{attn,cross_attn}.to_{q,k,v}
+        - v1.0 special: speaker_embedder, lyric_encoder.encoders.N.self_attn.linear_{q,k,v}
         """
         normalized = {}
         for k, v in lora_sd.items():
             new_k = k
 
+            # Strip PEFT prefix (v1.5)
             if new_k.startswith("base_model.model."):
                 new_k = new_k[len("base_model.model."):]
 
+            # Kohya underscore format → dotted
             if new_k.startswith("lora_unet_"):
                 rest = new_k[len("lora_unet_"):]
                 rest = cls._acestep_underscore_to_dot(rest)
                 new_k = f"diffusion_model.{rest}"
 
+            # Common prefix normalization
             new_k = re.sub(r"^transformer\.", "diffusion_model.", new_k)
             new_k = re.sub(r"^model\.", "diffusion_model.", new_k)
 
             if new_k.startswith("layers."):
                 new_k = "diffusion_model." + new_k
+            if new_k.startswith("transformer_blocks."):
+                new_k = "diffusion_model." + new_k
 
+            # v1.0 → v1.5: transformer_blocks.N → layers.N
+            new_k = re.sub(
+                r"^diffusion_model\.transformer_blocks\.(\d+)\.",
+                r"diffusion_model.layers.\1.", new_k
+            )
+
+            # v1.0 → v1.5: bare .attn. → .self_attn. (cross_attn already correct)
+            # Safe: .cross_attn. and .self_attn. have _ before attn, not .
+            new_k = re.sub(r"\.attn\.", ".self_attn.", new_k)
+
+            # v1.0 → v1.5: to_q/to_k/to_v → q_proj/k_proj/v_proj
             if new_k.startswith("diffusion_model.layers."):
-                new_k = re.sub(r"\.to_(q|k|v|out)\.", lambda m: f".{m.group(1)}_proj.", new_k)
+                new_k = re.sub(
+                    r"\.to_(q|k|v)\.", lambda m: f".{m.group(1)}_proj.", new_k
+                )
+                new_k = re.sub(r"\.to_out\.0\.", ".o_proj.", new_k)
+                new_k = re.sub(r"\.to_out\.", ".o_proj.", new_k)
+
+            # v1.0 lyric_encoder: linear_q/k/v → q_proj/k_proj/v_proj
+            if "lyric_encoder" in new_k:
+                new_k = new_k.replace(".linear_q.", ".q_proj.")
+                new_k = new_k.replace(".linear_k.", ".k_proj.")
+                new_k = new_k.replace(".linear_v.", ".v_proj.")
+                if not new_k.startswith("diffusion_model."):
+                    new_k = "diffusion_model." + new_k
+
+            # v1.0 speaker_embedder: keep as-is but add prefix
+            if new_k.startswith("speaker_embedder"):
+                new_k = "diffusion_model." + new_k
 
             normalized[new_k] = v
         return normalized
@@ -1345,6 +1640,8 @@ class _LoRAMergeBase:
             return cls._normalize_keys_ltx(lora_sd)
         elif architecture == 'qwen_image':
             return cls._normalize_keys_qwen_image(lora_sd)
+        elif architecture == 'ideogram4':
+            return cls._normalize_keys_ideogram4(lora_sd)
         return lora_sd  # unknown — pass through unchanged
 
     @staticmethod
@@ -1413,6 +1710,12 @@ class _LoRAMergeBase:
                     k_diff = k_patch[1][0]
                     v_diff = v_patch[1][0]
                     store_dtype = q_diff.dtype
+                    # Components can sit on different devices (GPU-deferred
+                    # score-during-merge patches next to CPU ones) — unify
+                    if k_diff.device != q_diff.device:
+                        k_diff = k_diff.to(q_diff.device)
+                    if v_diff.device != q_diff.device:
+                        v_diff = v_diff.to(q_diff.device)
                     fused_diff = torch.cat([q_diff, k_diff, v_diff], dim=0)
                     if store_dtype not in (torch.float32, torch.float64):
                         fused_diff = fused_diff.to(store_dtype)
@@ -1455,6 +1758,9 @@ class _LoRAMergeBase:
                                 store_dtype = dtype
                                 break
                     parts = [_LoRAMergeBase._expand_patch_to_diff(comp_patch) for comp_patch in [q_patch, k_patch, v_patch]]
+                    # Unify devices (GPU-deferred diffs can mix with CPU adapters)
+                    parts = [p if p.device == parts[0].device else p.to(parts[0].device)
+                             for p in parts]
                     fused_diff = torch.cat(parts, dim=0)
                     if store_dtype not in (torch.float32, torch.float64):
                         fused_diff = fused_diff.to(store_dtype)
@@ -1625,8 +1931,10 @@ class _LoRAMergeBase:
         return torch.Size(target_shape)
 
     @staticmethod
-    def _resolve_branch_strength(item, is_clip, clip_strength_multiplier):
-        """Base per-LoRA strength for the target branch before auto-scaling."""
+    def _resolve_branch_strength(item, is_clip):
+        """Base per-LoRA strength for the target branch before auto-scaling.
+        The global clip_strength_multiplier is deliberately NOT applied here —
+        it scales the merged clip patches once at add_patches time."""
         if is_clip:
             if item["clip_strength"] is not None:
                 return item["clip_strength"]
@@ -1814,7 +2122,7 @@ class _LoRAMergeBase:
                 continue
             filtered[i] = diff
             eff_strengths[i] = self._resolve_branch_strength(
-                active_loras[i], is_clip, clip_strength_multiplier
+                active_loras[i], is_clip
             ) * auto_scale
             rank_sums[i] = ranks.get(i, 0)
 
@@ -1862,27 +2170,34 @@ class _LoRAMergeBase:
             ("{}.lora.up.weight", "{}.lora.down.weight"),           # diffusers3
         ]
 
-        for up_fmt, down_fmt in formats:
+        def _extract(up_key, down_key):
+            mat_up = lora_dict[up_key]
+            mat_down = lora_dict[down_key]
+            alpha_key = "{}.alpha".format(key_prefix)
+            alpha = lora_dict.get(alpha_key, None)
+            if alpha is not None:
+                alpha = alpha.item()
+            else:
+                alpha = mat_down.shape[0]
+            mid_key = "{}.lora_mid.weight".format(key_prefix)
+            mid = lora_dict.get(mid_key, None)
+            return (mat_up, mat_down, alpha, mid)
+
+        # Try cached format first
+        dict_id = id(lora_dict)
+        cached_fmt = self._lora_format_cache.get(dict_id)
+        if cached_fmt is not None:
+            up_key = formats[cached_fmt][0].format(key_prefix)
+            down_key = formats[cached_fmt][1].format(key_prefix)
+            if up_key in lora_dict and down_key in lora_dict:
+                return _extract(up_key, down_key)
+
+        for fmt_idx, (up_fmt, down_fmt) in enumerate(formats):
             up_key = up_fmt.format(key_prefix)
             down_key = down_fmt.format(key_prefix)
-
             if up_key in lora_dict and down_key in lora_dict:
-                mat_up = lora_dict[up_key]
-                mat_down = lora_dict[down_key]
-
-                # Alpha
-                alpha_key = "{}.alpha".format(key_prefix)
-                alpha = lora_dict.get(alpha_key, None)
-                if alpha is not None:
-                    alpha = alpha.item()
-                else:
-                    alpha = mat_down.shape[0]  # rank as default
-
-                # Mid (for LoCon)
-                mid_key = "{}.lora_mid.weight".format(key_prefix)
-                mid = lora_dict.get(mid_key, None)
-
-                return (mat_up, mat_down, alpha, mid)
+                self._lora_format_cache[dict_id] = fmt_idx
+                return _extract(up_key, down_key)
 
         return None
 
@@ -2171,12 +2486,19 @@ class _LoRAMergeBase:
             }
 
         n = flat_a.numel()
+        sample_scale = 1.0
         if n > 100000:
             target_device = flat_a.device
             g = torch.Generator(device=target_device).manual_seed(42)
-            indices = torch.randperm(n, device=target_device, generator=g)[:100000]
+            indices = torch.randint(0, n, (100000,), device=target_device, generator=g)
             flat_a = flat_a[indices]
             flat_b = flat_b[indices]
+            # Sampled sums estimate (k/n) of the full-tensor sums; rescale
+            # dot/norm_* back to full scale so they are comparable with the
+            # exact per-LoRA norms accumulated in branch_energy (energy
+            # cross-terms) and so cross-prefix weighting is element-count
+            # proportional instead of sample-count proportional.
+            sample_scale = n / 100000.0
 
         mask = (flat_a != 0) & (flat_b != 0)
         n_overlap = mask.sum().item()
@@ -2197,9 +2519,9 @@ class _LoRAMergeBase:
 
         a_overlap = flat_a[mask]
         b_overlap = flat_b[mask]
-        dot = (a_overlap * b_overlap).sum().item()
-        norm_a_sq = (a_overlap * a_overlap).sum().item()
-        norm_b_sq = (b_overlap * b_overlap).sum().item()
+        dot = (a_overlap * b_overlap).sum().item() * sample_scale
+        norm_a_sq = (a_overlap * a_overlap).sum().item() * sample_scale
+        norm_b_sq = (b_overlap * b_overlap).sum().item() * sample_scale
         n_conflict = (a_overlap.sign() != b_overlap.sign()).sum().item()
 
         a_rms = a_overlap.square().mean().sqrt()
@@ -2217,13 +2539,27 @@ class _LoRAMergeBase:
         weighted_total = weights.sum().item()
         mismatch = a_strong.sign() != b_strong.sign()
         weighted_conflict = weights[mismatch].sum().item() if weighted_total > 0 else 0.0
-
-        denom = math.sqrt(norm_a_sq * norm_b_sq) if norm_a_sq > 0 and norm_b_sq > 0 else 0.0
-        cos_sim = dot / denom if denom > 0 else 0.0
-        cos_sim = self._safe_unit_clamp(cos_sim)
-        expected_conflict = math.acos(cos_sim) / math.pi if denom > 0 else 0.0
         weighted_ratio = (weighted_conflict / weighted_total) if weighted_total > 0 else 0.0
-        excess_conflict = max(weighted_ratio - expected_conflict, 0.0)
+
+        # Excess conflict: measured sign-mismatch beyond the rate implied by the
+        # correlation. Sheppard's theorem / the degree-0 arc-cosine kernel give
+        # the UNWEIGHTED expectation P(mismatch) = arccos(rho)/pi — so both the
+        # measured fraction and the correlation must be the plain (unweighted)
+        # statistics of the SAME position set. The previous magnitude-weighted
+        # ratio sat systematically below this baseline for correlated LoRAs
+        # (mismatches concentrate on small-|min| positions; cf. Cho & Saul's
+        # J1 != J0 angular dependence), under-detecting real conflict.
+        n_strong = a_strong.numel()
+        strong_mismatch_frac = (mismatch.sum().item() / n_strong) if n_strong > 0 else 0.0
+        dot_strong = (a_strong * b_strong).sum().item()
+        na_strong = (a_strong * a_strong).sum().item()
+        nb_strong = (b_strong * b_strong).sum().item()
+        denom_strong = (math.sqrt(na_strong * nb_strong)
+                        if na_strong > 0 and nb_strong > 0 else 0.0)
+        cos_strong = (self._safe_unit_clamp(dot_strong / denom_strong)
+                      if denom_strong > 0 else 0.0)
+        expected_conflict = math.acos(cos_strong) / math.pi if denom_strong > 0 else 0.0
+        excess_conflict = max(strong_mismatch_frac - expected_conflict, 0.0)
 
         subspace_overlap = self._compute_subspace_overlap(basis_a, basis_b)
         subspace_weight = math.sqrt(norm_a_sq * norm_b_sq) if norm_a_sq > 0 and norm_b_sq > 0 else 0.0
@@ -2263,8 +2599,12 @@ class _LoRAMergeBase:
         """
         DARE sparsification: randomly drop parameters and rescale survivors.
         Each element is kept with probability `density`, then rescaled by 1/q.
-        With dampening=0: q=density (standard DARE). With dampening>0: q is
-        interpolated toward 1.0, reducing noise amplification (DAREx, ICLR 2025).
+        With dampening=0: q=density (standard DARE, exact 1/(1-p) rescale).
+        With dampening>0: q is interpolated toward 1.0, a data-free heuristic
+        INSPIRED BY DAREx-q (ICLR 2025) — the paper itself selects q>1-p
+        empirically (validation grid search / output-difference minimization),
+        not via this closed form. Dampening>0 intentionally biases the
+        estimator low (E[out] = density/q < 1) to tame variance blow-up.
         """
         if density >= 1.0:
             return tensor
@@ -2477,7 +2817,7 @@ class _LoRAMergeBase:
             logging.debug(f"[LoRA Optimizer] Updated model size: +{patch_bytes / (1024**2):.0f}MB patches")
 
     @staticmethod
-    def _ties_elect_sign(trimmed_diffs, method="frequency"):
+    def _ties_elect_sign(trimmed_diffs, method="total"):
         """
         TIES Step 2: Elect Sign — determine majority sign direction per weight position.
 
@@ -2505,7 +2845,7 @@ class _LoRAMergeBase:
         return majority_sign
 
     @staticmethod
-    def _columnwise_elect_sign(trimmed_diffs, method="frequency"):
+    def _columnwise_elect_sign(trimmed_diffs, method="total"):
         """
         Column-wise sign election: each output neuron (row) votes as a unit
         instead of each element voting independently. For Conv2d tensors,
@@ -2918,7 +3258,7 @@ class _LoRAMergeBase:
         return rank
 
     @torch.no_grad()
-    def _merge_diffs(self, diffs_with_weights, mode, density=0.5, majority_sign_method="frequency",
+    def _merge_diffs(self, diffs_with_weights, mode, density=0.5, majority_sign_method="total",
                      compute_device=None, sparsification="disabled",
                      sparsification_density=0.7, sparsification_generator=None,
                      merge_refinement="none", dare_dampening=0.0,
@@ -3060,10 +3400,14 @@ class _LoRAMergeBase:
             return result.cpu() if to_cpu else result
 
         elif mode == "slerp":
-            # Iterative pairwise SLERP — magnitude-preserving blend for N diffs.
-            # For 2 diffs: equivalent to standard SLERP.
-            # For 3+ diffs: iteratively SLERPs accumulated result with next diff,
-            # sorted by descending |weight| so strongest LoRA anchors direction.
+            # Magnitude-preserving spherical blend for N diffs.
+            # For 2 diffs: standard SLERP (exact spherical geodesic — the
+            # Karcher mean reduces to it for N=2).
+            # For 3+ diffs: weighted Karcher (Fréchet) mean on the unit
+            # hypersphere. Iterative pairwise SLERP is order-dependent and
+            # collapses empirically for N>=3 (multi-SLERP scores below plain
+            # linear averaging at m=5 models; the Karcher mean is the
+            # order-independent spherical mean it tried to approximate).
             # Final norm corrected to match weighted average of input norms.
             n_diffs = len(diffs_with_weights)
 
@@ -3087,18 +3431,18 @@ class _LoRAMergeBase:
                 z = torch.zeros(ref_diff.shape, device=dev, dtype=dtype)
                 return z.cpu() if to_cpu else z
 
-            # Pre-compute norms for later correction (before vectors are consumed)
-            input_norms = [(v.norm().item(), w) for v, w in items]
-
-            # Iterative pairwise SLERP
-            acc_v, acc_w = items[0]
-            items[0] = None  # Free tensor reference
-            for k in range(1, n_diffs):
-                next_v, next_w = items[k]
-                items[k] = None  # Free tensor reference
+            if n_diffs == 2:
+                # Pre-compute norm-correction target before vectors are consumed
+                input_norms = [(v.norm().item(), w) for v, w in items]
+                target_norm = sum(n * w for n, w in input_norms) / total_w
+                # Standard pairwise SLERP
+                acc_v, acc_w = items[0]
+                items[0] = None  # Free tensor reference
+                next_v, next_w = items[1]
+                items[1] = None  # Free tensor reference
                 frac = next_w / (acc_w + next_w) if (acc_w + next_w) > 0 else 0.5
 
-                # Compute angle between accumulated and next vector
+                # Compute angle between the two vectors
                 norm_acc = acc_v.norm()
                 norm_next = next_v.norm()
                 denom = norm_acc * norm_next
@@ -3116,13 +3460,67 @@ class _LoRAMergeBase:
                     a = torch.sin((1.0 - frac) * theta) / sin_theta
                     b = torch.sin(frac * theta) / sin_theta
                     acc_v = a * acc_v + b * next_v
+                del next_v, items
+            else:
+                # Weighted Karcher mean, BATCHED: all unit vectors live in one
+                # [N, D] matrix so each iteration is two matvecs instead of
+                # per-unit kernels with .item() syncs (measured 1.7-2.9x
+                # faster at 4-16M elements). Iterates tangent-space (log-map)
+                # weighted average -> exp-map back, from the chordal-mean
+                # init. Converges in a few iterations for vectors in a
+                # half-space (the common case after negative-weight folding).
+                numel = items[0][0].numel()
+                U = torch.empty((n_diffs, numel), device=dev, dtype=torch.float32)
+                w_raw = []
+                for idx in range(n_diffs):
+                    v, w = items[idx]
+                    items[idx] = None  # Free tensor reference
+                    U[idx].copy_(v)
+                    w_raw.append(w)
+                    del v
+                del items
+                row_norms = U.norm(dim=1)  # [N]
+                w_raw = torch.tensor(w_raw, device=dev, dtype=torch.float32)
+                keep = row_norms > 1e-12
+                if not bool(keep.any()):
+                    del U
+                    z = torch.zeros(ref_diff.shape, device=dev, dtype=dtype)
+                    return z.cpu() if to_cpu else z
+                # Norm-correction target from the same row norms (zero-norm
+                # rows contribute ~0, matching the old per-vector reads)
+                target_norm = ((row_norms * w_raw).sum() / total_w).item()
+                if not bool(keep.all()):
+                    U = U[keep]
+                    row_norms = row_norms[keep]
+                    w_raw = w_raw[keep]
+                U.div_(row_norms.unsqueeze(1))  # unit rows
+                w_t = w_raw / total_w
 
-                acc_w = acc_w + next_w
-                del next_v
-            del items
+                # Init: normalized weighted chordal (Euclidean) mean
+                m = U.t().mv(w_t)
+                m_norm = m.norm()
+                m = U[0].clone() if m_norm.item() < 1e-8 else m / m_norm
+
+                for _ in range(8):
+                    # log_m(u_i) = theta_i/sin(theta_i) * (u_i - cos_i*m)
+                    # cos clamped away from ±1: theta -> 0 contributes ~0,
+                    # antipodal (cut locus) kept finite
+                    cos = (U @ m).clamp(-1.0 + 1e-7, 1.0 - 1e-7)  # [N]
+                    theta = torch.acos(cos)
+                    coef = torch.where(theta < 1e-7,
+                                       torch.zeros_like(theta),
+                                       w_t * theta / torch.sin(theta))
+                    tangent = U.t().mv(coef) - (coef * cos).sum() * m
+                    t_norm = tangent.norm()
+                    if t_norm.item() < 1e-7:
+                        break
+                    # exp_m(t) = cos(|t|)*m + sin(|t|)*t/|t|
+                    m = torch.cos(t_norm) * m + (torch.sin(t_norm) / t_norm) * tangent
+                    m = m / m.norm().clamp(min=1e-12)
+                del U
+                acc_v = m
 
             # Norm correction: rescale to match weighted average of input norms
-            target_norm = sum(n * w for n, w in input_norms) / total_w
             current_norm = acc_v.norm().item()
             if current_norm > 1e-8:
                 acc_v = acc_v * (target_norm / current_norm)
@@ -3428,8 +3826,10 @@ class _LoRAMergeBase:
         Compute sign conflict ratio and cosine similarity components between
         two diff tensors. Samples up to 100k positions for large tensors.
         Returns (n_overlap, n_conflict, dot, norm_a_sq, norm_b_sq).
+        Used by the Conflict Editor (the optimizer/AutoTuner path uses
+        _sample_pair_metrics).
         """
-        # Avoid unnecessary .float() copies — diffs from _analyze_prefix are already float32
+        # Avoid unnecessary .float() copies — caller diffs are already float32
         flat_a = diff_a.flatten()
         flat_b = diff_b.flatten()
         if device is not None:
@@ -3444,9 +3844,12 @@ class _LoRAMergeBase:
 
         n = flat_a.numel()
         if n > 100000:
+            # randint (with replacement), like _sample_pair_metrics — randperm
+            # materialized a full n-element int64 permutation (128MB at 16M
+            # elements) per pair just to take the first 100k entries
             target_device = flat_a.device
             g = torch.Generator(device=target_device).manual_seed(42)
-            indices = torch.randperm(n, device=target_device, generator=g)[:100000]
+            indices = torch.randint(0, n, (100000,), device=target_device, generator=g)
             flat_a = flat_a[indices]
             flat_b = flat_b[indices]
 
@@ -3517,7 +3920,8 @@ def _generate_param_grid():
 
 def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
                             magnitude_ratio, prefix_stats, arch_preset=None,
-                            avg_excess_conflict=None, avg_subspace_overlap=0.0):
+                            avg_excess_conflict=None, avg_subspace_overlap=0.0,
+                            decision_conflicts=None):
     """
     Score a merge config against analysis metrics (no merge needed).
     Returns float score in [0, 1] where higher = better predicted quality.
@@ -3550,11 +3954,14 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
         if avg_subspace_overlap > 0:
             effective_conflict *= (0.5 + 0.5 * avg_subspace_overlap)
 
-    decision_conflicts = [
-        ps.get("decision_conflict", ps.get("excess_conflict", ps.get("conflict_ratio", 0.0)))
-        for ps in prefix_stats.values()
-        if ps.get("n_loras", 0) > 1
-    ] if prefix_stats else []
+    if decision_conflicts is None:
+        # Config-independent — callers scoring a whole grid should compute
+        # this once and pass it in instead of rebuilding it per config
+        decision_conflicts = [
+            ps.get("decision_conflict", ps.get("excess_conflict", ps.get("conflict_ratio", 0.0)))
+            for ps in prefix_stats.values()
+            if ps.get("n_loras", 0) > 1
+        ] if prefix_stats else []
 
     # --- Mode fit score (0-0.4) ---
     if opt_mode == "per_prefix":
@@ -3680,8 +4087,54 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
     return score
 
 
+def _diff_score_stats(tensor, compute_svd):
+    """Scoring stats for one full-rank diff tensor: (fro_norm, sparsity, eff_rank).
+
+    Single implementation shared by _score_merge_result and the inline
+    score-during-merge path in _merge_one_group, so both produce identical
+    values for the same tensor on the same device. sparsity/eff_rank are
+    None when not measurable (all-zero tensor / non-2D / SVD failure).
+    """
+    fro_norm = torch.linalg.vector_norm(tensor, dtype=torch.float32).item()
+    t_abs = tensor.abs()
+    threshold = t_abs.max().item() * 0.01
+    sparsity = None
+    if threshold > 0:
+        # count_nonzero is exact where a float32 mean of 0/1s starts
+        # rounding above 2^24 elements
+        sparsity = torch.count_nonzero(t_abs < threshold).item() / t_abs.numel()
+    del t_abs
+    eff_rank = None
+    if compute_svd and tensor.dim() == 2 and min(tensor.shape) > 1:
+        try:
+            thin_dim = min(tensor.shape)
+            if thin_dim <= 32:
+                # Small enough for direct SVD (Triton-accelerated)
+                s = _triton_svdvals(tensor.float(), n_sv=min(thin_dim, 64))
+            else:
+                # Large tensor: use Gram matrix + eigvalsh to avoid
+                # full SVD memory allocation (critical for video models)
+                t = tensor.float()
+                if t.shape[0] <= t.shape[1]:
+                    gram = torch.mm(t, t.T)
+                else:
+                    gram = torch.mm(t.T, t)
+                del t
+                eigs = torch.linalg.eigvalsh(gram).flip(-1).clamp(min=0)
+                s = eigs.sqrt()
+                del gram, eigs
+            s_norm = s / (s.sum() + 1e-10)
+            entropy = -(s_norm * (s_norm + 1e-10).log()).sum().item()
+            eff_rank = min(math.exp(entropy), thin_dim)
+            del s
+        except Exception:
+            pass
+    return fro_norm, sparsity, eff_rank
+
+
 def _score_merge_result(model_patches, clip_patches, compute_svd=True,
-                        score_device=None, arch_preset=None, lora_svd=False):
+                        score_device=None, arch_preset=None, lora_svd=False,
+                        _baseline=None, _return_raw=False, _inline_stats=None):
     """
     Score an actual merge result by measuring output quality metrics.
     Returns dict with individual metrics and composite score in [0, 1].
@@ -3693,10 +4146,14 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
     When arch_preset is provided, uses arch-aware ideal sparsity from
     dare_ideal_density instead of hardcoded 40%.
     """
-    norms = []
-    importance_values = []
-    effective_ranks = []
-    sparsities = []
+    if _baseline is not None:
+        norms = list(_baseline["norms"])
+        effective_ranks = list(_baseline["effective_ranks"])
+        sparsities = list(_baseline["sparsities"])
+    else:
+        norms = []
+        effective_ranks = []
+        sparsities = []
     _svd_tasks = []  # (gram_up [rank,rank], rank_int) — batched after loop
 
     all_patches = (
@@ -3736,7 +4193,6 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
             scale = alpha / dim if (alpha is not None and dim is not None) else 1.0
             fro_norm = (w1.float().norm().item() * w2.float().norm().item() * abs(scale))
             norms.append(fro_norm)
-            importance_values.append(fro_norm)
             del w1, w2
             continue
         elif isinstance(patch, LoHaAdapter):
@@ -3745,7 +4201,6 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
                 diff = diff.to(score_device)
             fro_norm = diff.norm().item()
             norms.append(fro_norm)
-            importance_values.append(fro_norm)
             max_val = diff.abs().max().item()
             threshold = max_val * 0.01
             if threshold > 0:
@@ -3759,21 +4214,26 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
             if mat_up is not None and mat_down is not None:
                 rank = mat_down.shape[0] if mat_down.dim() >= 1 else 1
                 scale = alpha / rank if rank > 0 else 1.0
-                up_flat = mat_up.flatten(start_dim=1).float()
-                down_flat = mat_down.flatten(start_dim=1).float()
+                up_flat = mat_up.flatten(start_dim=1)
+                down_flat = mat_down.flatten(start_dim=1)
                 if score_device is not None:
                     up_flat = up_flat.to(score_device)
                     down_flat = down_flat.to(score_device)
+                up_flat = up_flat.float()
+                down_flat = down_flat.float()
                 # ||AB||_F^2 = tr(A^T A B B^T) — avoids materializing full diff
                 gram_up = torch.mm(up_flat.T, up_flat)
                 gram_down = torch.mm(down_flat, down_flat.T)
                 fro_norm = (torch.trace(gram_up @ gram_down).clamp(min=0) ** 0.5 * abs(scale)).item()
                 norms.append(fro_norm)
-                importance_values.append(fro_norm)
-                # Estimate element-wise sparsity by sampling columns of the product
+                # Estimate element-wise sparsity by sampling columns of the product.
+                # Seeded per target key: unseeded sampling made composite scores
+                # (and thus candidate rankings) vary run-to-run.
                 n_cols = down_flat.shape[1]
                 sample_k = min(64, n_cols)
-                col_idx = torch.randperm(n_cols, device=down_flat.device)[:sample_k]
+                _col_g = torch.Generator(device=down_flat.device)
+                _col_g.manual_seed(zlib.crc32(str(target_key).encode("utf-8")) & 0xFFFFFFFF)
+                col_idx = torch.randperm(n_cols, device=down_flat.device, generator=_col_g)[:sample_k]
                 sampled = torch.mm(up_flat, down_flat[:, col_idx]) * scale
                 max_val = sampled.abs().max().item()
                 threshold = max_val * 0.01
@@ -3793,47 +4253,31 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
         if tensor is None:
             continue
 
-        # Compute norm and sparsity without fp32 copy for large tensors
+        # Inline stats measured at merge time (score-during-merge): same
+        # tensor object, stats computed on the compute device by the same
+        # helper — skip the transfer and recompute entirely. The identity
+        # check makes stale id() collisions impossible to act on.
+        if _inline_stats is not None:
+            _entry = _inline_stats.get(id(tensor))
+            if _entry is not None and _entry[0] is tensor:
+                fro_norm, sparsity, eff_rank = _entry[1]
+                norms.append(fro_norm)
+                if sparsity is not None:
+                    sparsities.append(sparsity)
+                if eff_rank is not None:
+                    effective_ranks.append(eff_rank)
+                del tensor
+                continue
+
         if score_device is not None:
             tensor = tensor.to(score_device)
 
-        # Frobenius norm — avoid full fp32 copy for non-float32 tensors
-        fro_norm = tensor.to(dtype=torch.float32).norm().item() if tensor.dtype != torch.float32 else tensor.norm().item()
+        fro_norm, sparsity, eff_rank = _diff_score_stats(tensor, compute_svd)
         norms.append(fro_norm)
-        importance_values.append(fro_norm)
-
-        # Sparsity — compute before SVD to free tensor sooner
-        threshold = tensor.abs().max().item() * 0.01
-        if threshold > 0:
-            sparsity = (tensor.abs() < threshold).to(dtype=torch.float32).mean().item()
+        if sparsity is not None:
             sparsities.append(sparsity)
-
-        # Effective rank via spectral analysis (optional, expensive)
-        if compute_svd and tensor.dim() == 2 and min(tensor.shape) > 1:
-            try:
-                thin_dim = min(tensor.shape)
-                if thin_dim <= 32:
-                    # Small enough for direct SVD (Triton-accelerated)
-                    s = _triton_svdvals(tensor.float(), n_sv=min(thin_dim, 64))
-                else:
-                    # Large tensor: use Gram matrix + eigvalsh to avoid
-                    # full SVD memory allocation (critical for video models)
-                    t = tensor.float()
-                    if t.shape[0] <= t.shape[1]:
-                        gram = torch.mm(t, t.T)
-                    else:
-                        gram = torch.mm(t.T, t)
-                    del t
-                    eigs = torch.linalg.eigvalsh(gram).flip(-1).clamp(min=0)
-                    s = eigs.sqrt()
-                    del gram, eigs
-                s_norm = s / (s.sum() + 1e-10)
-                entropy = -(s_norm * (s_norm + 1e-10).log()).sum().item()
-                eff_rank = min(math.exp(entropy), thin_dim)
-                effective_ranks.append(eff_rank)
-                del s
-            except Exception:
-                pass
+        if eff_rank is not None:
+            effective_ranks.append(eff_rank)
         del tensor
 
     # Batched effective-rank from deferred gram matrices.
@@ -3868,14 +4312,10 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
         metrics["norm_mean"] = 0.0
         metrics["norm_cv"] = 1.0
 
-    if importance_values:
-        metrics["importance_mean"] = sum(importance_values) / len(importance_values)
-        metrics["importance_std"] = (sum((n - metrics["importance_mean"])**2 for n in importance_values)
-                                     / len(importance_values)) ** 0.5
-        metrics["importance_cv"] = metrics["importance_std"] / (metrics["importance_mean"] + 1e-10)
-    else:
-        metrics["importance_mean"] = 0.0
-        metrics["importance_cv"] = metrics["norm_cv"]
+    # importance_* mirrored norm_* exactly (every append site pushed the same
+    # value) — keep the metric keys for report/consumer compatibility
+    metrics["importance_mean"] = metrics["norm_mean"]
+    metrics["importance_cv"] = metrics["norm_cv"]
 
     if effective_ranks:
         metrics["effective_rank_mean"] = sum(effective_ranks) / len(effective_ranks)
@@ -3913,15 +4353,43 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
         score += metrics["sparsity_fit"] * 0.5
 
     metrics["composite_score"] = score
+    if _return_raw:
+        metrics["_raw"] = {
+            "norms": norms,
+            "effective_ranks": effective_ranks,
+            "sparsities": sparsities,
+        }
     return metrics
 
 
+def _evaluator_file_fingerprint(module_path):
+    """mtime:size of an evaluator file; '' for importable module names."""
+    if module_path and os.path.isfile(module_path):
+        try:
+            st = os.stat(module_path)
+            return f"{st.st_mtime}:{st.st_size}"
+        except OSError:
+            pass
+    return ""
+
+
+_EVAL_CALLABLE_CACHE = {}
+
+
 def _load_python_callable(module_path, callable_name):
-    """Load a callable from either a Python file path or importable module name."""
+    """Load a callable from either a Python file path or importable module name.
+    File-path evaluators are cached keyed by (path, callable, mtime, size) so
+    module-level setup (reference images, pipelines) doesn't re-run for every
+    candidate — and an edited file is picked up automatically."""
     if not module_path or not callable_name:
         raise ValueError("module_path and callable_name are required")
 
     if os.path.isfile(module_path):
+        cache_key = (module_path, callable_name,
+                     _evaluator_file_fingerprint(module_path))
+        fn = _EVAL_CALLABLE_CACHE.get(cache_key)
+        if fn is not None:
+            return fn
         module_name = f"lora_optimizer_eval_{hashlib.sha256(module_path.encode()).hexdigest()[:12]}"
         spec = importlib.util.spec_from_file_location(module_name, module_path)
         if spec is None or spec.loader is None:
@@ -3930,10 +4398,15 @@ def _load_python_callable(module_path, callable_name):
         spec.loader.exec_module(module)
     else:
         module = importlib.import_module(module_path)
+        cache_key = None
 
     fn = getattr(module, callable_name, None)
     if fn is None or not callable(fn):
         raise AttributeError(f"Callable '{callable_name}' not found in {module_path}")
+    if cache_key is not None:
+        if len(_EVAL_CALLABLE_CACHE) > 8:
+            _EVAL_CALLABLE_CACHE.clear()
+        _EVAL_CALLABLE_CACHE[cache_key] = fn
     return fn
 
 
@@ -3979,6 +4452,13 @@ def _run_autotuner_evaluator(evaluator, model, clip, lora_data, config, analysis
     except (TypeError, ValueError):
         logging.warning(f"[LoRA AutoTuner] External evaluator returned invalid score: {score!r}")
         return {"score": None, "details": details}
+
+    if score < 0.0 or score > 1.0:
+        # Silent clamping saturates everything to 1.0 for evaluators on a
+        # 0-100/logit scale — with external_only the ranking then collapses
+        logging.warning(f"[LoRA AutoTuner] External evaluator score {score:.4g} "
+                        f"outside [0, 1] — clamping. Normalize your evaluator's "
+                        f"output to keep candidate ranking meaningful.")
 
     return {
         "score": max(0.0, min(1.0, score)),
@@ -4220,11 +4700,13 @@ class LoRAOptimizer(_LoRAMergeBase):
                                "'basic': only TIES vs weighted_average, no advanced strategy selection. "
                                "(Previously: this setting was called 'behavior_profile' with values v1.2/no_slerp/classic.)"
                 }),
-                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                "architecture_preset": (["auto", "sd_unet", "dit", "acestep_dit", "llm"], {
                     "default": "auto",
                     "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys. "
                                "'sd_unet': SD/SDXL UNet defaults. 'dit': DiT models (Flux, WAN, Z-Image, LTX, HunyuanVideo) "
-                               "with higher density floors and wider strength range. 'llm': LLM-based models (Qwen, LLaMA)."
+                               "with higher density floors and wider strength range. "
+                               "'acestep_dit': ACE-Step music DiT — tuned for voice preservation with wider orthogonal band "
+                               "and conservative TIES threshold. 'llm': LLM-based models (Qwen, LLaMA)."
                 }),
                 "merge_strategy_override": ("STRING", {
                     "default": "",
@@ -4336,314 +4818,26 @@ class LoRAOptimizer(_LoRAMergeBase):
             logging.warning(f"[LoRA Optimizer] Failed to save report: {e}")
             return None
 
-    def _process_prefix(self, lora_prefix, active_loras, model_keys, clip_keys,
-                        model, clip, device):
-        """
-        Process a single LoRA key prefix: resolve target key, compute diffs for
-        each active LoRA against the target shape. Thread-safe — all writes go
-        to local variables, reads from shared immutable data.
-
-        Returns (lora_prefix, diffs_for_key, lora_diffs_for_key, partial_stats,
-                 target_info, skip_count) or None if prefix should be skipped.
-        partial_stats is a list of (lora_index, rank, l2_norm) tuples.
-        """
-        target_key = None
-        is_clip = False
-
-        if lora_prefix in model_keys:
-            target_key = model_keys[lora_prefix]
-        elif lora_prefix in clip_keys:
-            target_key = clip_keys[lora_prefix]
-            is_clip = True
-
-        if target_key is None:
-            return None
-
-        # Handle tuple keys (for sliced weights, e.g. Flux linear1_qkv)
-        offset = None
-        if isinstance(target_key, tuple):
-            actual_key = target_key[0]
-            if len(target_key) > 1:
-                offset = target_key[1]
-        else:
-            actual_key = target_key
-
-        # Get target weight shape (use sliced shape when offset present)
-        try:
-            if is_clip:
-                target_weight = comfy.utils.get_attr(clip.cond_stage_model, actual_key)
-            else:
-                target_weight = comfy.utils.get_attr(model.model, actual_key)
-            target_shape = list(target_weight.shape)
-            if offset is not None:
-                target_shape[offset[0]] = offset[2]
-            target_shape = torch.Size(target_shape)
-        except (AttributeError, RuntimeError, IndexError):
-            return None
-
-        diffs_for_key = []
-        lora_diffs_for_key = {}
-        partial_stats = []
-        skip_count = 0
-        for i, item in enumerate(active_loras):
-            # Virtual LoRAs from sub-merges store pre-computed diffs keyed by target key
-            if item.get("_precomputed_diffs"):
-                tkey = target_key
-                raw = item["lora"].get(tkey)
-                if raw is None and isinstance(tkey, tuple):
-                    raw = item["lora"].get(tkey[0])
-                if raw is not None:
-                    if isinstance(raw, torch.Tensor):
-                        diff = raw.float()
-                    else:
-                        diff = self._expand_patch_to_diff(raw)
-                    if device is not None and diff.device != device:
-                        diff = diff.to(device)
-                    try:
-                        diff = diff.reshape(target_shape)
-                    except RuntimeError:
-                        diff = None
-                    rank = 1
-                else:
-                    continue
-            elif (lora_info := self._get_lora_key_info(item["lora"], lora_prefix)) is not None:
-                mat_up, mat_down, alpha, mid = lora_info
-                rank = mat_down.shape[0]
-                diff = self._compute_lora_diff(mat_up, mat_down, alpha, mid, target_shape, device=device)
-            else:
-                # Try LoKr / LoHa formats
-                alt = self._get_lokr_diff(item["lora"], lora_prefix, device=device)
-                if alt is None:
-                    alt = self._get_loha_diff(item["lora"], lora_prefix, device=device)
-                if alt is not None:
-                    diff, rank, _ = alt
-                    try:
-                        diff = diff.reshape(target_shape)
-                    except RuntimeError:
-                        diff = None
-                        rank = 0
-                else:
-                    continue
-
-            if diff is not None:
-                # For CLIP keys, use per-LoRA clip_strength when available
-                if is_clip and item["clip_strength"] is not None:
-                    eff_strength = item["clip_strength"]
-                else:
-                    eff_strength = item["strength"]
-                diffs_for_key.append((diff, eff_strength, i))
-                # Store sign-corrected diff for conflict analysis;
-                # negative strength inverts the LoRA's direction
-                lora_diffs_for_key[i] = diff if eff_strength >= 0 else -diff
-                # Always use model strength for l2_norms so _compute_auto_strengths
-                # can correctly undo the weighting (it divides by model strength)
-                l2 = diff.float().norm().item() * abs(item["strength"])
-                partial_stats.append((i, rank, l2))
-            else:
-                skip_count += 1
-
-        if len(diffs_for_key) == 0:
-            if skip_count > 0:
-                return (lora_prefix, [], {}, [], (target_key, is_clip), skip_count)
-            return None
-
-        return (lora_prefix, diffs_for_key, lora_diffs_for_key, partial_stats,
-                (target_key, is_clip), skip_count)
-
-    @torch.no_grad()
-    def _analyze_prefix(self, lora_prefix, active_loras, model_keys, clip_keys,
-                        model, clip, device, n_magnitude_samples=1000):
-        """
-        Pass 1 per-prefix analysis: compute diffs, sample conflicts and
-        magnitudes, then discard diffs. Returns lightweight scalars/samples
-        so the caller never accumulates full-rank diff tensors.
-
-        All GPU work (diff computation, conflict sampling, magnitude sampling)
-        stays on GPU until the final small results are copied to CPU, avoiding
-        the GPU→CPU→GPU bounce that kills pipelining.
-
-        Returns (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
-                 target_info, skip_count) or None if prefix should be skipped.
-
-        partial_stats: list of (lora_index, rank, l2_norm)
-        pair_conflicts: dict mapping (i, j) -> (overlap, conflict, dot, norm_a_sq, norm_b_sq)
-        magnitude_samples: list of small 1D CPU float tensors
-        """
-        # --- Resolve target key and shape (same as _process_prefix) ---
-        target_key = None
-        is_clip = False
-
-        if lora_prefix in model_keys:
-            target_key = model_keys[lora_prefix]
-        elif lora_prefix in clip_keys:
-            target_key = clip_keys[lora_prefix]
-            is_clip = True
-
-        if target_key is None:
-            return None
-
-        offset = None
-        if isinstance(target_key, tuple):
-            actual_key = target_key[0]
-            if len(target_key) > 1:
-                offset = target_key[1]
-        else:
-            actual_key = target_key
-
-        try:
-            if is_clip:
-                target_weight = comfy.utils.get_attr(clip.cond_stage_model, actual_key)
-            else:
-                target_weight = comfy.utils.get_attr(model.model, actual_key)
-            target_shape = list(target_weight.shape)
-            if offset is not None:
-                target_shape[offset[0]] = offset[2]
-            target_shape = torch.Size(target_shape)
-        except (AttributeError, RuntimeError, IndexError):
-            return None
-
-        # --- Compute diffs for all active LoRAs ---
-        # Keep diffs on GPU (device) for conflict + magnitude analysis.
-        # _compute_lora_diff normally returns CPU when device=cuda, so we
-        # call it with device=None and manually move matrices to GPU.
-        use_gpu = device is not None and device.type != "cpu"
-        diffs = {}  # lora_index -> diff tensor (on device)
-        eff_strengths = {}  # lora_index -> effective strength
-        partial_stats = []
-        skip_count = 0
-
-        for i, item in enumerate(active_loras):
-            # Virtual LoRAs from sub-merges store pre-computed diffs keyed by target key
-            if item.get("_precomputed_diffs"):
-                tkey = target_key
-                raw = item["lora"].get(tkey)
-                if raw is None and isinstance(tkey, tuple):
-                    raw = item["lora"].get(tkey[0])
-                if raw is None:
-                    continue
-                if isinstance(raw, torch.Tensor):
-                    diff = raw.float()
-                else:
-                    diff = self._expand_patch_to_diff(raw)
-                if device is not None and diff.device != device:
-                    diff = diff.to(device)
-                try:
-                    diff = diff.reshape(target_shape)
-                except RuntimeError:
-                    skip_count += 1
-                    continue
-                if use_gpu and diff.device.type == "cpu":
-                    diff = diff.to(device)
-                rank = 1  # unknown rank for virtual LoRAs
-            elif (lora_info := self._get_lora_key_info(item["lora"], lora_prefix)) is not None:
-                mat_up, mat_down, alpha, mid = lora_info
-                rank = mat_down.shape[0]
-
-                # Compute diff on GPU but DON'T copy back to CPU yet
-                if use_gpu:
-                    mat_up = mat_up.to(device)
-                    mat_down = mat_down.to(device)
-                    if mid is not None:
-                        mid = mid.to(device)
-                scale = alpha / rank
-
-                if mid is not None:
-                    final_shape = [mat_down.shape[1], mat_down.shape[0], mid.shape[2], mid.shape[3]]
-                    mat_down = (
-                        torch.mm(
-                            mat_down.transpose(0, 1).flatten(start_dim=1).float(),
-                            mid.transpose(0, 1).flatten(start_dim=1).float(),
-                        )
-                        .reshape(final_shape)
-                        .transpose(0, 1)
-                    )
-
-                diff = torch.mm(
-                    mat_up.flatten(start_dim=1).float(),
-                    mat_down.flatten(start_dim=1).float()
-                )
-                del mat_up, mat_down  # Free LoRA matrices from GPU
-                try:
-                    diff = diff.reshape(target_shape)
-                except RuntimeError:
-                    skip_count += 1
-                    continue
-
-                diff = diff * scale
-            else:
-                # Try LoKr / LoHa formats
-                alt = self._get_lokr_diff(
-                    item["lora"], lora_prefix,
-                    device=device if use_gpu else None, to_cpu=False,
-                )
-                if alt is None:
-                    alt = self._get_loha_diff(
-                        item["lora"], lora_prefix,
-                        device=device if use_gpu else None, to_cpu=False,
-                    )
-                if alt is None:
-                    continue
-                diff, rank, _ = alt
-                try:
-                    diff = diff.reshape(target_shape)
-                except RuntimeError:
-                    skip_count += 1
-                    continue
-
-            if is_clip and item["clip_strength"] is not None:
-                eff_strength = item["clip_strength"]
-            else:
-                eff_strength = item["strength"]
-            diffs[i] = diff
-            eff_strengths[i] = eff_strength
-            l2 = diff.float().norm().item() * abs(item["strength"])
-            partial_stats.append((i, rank, l2))
-
-        if len(diffs) == 0:
-            if skip_count > 0:
-                return (lora_prefix, [], {}, [], (target_key, is_clip), skip_count)
-            return None
-
-        # --- Pairwise conflict analysis (sign-corrected, stays on device) ---
-        pair_conflicts = {}
-        lora_indices = sorted(diffs.keys())
-        for ai in range(len(lora_indices)):
-            for bi in range(ai + 1, len(lora_indices)):
-                i, j = lora_indices[ai], lora_indices[bi]
-                diff_i = diffs[i] if eff_strengths[i] >= 0 else -diffs[i]
-                diff_j = diffs[j] if eff_strengths[j] >= 0 else -diffs[j]
-                ov, conf, dot, na_sq, nb_sq = self._sample_conflict(diff_i, diff_j, device=device)
-                pair_conflicts[(i, j)] = (ov, conf, dot, na_sq, nb_sq)
-
-        # --- Magnitude sampling (sample on device, free each diff eagerly) ---
-        magnitude_samples = []
-        seed = hash(lora_prefix) & 0xFFFFFFFF
-        sample_dev = diffs[lora_indices[0]].device
-        mag_g = torch.Generator(device=sample_dev).manual_seed(seed)
-        for i in lora_indices:
-            flat = diffs[i].flatten().abs().float() * abs(eff_strengths[i])
-            del diffs[i]  # Free this diff's GPU memory immediately
-            n = flat.numel()
-            if n > n_magnitude_samples:
-                indices = torch.randint(0, n, (n_magnitude_samples,),
-                                        device=sample_dev, generator=mag_g)
-                flat = flat[indices]
-            magnitude_samples.append(flat.cpu())
-        return (lora_prefix, partial_stats, pair_conflicts, magnitude_samples,
-                (target_key, is_clip), skip_count)
-
     @torch.no_grad()
     def _analyze_target_group(self, target_group, active_loras, model, clip, device,
-                              clip_strength_multiplier=1.0, merge_refinement="none", n_magnitude_samples=1000):
+                              clip_strength_multiplier=1.0, merge_refinement="none", n_magnitude_samples=1000,
+                              diff_cache=None):
         """
         Pass 1 analysis for one resolved target group. All aliases that hit the
         same underlying weight are aggregated per LoRA before statistics are
         computed, so mixed-trainer overlaps are analyzed as one merge unit.
+
+        diff_cache: optional _DiffCache to warm with the per-alias diffs
+        computed here (cache entries are raw pre-masking diffs, so they are
+        valid for any downstream merge_refinement/conflict_mode). The cache is
+        freshly created per AutoTuner run, so analysis never *reads* stale
+        entries — it only populates them for the Phase 2 candidates.
         """
         prepared = self._prepare_group_diffs(
             target_group, active_loras, model, clip, device,
             clip_strength_multiplier=clip_strength_multiplier,
             merge_refinement=merge_refinement,
+            diff_cache=diff_cache,
         )
         if prepared is None:
             return None
@@ -4687,7 +4881,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 )
 
         magnitude_samples = []
-        seed = hash(target_group["label_prefix"]) & 0xFFFFFFFF
+        # zlib.crc32: stable across processes (hash() varies with PYTHONHASHSEED)
+        seed = zlib.crc32(target_group["label_prefix"].encode("utf-8")) & 0xFFFFFFFF
         sample_dev = diffs[lora_indices[0]].device
         mag_g = torch.Generator(device=sample_dev).manual_seed(seed)
         for i in lora_indices:
@@ -4781,9 +4976,13 @@ class LoRAOptimizer(_LoRAMergeBase):
         pos = lora_indices.index(lora_idx)
         rank = partial_stats[pos][1]
 
+        # Mirror _resolve_branch_strength: the global clip_strength_multiplier
+        # is applied at add_patches time, never to the analyzed diffs — using
+        # it here would make entries non-portable across runs with other
+        # multiplier values (incl. community-cache consumers).
         clip_s = active_loras[lora_idx].get("clip_strength")
         if is_clip:
-            eff_s = clip_s if clip_s is not None else active_loras[lora_idx]["strength"] * clip_strength_multiplier
+            eff_s = clip_s if clip_s is not None else active_loras[lora_idx]["strength"]
         else:
             eff_s = active_loras[lora_idx]["strength"]
         abs_strength = abs(eff_s)
@@ -4824,14 +5023,34 @@ class LoRAOptimizer(_LoRAMergeBase):
         """
         Reconstruct the 8-tuple expected by _collect_analysis_result from cached
         data and current active_loras. Returns None if any strength sign has
-        flipped vs the cached signs (triggers full re-analysis for this prefix).
+        flipped vs the cached signs (triggers full re-analysis for this prefix)
+        or if the entry is malformed (e.g. a corrupt community download).
         """
+        try:
+            return LoRAOptimizer._reconstruct_from_analysis_cache_unchecked(
+                prefix, cached_prefix, active_loras)
+        except (KeyError, ValueError, TypeError, IndexError, AttributeError) as e:
+            logging.warning(
+                f"[AutoTuner Analysis Cache] Malformed entry for {prefix!r} "
+                f"({type(e).__name__}: {e}) — falling back to full analysis")
+            return None
+
+    @staticmethod
+    def _reconstruct_from_analysis_cache_unchecked(prefix, cached_prefix, active_loras):
         cached_signs = cached_prefix.get("strength_signs", {})
         per_lora_norm_sq_raw = cached_prefix["per_lora_norm_sq"]
         lora_indices = sorted(int(k) for k in per_lora_norm_sq_raw.keys())
+        is_clip = cached_prefix["is_clip"]
+
+        # Effective strength must mirror _extract_for_analysis_cache: for clip
+        # prefixes the per-LoRA clip_strength (when set) is what scaled the
+        # diffs and determined the cached sign — not the model strength.
+        def _eff_s(i):
+            clip_s = active_loras[i].get("clip_strength")
+            return clip_s if (clip_s is not None and is_clip) else active_loras[i]["strength"]
 
         for i in lora_indices:
-            current_sign = 1 if active_loras[i]["strength"] >= 0 else -1
+            current_sign = 1 if _eff_s(i) >= 0 else -1
             if current_sign != cached_signs.get(str(i), 1):
                 logging.info(
                     f"[AutoTuner Analysis Cache] Sign flip on LoRA {i} "
@@ -4854,11 +5073,11 @@ class LoRAOptimizer(_LoRAMergeBase):
         magnitude_samples = []
         for i in lora_indices:
             raw = mag_unscaled.get(str(i), [])
-            t = torch.tensor(raw, dtype=torch.float32) * abs(active_loras[i]["strength"])
+            t = torch.tensor(raw, dtype=torch.float32) * abs(_eff_s(i))
             magnitude_samples.append(t)
 
         tk = cached_prefix["target_key"]
-        target_key = tuple(tk) if isinstance(tk, list) else tk
+        target_key = _json_to_tuples(tk)
 
         per_lora_norm_sq = {int(k): float(v) for k, v in per_lora_norm_sq_raw.items()}
 
@@ -4879,12 +5098,27 @@ class LoRAOptimizer(_LoRAMergeBase):
                                            clip_strength_multiplier=1.0):
         """
         Reconstruct the _analyze_target_group 8-tuple from per-LoRA and per-pair
-        cache entries. Returns None if any participating LoRA has a sign flip.
+        cache entries. Returns None if any participating LoRA has a sign flip
+        or if an entry is malformed (e.g. a corrupt community download).
 
         lora_entries: {lora_idx: dict_or_None} — None means non-participating
         pair_entries: {(i,j): dict} — only pairs where both LoRAs participate
         lora_hashes: {lora_idx: hash_str}
         """
+        try:
+            return LoRAOptimizer._reconstruct_from_pair_lora_cache_unchecked(
+                prefix, lora_entries, pair_entries, active_loras, lora_hashes,
+                clip_strength_multiplier)
+        except (KeyError, ValueError, TypeError, IndexError, AttributeError) as e:
+            logging.warning(
+                f"[AutoTuner Pair/Lora Cache] Malformed entry for {prefix!r} "
+                f"({type(e).__name__}: {e}) — falling back to full analysis")
+            return None
+
+    @staticmethod
+    def _reconstruct_from_pair_lora_cache_unchecked(prefix, lora_entries, pair_entries,
+                                                    active_loras, lora_hashes,
+                                                    clip_strength_multiplier=1.0):
         participating = {i for i, entry in lora_entries.items() if entry is not None}
         if not participating:
             return None  # no LoRAs active for this prefix; fall back to _analyze_target_group
@@ -4895,7 +5129,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             clip_s = active_loras[i].get("clip_strength")
             is_clip = entry["is_clip"]
             if is_clip:
-                eff_s = clip_s if clip_s is not None else active_loras[i]["strength"] * clip_strength_multiplier
+                eff_s = clip_s if clip_s is not None else active_loras[i]["strength"]
             else:
                 eff_s = active_loras[i]["strength"]
             current_sign = 1 if eff_s >= 0 else -1
@@ -4914,7 +5148,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             clip_s = active_loras[i].get("clip_strength")
             is_clip = entry["is_clip"]
             if is_clip:
-                eff_s = clip_s if clip_s is not None else active_loras[i]["strength"] * clip_strength_multiplier
+                eff_s = clip_s if clip_s is not None else active_loras[i]["strength"]
             else:
                 eff_s = active_loras[i]["strength"]
             abs_strength = abs(eff_s)
@@ -4939,7 +5173,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Get prefix-level metadata from any participating LoRA's entry
         first = lora_entries[min(participating)]
         tk = first["target_key"]
-        target_key = tuple(tk) if isinstance(tk, list) else tk
+        target_key = _json_to_tuples(tk)
 
         return (
             prefix,
@@ -4958,7 +5192,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                             decision_smoothing=0.0, progress_cb=None,
                             cached_analysis=None, track_new_entries=False,
                             on_prefix_done=None,
-                            lora_caches=None, pair_caches=None, lora_hashes=None):
+                            lora_caches=None, pair_caches=None, lora_hashes=None,
+                            diff_cache=None):
         """
         Shared Pass 1 runner used by both the optimizer and AutoTuner.
         Returns the same lightweight accumulators both call sites need.
@@ -4978,12 +5213,10 @@ class LoRAOptimizer(_LoRAMergeBase):
             "model": {
                 "norm_sq": [0.0] * len(active_loras),
                 "dot": {(i, j): 0.0 for i, j in pairs},
-                "importance": [0.0] * len(active_loras),
             },
             "clip": {
                 "norm_sq": [0.0] * len(active_loras),
                 "dot": {(i, j): 0.0 for i, j in pairs},
-                "importance": [0.0] * len(active_loras),
             },
         }
         pair_accum = {
@@ -5111,6 +5344,26 @@ class LoRAOptimizer(_LoRAMergeBase):
                     pair_entries[(i, j)] = cache[prefix]
             return lora_entries, pair_entries
 
+        def _backfill_pair_lora(prefix, result):
+            """A prefix served from the stack-level analysis cache is exactly
+            the tuple the per-LoRA/pair extractors consume — backfill caches
+            that lack it so the same LoRA hits in other stacks (and the
+            estimator/community layers see it) without re-analysis."""
+            if not track_new_entries:
+                return
+            if lora_caches is not None:
+                for i in range(len(active_loras)):
+                    if prefix not in (lora_caches.get(i) or {}):
+                        new_lora_entries[i][prefix] = self._extract_for_lora_cache(
+                            result, i, active_loras, clip_strength_multiplier)
+            if pair_caches is not None and lora_hashes is not None:
+                for (i, j) in pairs:
+                    if prefix not in (pair_caches.get((i, j)) or {}):
+                        pair_entry = self._extract_for_pair_cache(
+                            result, i, j, lora_hashes[i], lora_hashes[j])
+                        if pair_entry is not None:
+                            new_pair_entries[(i, j)][prefix] = pair_entry
+
         group_items = list(target_groups.values())
         if use_gpu:
             for target_group in group_items:
@@ -5119,6 +5372,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 if cached_analysis is not None and prefix in cached_analysis:
                     result = self._reconstruct_from_analysis_cache(
                         prefix, cached_analysis[prefix], active_loras)
+                    if result is not None:
+                        _backfill_pair_lora(prefix, result)
                 if result is None:
                     hit = _pair_lora_cache_hit(prefix)
                     if hit is not None:
@@ -5131,6 +5386,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         target_group, active_loras, model, clip, compute_device,
                         clip_strength_multiplier=clip_strength_multiplier,
                         merge_refinement=merge_refinement,
+                        diff_cache=diff_cache,
                     )
                     if result is not None and track_new_entries:
                         entry = self._extract_for_analysis_cache(result, active_loras)
@@ -5160,6 +5416,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         result = self._reconstruct_from_analysis_cache(
                             prefix, cached_analysis[prefix], active_loras)
                         if result is not None:
+                            _backfill_pair_lora(prefix, result)
                             _collect_analysis_result(result)
                             if progress_cb is not None:
                                 progress_cb()
@@ -5178,17 +5435,19 @@ class LoRAOptimizer(_LoRAMergeBase):
                     futures[executor.submit(
                         self._analyze_target_group, target_group, active_loras,
                         model, clip, compute_device, clip_strength_multiplier,
-                        merge_refinement
+                        merge_refinement, diff_cache=diff_cache
                     )] = prefix
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
                     if result is not None and track_new_entries:
                         prefix = result[0]
-                        if cached_analysis is None or prefix not in cached_analysis:
-                            entry = self._extract_for_analysis_cache(result, active_loras)
-                            new_analysis_entries[prefix] = entry
-                            if on_prefix_done is not None:
-                                on_prefix_done(prefix, entry)
+                        # Futures only exist for prefixes that missed the cache
+                        # or failed reconstruction (e.g. sign flip) — always
+                        # record so stale entries get healed, like the GPU path
+                        entry = self._extract_for_analysis_cache(result, active_loras)
+                        new_analysis_entries[prefix] = entry
+                        if on_prefix_done is not None:
+                            on_prefix_done(prefix, entry)
                         if lora_caches is not None:
                             for i in range(len(active_loras)):
                                 new_lora_entries[i][prefix] = self._extract_for_lora_cache(
@@ -5323,22 +5582,31 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         floor_applied = False
         floor = None
-        if pairwise_cos:
+        explicit_floor = auto_strength_floor >= 0
+        if explicit_floor:
+            # An explicitly set floor bounds the reduction REGARDLESS of stack
+            # alignment — the widget promises "how much the weakest LoRA is
+            # allowed to be scaled down", full stop. Previously the
+            # orthogonality gate below silently ignored user floors on
+            # aligned/opposing stacks.
+            floor = auto_strength_floor
+        elif pairwise_cos:
+            # The -1 defaults are orthogonality-noise heuristics: aligned
+            # stacks compound energy and genuinely need the reduction, so
+            # the default floors only apply to mostly-orthogonal stacks.
             avg_cos = sum(pairwise_cos) / len(pairwise_cos)
             alignment_thresh = arch_preset["alignment_threshold"]
             if abs(avg_cos) <= alignment_thresh:
-                if auto_strength_floor >= 0:
-                    floor = auto_strength_floor
-                elif is_full_rank:
+                if is_full_rank:
                     floor = arch_preset.get("full_rank", {}).get("auto_strength_floor", 1.0)
                 else:
                     floor = _VIDEO_ARCH_ORTHOGONAL_FLOOR.get(
                         detected_arch,
                         arch_preset.get("auto_strength_orthogonal_floor", 0.85),
                     )
-                if scale < floor:
-                    scale = floor
-                    floor_applied = True
+        if floor is not None and scale < floor:
+            scale = floor
+            floor_applied = True
 
         new_strengths = [s * scale if effective[i] > 0 else s for i, s in enumerate(strengths)]
 
@@ -5354,7 +5622,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                 alignment_desc = "mostly orthogonal (independent)"
             if floor_applied:
                 arch_label = detected_arch or "unknown"
-                if is_full_rank:
+                if explicit_floor:
+                    reasoning.append(
+                        f"{branch_name}: user floor {floor:.2f} applied "
+                        f"(bounds auto-strength reduction regardless of alignment)"
+                    )
+                elif is_full_rank:
                     reasoning.append(
                         f"{branch_name}: full-rank orthogonal floor {floor:.2f} applied "
                         f"to preserve complete weight deltas"
@@ -5517,6 +5790,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         }
 
     @staticmethod
+    @functools.lru_cache(maxsize=4096)
     def _extract_block_name(prefix):
         """
         Extract a human-readable block name from a LoRA key prefix.
@@ -5530,8 +5804,9 @@ class LoRAOptimizer(_LoRAMergeBase):
           transformer.blocks.8.attn1.to_q -> blocks.8
 
         Falls back to the first two meaningful segments if no pattern matches.
+        Pure function of the prefix — cached (called per prefix per smoothing
+        pass, with two regex evaluations each).
         """
-        import re
         # Normalize separators: lora_unet_input_blocks_4 -> input_blocks.4
         # Strip common prefixes
         p = prefix
@@ -5702,20 +5977,58 @@ class LoRAOptimizer(_LoRAMergeBase):
         else:
             density = 0.5  # unused but set for completeness
 
-        # Sign method (only relevant for TIES mode)
+        # Sign method (only relevant for TIES mode).
+        # Always magnitude-weighted "total" voting: the TIES paper (NeurIPS
+        # 2023) defines sign election ONLY as gamma = sgn(sum of trimmed task
+        # vectors) — the sign with greater total magnitude wins. There is no
+        # frequency vote in the paper; it remains available as an explicit
+        # merge_strategy override only.
         if mode == "ties":
-            if magnitude_ratio > arch_preset["magnitude_ratio_total_sign"]:
-                sign_method = "total"
-                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x > {arch_preset['magnitude_ratio_total_sign']:.0f}x -> 'total' sign method (magnitude-weighted voting)")
-                reasoning.append("  Stronger LoRA gets more influence in sign election")
-            else:
-                sign_method = "frequency"
-                reasoning.append(f"Magnitude ratio {magnitude_ratio:.2f}x <= {arch_preset['magnitude_ratio_total_sign']:.0f}x -> 'frequency' sign method (equal voting)")
-                reasoning.append("  Similar-strength LoRAs get equal votes")
+            sign_method = "total"
+            reasoning.append("Sign election: 'total' (magnitude-weighted voting, TIES-canonical)")
         else:
-            sign_method = "frequency"  # unused, default for completeness
+            sign_method = "total"  # unused, default for completeness
 
         return (mode, density, sign_method, reasoning)
+
+    def _decide_prefix_mode(self, pf, strategy_set, arch_preset, smooth_slerp_gate,
+                            is_full_rank, fr_preset):
+        """
+        Per-prefix merge mode decision for per_prefix mode (n_loras >= 2).
+        Single source of truth shared by Pass 2 and the AutoTuner's
+        candidate deduplication — keep ALL mode gating here.
+        Returns (mode, density, sign_method, orthogonal, opposing).
+        """
+        pf_mode, pf_density, pf_sign, _ = self._auto_select_params(
+            pf["conflict_ratio"], pf.get("decision_magnitude_ratio", pf["magnitude_ratio"]),
+            magnitude_samples=pf.get("magnitude_samples"),
+            avg_cos_sim=pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)),
+            avg_excess_conflict=pf.get("decision_conflict", pf.get("excess_conflict", pf.get("conflict_ratio", 0.0))),
+            avg_subspace_overlap=pf.get("decision_subspace_overlap", pf.get("avg_subspace_overlap", 0.0)),
+            strategy_set=strategy_set,
+            arch_preset=arch_preset,
+            precomputed_density=pf.get("precomputed_density"),
+        )
+        # Upgrade weighted_average → slerp for 2+ non-opposing LoRAs.
+        # SLERP preserves magnitude better than weighted_average's /N reduction,
+        # which is critical for video LoRAs where motion energy matters.
+        # Skip for opposing LoRAs (cos < 0): SLERP interpolates between opposing
+        # directions while preserving magnitude, amplifying artifacts.
+        pf_raw_cos = pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)) if smooth_slerp_gate else pf.get("avg_cos_sim", 0.0)
+        pf_orthogonal = abs(pf_raw_cos) < arch_preset["orthogonal_cos_sim_max"]
+        pf_opposing = pf_raw_cos < 0
+        # Full-rank gate: skip SLERP upgrade — for full-rank patches the
+        # information is spread across all dimensions, and SLERP's
+        # hypersphere interpolation loses signal from both LoRAs.
+        if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
+                and strategy_set == "full"
+                and not pf_opposing
+                and not (is_full_rank and fr_preset.get("disable_slerp_upgrade", False))):
+            pf_mode = "slerp"
+        if (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)
+                and pf_mode == "weighted_average" and pf_orthogonal):
+            pf_mode = "weighted_sum"
+        return pf_mode, pf_density, pf_sign, pf_orthogonal, pf_opposing
 
     def _build_report(self, lora_stats, pairwise_conflicts, collection_stats,
                       mode, density, sign_method, reasoning, merge_summary,
@@ -6071,6 +6384,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             if tuner_data is None or "top_n" not in tuner_data or len(tuner_data["top_n"]) == 0:
                 logging.warning("[Tuner Data] No valid tuner_data — falling back to manual merge")
             else:
+                _warn_stale_tuner_data(tuner_data, "Tuner Data Bridge")
                 entry = tuner_data["top_n"][0]
                 config = entry["config"]
                 strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
@@ -6093,10 +6407,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     dare_dampening=config["dare_dampening"],
                     merge_strategy_override=strategy_override,
                     merge_refinement=config["merge_refinement"],
-                    strategy_set=tuner_data.get("strategy_set", strategy_set),
+                    strategy_set=config.get("strategy_set", "full"),
                     architecture_preset=tuner_data.get("architecture_preset", architecture_preset),
                     decision_smoothing=resolved_smoothing,
-                    smooth_slerp_gate=smooth_slerp_gate,
+                    smooth_slerp_gate=tuner_data.get("smooth_slerp_gate", smooth_slerp_gate),
                 )
                 applied_config = dict(config)
                 return {"result": result, "ui": {"applied_settings": [json.dumps(applied_config)]}}
@@ -6125,7 +6439,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             smooth_slerp_gate=smooth_slerp_gate,
         )
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False, _skip_qkv_refusion=False):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False, _skip_qkv_refusion=False, _sl_patch_cache=None, _score_collector=None, _skip_model_apply=False, _group_patch_cache=None):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Resolve aliases to target groups, compute diffs, sample metrics, discard diffs
@@ -6133,11 +6447,9 @@ class LoRAOptimizer(_LoRAMergeBase):
         Pass 2: Recompute diffs per target group, merge immediately, discard
         Peak memory tracks the largest active target group, not the whole stack.
         """
-        # Free stale cached models when the input model changes — prevents
-        # the old patched model from staying in RAM after switching models.
-        current_mid = id(model) if model is not None else None
-        prev_mid = getattr(self, '_cached_model_id', None)
-        if prev_mid is not None and current_mid != prev_mid:
+        # Free stale cached models when the input model/clip changes — prevents
+        # the old patched clones from staying in RAM after switching models.
+        if self._track_model_identity(model, clip):
             if hasattr(self, '_merge_cache') and self._merge_cache:
                 self._merge_cache.clear()
             if hasattr(self, '_autotuner_cache') and getattr(self, '_autotuner_cache', None):
@@ -6150,7 +6462,6 @@ class LoRAOptimizer(_LoRAMergeBase):
                     delegate._autotuner_cache.clear()
                 delegate._cached_model_id = None
             gc.collect()
-        self._cached_model_id = current_mid
 
         # Normalize stack format (standard tuples or LoRAStack dicts)
         if not lora_stack or len(lora_stack) == 0:
@@ -6282,21 +6593,6 @@ class LoRAOptimizer(_LoRAMergeBase):
         logging.info(f"[LoRA Optimizer] Starting analysis of {len(active_loras)} LoRAs")
         t_start = time.time()
 
-        # Get key maps
-        model_keys = self._get_model_keys(model)
-
-        clip_keys = {}
-        if clip is not None:
-            clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
-
-        # Build target groups so all aliases for the same underlying weight are
-        # analyzed and merged together.
-        all_lora_prefixes = self._collect_lora_prefixes(active_loras)
-        target_groups = self._build_target_groups(all_lora_prefixes, model_keys, clip_keys)
-        if not target_groups:
-            return (model, clip, "No compatible LoRA keys found. "
-                    "LoRAs may be incompatible with this model architecture.", None, None)
-
         compute_device = self._get_compute_device()
         use_gpu = compute_device.type != "cpu"
 
@@ -6329,6 +6625,22 @@ class LoRAOptimizer(_LoRAMergeBase):
             logging.info(f"[LoRA Optimizer] Using cached analysis ({prefix_count} target groups, skipping Pass 1)")
 
         else:
+            # Key maps + target groups are only built when Pass 1 actually runs —
+            # with cached analysis (AutoTuner candidates) they come from the cache,
+            # so building them here would be discarded work on every candidate.
+            model_keys = self._get_model_keys(model)
+            clip_keys = {}
+            if clip is not None:
+                clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
+
+            # Build target groups so all aliases for the same underlying weight
+            # are analyzed and merged together.
+            all_lora_prefixes = self._collect_lora_prefixes(active_loras)
+            target_groups = self._build_target_groups(all_lora_prefixes, model_keys, clip_keys)
+            if not target_groups:
+                return (model, clip, "No compatible LoRA keys found. "
+                        "LoRAs may be incompatible with this model architecture.", None, None)
+
             # =====================================================================
             # Pass 1 — Analysis (streaming: diffs computed, sampled, and discarded)
             # =====================================================================
@@ -6591,6 +6903,10 @@ class LoRAOptimizer(_LoRAMergeBase):
         strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "slerp": 0, "ties": 0, "consensus": 0}
         prefix_decisions = []  # list of (prefix, mode, conflict_ratio, n_loras) for block map
         has_virtual_loras = any(item.get("_precomputed_diffs") for item in active_loras)
+        # conflict_mode masking depends on merge_refinement, so Pass-1 norms
+        # (computed with refinement "none") can't be reused when any LoRA masks
+        stack_has_conflict_modes = any(
+            item.get("conflict_mode", "all") != "all" for item in active_loras)
 
         # VRAM budget for patch storage
         vram_budget_bytes = 0
@@ -6602,6 +6918,68 @@ class LoRAOptimizer(_LoRAMergeBase):
             vram_budget_bytes = int(usable * vram_budget)
             logging.info(f"[LoRA Optimizer] VRAM patch budget: {vram_budget_bytes // (1024**2)}MB "
                          f"({vram_budget*100:.0f}% of {usable // (1024**2)}MB free)")
+
+        # Score-during-merge deferral budget for Z-Image QKV components:
+        # their scoring stats must be measured on the post-refusion FUSED
+        # tensor (the sparsity threshold uses the fused max), so they stay on
+        # the GPU until refusion instead of being scored inline. Disabled when
+        # a VRAM patch budget is active (those patches may stay on GPU anyway
+        # and the budget accounting must remain authoritative).
+        _defer_budget = 0
+        if (_score_collector is not None and use_gpu and vram_budget_bytes == 0
+                and getattr(self, '_detected_arch', None) == 'zimage'
+                and not _skip_qkv_refusion):
+            try:
+                _free_vram = comfy.model_management.get_free_memory(compute_device)
+                _defer_budget = max(0, int(_free_vram * 0.25))
+            except Exception:
+                _defer_budget = 0
+        _deferred_bytes = [0]
+
+        def _sl_store(key, result_tuple):
+            """Budgeted store for the single-LoRA patch cache (CPU patches only)."""
+            if _sl_patch_cache is None or result_tuple is None:
+                return
+            patch = result_tuple[2]
+            tensors = patch.weights if hasattr(patch, "weights") else (
+                patch[1] if isinstance(patch, tuple) and len(patch) >= 2 else ())
+            for _t in (tensors if isinstance(tensors, (tuple, list)) else ()):
+                if isinstance(_t, torch.Tensor) and _t.is_cuda:
+                    return
+            p_bytes = self._estimate_single_patch_bytes(patch)
+            if _sl_patch_cache["bytes"] + p_bytes > _sl_patch_cache["budget"]:
+                _sl_patch_cache["budget_skips"] += 1
+                return
+            _sl_patch_cache["bytes"] += p_bytes
+            _sl_patch_cache["store"][key] = result_tuple
+
+        def _gc_store(key, result_tuple, is_clip_key):
+            """Store a group merge for cross-candidate replay (CPU patches only —
+            CUDA entries would pin VRAM across candidates; RAM-budget capped)."""
+            if key is None or _group_patch_cache is None:
+                return
+            planned = _group_patch_cache["plan"].get(key, 0)
+            if planned < 2:
+                return
+            patch = result_tuple[2]
+            tensors = patch.weights if hasattr(patch, "weights") else (
+                patch[1] if isinstance(patch, tuple) and len(patch) >= 2 else ())
+            for _t in (tensors if isinstance(tensors, (tuple, list)) else ()):
+                if isinstance(_t, torch.Tensor) and _t.is_cuda:
+                    return
+            p_bytes = self._estimate_single_patch_bytes(patch)
+            if _group_patch_cache["bytes"] + p_bytes > _group_patch_cache["budget"]:
+                _group_patch_cache["budget_skips"] += 1
+                return
+            _group_patch_cache["bytes"] += p_bytes
+            _group_patch_cache["peak_bytes"] = max(
+                _group_patch_cache["peak_bytes"], _group_patch_cache["bytes"])
+            _group_patch_cache["store"][key] = {
+                "result": result_tuple,
+                "auto_scale": 1.0 if is_clip_key else model_auto_scale,
+                "remaining": planned - 1,
+                "bytes": p_bytes,
+            }
 
         def _merge_one_group(label_prefix, target_group):
             """Recompute diffs for one target group, merge, return patch or None."""
@@ -6623,6 +7001,15 @@ class LoRAOptimizer(_LoRAMergeBase):
                 pf_n_loras = prefix_stats.get(label_prefix, {}).get("n_loras", 0)
                 pf_conflict = prefix_stats.get(label_prefix, {}).get("decision_conflict",
                                                                      prefix_stats.get(label_prefix, {}).get("conflict_ratio", 0.0))
+            elif optimization_mode == "global":
+                # Global mode: the selected/overridden merge mode applies to
+                # multi-LoRA groups. pf_n_loras MUST be populated here — when
+                # it stayed 0, the single-contributor fallback below silently
+                # forced weighted_sum for EVERY group, so global-mode
+                # candidates never actually merged with their declared mode.
+                pf_n_loras = prefix_stats.get(label_prefix, {}).get("n_loras", 0)
+                pf_conflict = prefix_stats.get(label_prefix, {}).get("decision_conflict",
+                                                                     prefix_stats.get(label_prefix, {}).get("conflict_ratio", 0.0))
             elif optimization_mode == "per_prefix" and label_prefix in prefix_stats:
                 pf = prefix_stats[label_prefix]
                 pf_conflict = pf.get("decision_conflict", pf.get("conflict_ratio", 0.0))
@@ -6632,35 +7019,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     pf_density = 0.5
                     pf_sign = "frequency"
                 else:
-                    pf_mode, pf_density, pf_sign, _ = self._auto_select_params(
-                        pf["conflict_ratio"], pf.get("decision_magnitude_ratio", pf["magnitude_ratio"]),
-                        magnitude_samples=pf.get("magnitude_samples"),
-                        avg_cos_sim=pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)),
-                        avg_excess_conflict=pf.get("decision_conflict", pf.get("excess_conflict", pf.get("conflict_ratio", 0.0))),
-                        avg_subspace_overlap=pf.get("decision_subspace_overlap", pf.get("avg_subspace_overlap", 0.0)),
-                        strategy_set=strategy_set,
-                        arch_preset=arch_preset,
-                        precomputed_density=pf.get("precomputed_density"),
-                    )
-                    # Upgrade weighted_average → slerp for 2+ non-opposing LoRAs.
-                    # SLERP preserves magnitude better than weighted_average's /N reduction,
-                    # which is critical for video LoRAs where motion energy matters.
-                    # Skip for opposing LoRAs (cos < 0): SLERP interpolates between opposing
-                    # directions while preserving magnitude, amplifying artifacts.
-                    pf_raw_cos = pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)) if smooth_slerp_gate else pf.get("avg_cos_sim", 0.0)
-                    pf_orthogonal = abs(pf_raw_cos) < arch_preset["orthogonal_cos_sim_max"]
-                    pf_opposing = pf_raw_cos < 0
-                    # Full-rank gate: skip SLERP upgrade — for full-rank patches the
-                    # information is spread across all dimensions, and SLERP's
-                    # hypersphere interpolation loses signal from both LoRAs.
-                    if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
-                            and strategy_set == "full"
-                            and not pf_opposing
-                            and not (is_full_rank and fr_preset.get("disable_slerp_upgrade", False))):
-                        pf_mode = "slerp"
-                    if (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)
-                            and pf_mode == "weighted_average" and pf_orthogonal):
-                        pf_mode = "weighted_sum"
+                    pf_mode, pf_density, pf_sign, pf_orthogonal, pf_opposing = (
+                        self._decide_prefix_mode(
+                            pf, strategy_set, arch_preset, smooth_slerp_gate,
+                            is_full_rank, fr_preset))
 
             # Apply merge strategy override from Conflict Editor (takes priority over auto-selection)
             # Skip when user explicitly chose additive (protects DPO/edit LoRAs)
@@ -6672,6 +7034,37 @@ class LoRAOptimizer(_LoRAMergeBase):
             raw_n = pf.get("raw_n_loras", pf_n_loras)
             if pf_n_loras <= 1 and pf_mode != "weighted_sum":
                 pf_mode = "weighted_sum"
+
+            # Cross-candidate group cache: multi-LoRA groups whose decision
+            # tuple recurs across the sweep's candidates are merged once and
+            # replayed (planned in auto_tune; entries evict after last use)
+            _gc_key = None
+            if _group_patch_cache is not None and pf_n_loras > 1:
+                _pf_quality_key = ("none" if (pf_mode == "weighted_average" and pf_opposing)
+                                   else merge_refinement)
+                _gc_key = _group_merge_cache_key(
+                    label_prefix, is_clip_key, pf_mode, pf_density, pf_sign,
+                    _pf_quality_key, sparsification, sparsification_density,
+                    dare_dampening, merge_refinement, auto_strength)
+                _entry = _group_patch_cache["store"].get(_gc_key)
+                if _entry is not None:
+                    _group_patch_cache["hits"] += 1
+                    _entry["remaining"] -= 1
+                    result = _entry["result"]
+                    if _entry["remaining"] <= 0:
+                        _group_patch_cache["store"].pop(_gc_key, None)
+                        _group_patch_cache["bytes"] -= _entry.get("bytes", 0)
+                    _cur_scale = 1.0 if is_clip_key else model_auto_scale
+                    if _entry["auto_scale"] != _cur_scale:
+                        # Scale-invariant entry replayed under a different
+                        # auto-strength scale: patch and score stats are
+                        # identical by construction; only the input-norms
+                        # energy bookkeeping scales with the branch multiplier
+                        _ratio = (_cur_scale / _entry["auto_scale"]
+                                  if _entry["auto_scale"] else 1.0)
+                        result = result[:8] + (result[8] * _ratio,) + result[9:]
+                    return result
+                _group_patch_cache["misses"] += 1
 
             linear_stats = None
             if (pf_mode in ("weighted_sum", "weighted_average", "normalize")
@@ -6702,11 +7095,14 @@ class LoRAOptimizer(_LoRAMergeBase):
                         if gpu_patch_bytes + p_bytes <= vram_budget_bytes:
                             patch = self._move_patch_to_device(patch, compute_device)
                             gpu_patch_bytes += p_bytes
-                    return (
+                    result = (
                         target_key, is_clip_key, patch, pf_mode, label_prefix,
                         pf_conflict, max(pf_n_loras, 1), False,
-                        linear_stats[0], linear_stats[1]
+                        linear_stats[0], linear_stats[1],
+                        None,  # LoRAAdapter patches are scored from factors
                     )
+                    _gc_store(_gc_key, result, is_clip_key)
+                    return result
 
             prepared = self._prepare_group_diffs(
                 target_group, active_loras, model, clip, compute_device,
@@ -6725,6 +7121,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             if len(diffs_list) <= 1 and pf_mode != "weighted_sum":
                 pf_mode = "weighted_sum"
+                _gc_key = None  # decision diverged from the planned key — don't cache
 
             # Create deterministic per-group RNG for reproducible sparsification
             sp_gen = None
@@ -6734,8 +7131,21 @@ class LoRAOptimizer(_LoRAMergeBase):
                 sp_gen = torch.Generator(device=gen_device)
                 sp_gen.manual_seed(seed)
 
-            input_norms_mean = (sum(d.float().norm().item() * abs(w) for d, w in diffs_list)
-                                / len(diffs_list)) if diffs_list else 0.0
+            # Reuse the exact per-LoRA norms from Pass 1 instead of re-reading
+            # every diff tensor here (a full pass + sync per diff per group per
+            # candidate). Fallback covers conflict-mode masking (differs by
+            # refinement) and prefixes missing from the analysis stats.
+            pf_norm_sq = pf.get("per_lora_norm_sq") or {}
+            diff_indices = sorted(prepared["diffs"].keys())
+            if (diff_indices and not stack_has_conflict_modes
+                    and all(i in pf_norm_sq for i in diff_indices)):
+                input_norms_mean = (
+                    sum(math.sqrt(max(pf_norm_sq[i], 0.0)) * abs(prepared["eff_strengths"][i])
+                        for i in diff_indices) / len(diff_indices)
+                )
+            else:
+                input_norms_mean = (sum(d.float().norm().item() * abs(w) for d, w in diffs_list)
+                                    / len(diffs_list)) if diffs_list else 0.0
 
             # For orthogonal/opposing weighted_average, force standard quality.
             # TALL-masks classifies most positions as "selfish" for orthogonal
@@ -6758,7 +7168,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                 sparsification_generator=sp_gen,
                 merge_refinement=pf_quality,
                 dare_dampening=dare_dampening,
-                keep_on_gpu=should_keep,
+                # Keep the result on the compute device: the norm and dtype
+                # downcast below run there, so the CPU transfer (when needed)
+                # moves half the bytes and skips a full CPU-side read
+                keep_on_gpu=True,
             )
             merged_norm = merged_diff.float().norm().item() if merged_diff is not None else 0.0
             diffs_list.clear()  # Free input diffs from GPU
@@ -6772,6 +7185,29 @@ class LoRAOptimizer(_LoRAMergeBase):
             # to halve memory — ComfyUI handles dtype conversion when applying
             if storage_dtype is not None and merged_diff.dtype != storage_dtype:
                 merged_diff = merged_diff.to(storage_dtype)
+            # Score-during-merge: measure scoring stats while the result is
+            # still on the compute device, so _score_merge_result never has
+            # to transfer the patch back. Z-Image QKV components are instead
+            # deferred (kept on GPU, scored post-refusion on the fused
+            # tensor) within the deferral budget.
+            score_stats = None
+            defer_gpu = False
+            if _score_collector is not None and not should_compress:
+                if _defer_budget > 0 and merged_diff.is_cuda and not should_keep:
+                    tkey_str = target_key[0] if isinstance(target_key, tuple) else target_key
+                    if isinstance(tkey_str, str) and _ZIMAGE_QKV_KEY_RE.search(tkey_str):
+                        t_bytes = merged_diff.nelement() * merged_diff.element_size()
+                        if _deferred_bytes[0] + t_bytes <= _defer_budget:
+                            _deferred_bytes[0] += t_bytes
+                            defer_gpu = True
+                if not defer_gpu:
+                    score_stats = _diff_score_stats(
+                        merged_diff, _score_collector.get("compute_svd", False))
+            # Move off-GPU now unless deferred for refusion scoring, kept by
+            # the VRAM budget, or a GPU-side SVD is about to consume it anyway
+            if (merged_diff.is_cuda and not should_keep and not defer_gpu
+                    and not (should_compress and resolved_svd_device is not None)):
+                merged_diff = merged_diff.cpu()
             if should_compress:
                 patch = self._compress_to_lowrank(merged_diff, compress_rank, svd_device=resolved_svd_device)
                 del merged_diff
@@ -6786,7 +7222,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                     gpu_patch_bytes += p_bytes
                 else:
                     patch = self._move_patch_to_device(patch, torch.device("cpu"))
-            return (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm)
+            result = (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm, score_stats)
+            _gc_store(_gc_key, result, is_clip_key)
+            return result
 
         lowrank_count = 0
         total_input_energy = 0.0
@@ -6801,7 +7239,8 @@ class LoRAOptimizer(_LoRAMergeBase):
             nonlocal _overwrite_count
             if result is None:
                 return
-            target_key, is_clip_key, patch, used_mode, prefix, conflict, n_loras, is_compressed, inp_norm, mrg_norm = result
+            (target_key, is_clip_key, patch, used_mode, prefix, conflict,
+             n_loras, is_compressed, inp_norm, mrg_norm, score_stats) = result
             total_input_energy += inp_norm
             total_merged_energy += mrg_norm
 
@@ -6827,6 +7266,16 @@ class LoRAOptimizer(_LoRAMergeBase):
                 target_dict[target_key] = patch
                 if isinstance(patch, (LoRAAdapter, LoKrAdapter, LoHaAdapter)):
                     lowrank_count += 1
+                # Register inline scoring stats keyed by the FINAL stored
+                # tensor's identity (the held reference also prevents id()
+                # reuse). Collision-accumulated patches above get no entry —
+                # _score_merge_result falls back to direct measurement.
+                if (score_stats is not None and _score_collector is not None
+                        and isinstance(patch, tuple) and len(patch) >= 2
+                        and patch[0] == "diff"):
+                    _t_final = patch[1][0] if isinstance(patch[1], tuple) else patch[1]
+                    if isinstance(_t_final, torch.Tensor):
+                        _score_collector["stats"][id(_t_final)] = (_t_final, score_stats)
 
             processed_keys += 1
             if is_compressed:
@@ -6834,10 +7283,21 @@ class LoRAOptimizer(_LoRAMergeBase):
             strategy_counts[used_mode] = strategy_counts.get(used_mode, 0) + 1
             prefix_decisions.append((prefix, used_mode, conflict, n_loras))
 
+        _sl_cache_hits = 0
         if use_gpu:
             group_items = list(target_groups.items())
             n_loras = len(active_loras)
             for idx, (label_prefix, target_group) in enumerate(group_items):
+                # Single-LoRA patch cache: reuse across Phase 2 candidates
+                _sl_key = None
+                if _sl_patch_cache is not None and prefix_stats.get(label_prefix, {}).get("n_loras", 0) <= 1:
+                    _sl_key = (label_prefix, auto_strength)
+                    cached = _sl_patch_cache["store"].get(_sl_key)
+                    if cached is not None:
+                        _collect_merge_result(cached)
+                        _sl_cache_hits += 1
+                        continue
+
                 if _diff_cache is not None and idx + 1 < len(group_items):
                     next_group = group_items[idx + 1][1]
                     prefetch_keys = [
@@ -6846,18 +7306,38 @@ class LoRAOptimizer(_LoRAMergeBase):
                         for i in range(n_loras)
                     ]
                     _diff_cache.prefetch(prefetch_keys)
-                _collect_merge_result(_merge_one_group(label_prefix, target_group))
+                result = _merge_one_group(label_prefix, target_group)
+                if _sl_key is not None:
+                    _sl_store(_sl_key, result)
+                _collect_merge_result(result)
         else:
             max_workers = min(4, max(1, len(target_groups)))
+            # Separate cached single-LoRA results from groups that need computation
+            compute_items = []
+            for label_prefix, target_group in target_groups.items():
+                if _sl_patch_cache is not None and prefix_stats.get(label_prefix, {}).get("n_loras", 0) <= 1:
+                    cached = _sl_patch_cache["store"].get((label_prefix, auto_strength))
+                    if cached is not None:
+                        _collect_merge_result(cached)
+                        _sl_cache_hits += 1
+                        continue
+                compute_items.append((label_prefix, target_group))
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {
-                    executor.submit(_merge_one_group, label_prefix, target_group): label_prefix
-                    for label_prefix, target_group in target_groups.items()
+                    executor.submit(_merge_one_group, lp, tg): lp
+                    for lp, tg in compute_items
                 }
                 for future in concurrent.futures.as_completed(futures):
-                    _collect_merge_result(future.result())
+                    result = future.result()
+                    lp = futures[future]
+                    if _sl_patch_cache is not None and prefix_stats.get(lp, {}).get("n_loras", 0) <= 1:
+                        _sl_store((lp, auto_strength), result)
+                    _collect_merge_result(result)
 
         fullrank_count = processed_keys - lowrank_count
+        if _sl_cache_hits > 0:
+            logging.info(f"[LoRA Optimizer]   Single-LoRA patch cache: {_sl_cache_hits} hits")
         if _overwrite_count > 0:
             logging.info(f"[LoRA Optimizer] {_overwrite_count} target-key collisions resolved "
                          f"(different LoRA key formats targeting the same model weight — diffs accumulated)")
@@ -6914,7 +7394,11 @@ class LoRAOptimizer(_LoRAMergeBase):
         if _analysis_cache is None:
             prefix_stats.clear()
             self.loaded_loras.clear()
-        if use_gpu:
+        if use_gpu and _analysis_cache is None:
+            # Skipped during AutoTuner candidate merges: releasing the
+            # allocator's cached blocks here forces cudaFree/cudaMalloc churn
+            # on every candidate; auto_tune empties the cache once after the
+            # sweep instead.
             torch.cuda.empty_cache()
 
         # Re-fuse Z-Image QKV patches if architecture normalization was used
@@ -6924,6 +7408,25 @@ class LoRAOptimizer(_LoRAMergeBase):
             if len(model_patches) > 0:
                 model_patches = self._refuse_zimage_patches(model_patches)
                 logging.info(f"[LoRA Optimizer] Re-fused Z-Image QKV patches ({len(model_patches)} model patches)")
+
+        # Score-during-merge: deferred QKV components were fused on the GPU —
+        # measure the fused tensors there, then move them off-GPU. Patches the
+        # VRAM budget legitimately keeps on GPU are already registered (their
+        # identity check passes) and stay put.
+        if _score_collector is not None and use_gpu:
+            _stats_map = _score_collector["stats"]
+            for _k, _p in model_patches.items():
+                if isinstance(_p, tuple) and len(_p) >= 2 and _p[0] == "diff":
+                    _t = _p[1][0] if isinstance(_p[1], tuple) else _p[1]
+                    if isinstance(_t, torch.Tensor) and _t.is_cuda:
+                        _entry = _stats_map.get(id(_t))
+                        if _entry is not None and _entry[0] is _t:
+                            continue
+                        _st = _diff_score_stats(
+                            _t, _score_collector.get("compute_svd", False))
+                        _t_cpu = _t.cpu()
+                        model_patches[_k] = ("diff", (_t_cpu,))
+                        _stats_map[id(_t_cpu)] = (_t_cpu, _st)
 
         # Build reverse key map: target_key → canonical prefix metadata
         # (used by SaveMergedLoRA to reconstruct standard LoRA key names)
@@ -6957,15 +7460,19 @@ class LoRAOptimizer(_LoRAMergeBase):
         else:
             clip_strength_out = output_strength * clip_strength_multiplier * clip_auto_scale
 
-        if model is not None and len(model_patches) > 0:
-            new_model = model.clone()
-            new_model.add_patches(model_patches, output_strength)
-            self._update_model_size(new_model, model_patches)
+        # _skip_model_apply: AutoTuner candidates that are scored and discarded
+        # (subsampling / tuning_only, no evaluator) never need the patched
+        # clone — skip clone/add_patches and return the inputs unchanged.
+        if not _skip_model_apply:
+            if model is not None and len(model_patches) > 0:
+                new_model = model.clone()
+                new_model.add_patches(model_patches, output_strength)
+                self._update_model_size(new_model, model_patches)
 
-        if clip is not None and len(clip_patches) > 0:
-            new_clip = clip.clone()
-            new_clip.add_patches(clip_patches, clip_strength_out)
-            self._update_model_size(new_clip, clip_patches)
+            if clip is not None and len(clip_patches) > 0:
+                new_clip = clip.clone()
+                new_clip.add_patches(clip_patches, clip_strength_out)
+                self._update_model_size(new_clip, clip_patches)
 
         merge_summary = {
             "keys_processed": processed_keys,
@@ -6978,23 +7485,34 @@ class LoRAOptimizer(_LoRAMergeBase):
             "auto_output_strength": auto_output_strength,
         }
 
-        report = self._build_report(
-            lora_stats, pairwise_conflicts, collection_stats,
-            mode, density, sign_method, reasoning, merge_summary,
-            auto_strength_info=auto_strength_info,
-            strategy_counts=strategy_counts if optimization_mode == "per_prefix" else None,
-            optimization_mode=optimization_mode,
-            prefix_decisions=prefix_decisions if optimization_mode == "per_prefix" else None,
-            detected_arch=getattr(self, '_detected_arch', None),
-            normalize_keys=normalize_keys,
-            sparsification=sparsification,
-            sparsification_density=sparsification_density,
-            dare_dampening=dare_dampening,
-            merge_refinement=merge_refinement,
-            compatibility_warnings=compatibility_warnings,
-            strategy_set=strategy_set,
-            architecture_preset=preset_key,
-        )
+        if _skip_report:
+            # Phase 2 candidate merges are scored, not shown — skip the build
+            report = ""
+        else:
+            report = self._build_report(
+                lora_stats, pairwise_conflicts, collection_stats,
+                mode, density, sign_method, reasoning, merge_summary,
+                auto_strength_info=auto_strength_info,
+                strategy_counts=strategy_counts if optimization_mode == "per_prefix" else None,
+                optimization_mode=optimization_mode,
+                prefix_decisions=prefix_decisions if optimization_mode == "per_prefix" else None,
+                detected_arch=getattr(self, '_detected_arch', None),
+                normalize_keys=normalize_keys,
+                sparsification=sparsification,
+                sparsification_density=sparsification_density,
+                dare_dampening=dare_dampening,
+                merge_refinement=merge_refinement,
+                compatibility_warnings=compatibility_warnings,
+                strategy_set=strategy_set,
+                architecture_preset=preset_key,
+            )
+
+        # Derive per-prefix decision map from the decision log (last-wins if a
+        # prefix somehow appears twice — shouldn't, but defensive).
+        per_prefix_decisions = {
+            prefix: mode
+            for prefix, mode, _conflict, _n in prefix_decisions
+        }
 
         # Bundle LORA_DATA for optional downstream saving
         lora_data = {
@@ -7005,6 +7523,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             "clip_strength": clip_strength_out,
             "suggested_max_strength": suggested_max_strength,
             "sum_rank": compress_rank if compress_rank > 0 else 128,
+            "per_prefix_decisions": per_prefix_decisions,
             "merge_metadata": {
                 "source_loras": [{"name": item["name"], "strength": item["strength"]} for item in active_loras],
                 "mode": mode,
@@ -7026,7 +7545,11 @@ class LoRAOptimizer(_LoRAMergeBase):
             self._merge_cache = {cache_key: (model_patches, clip_patches, report, clip_strength_out, lora_data)}
         else:
             self._merge_cache = {}
-            logging.info("[LoRA Optimizer] Patch cache disabled — RAM freed after merge")
+            if _analysis_cache is None:
+                # Only log on standalone merges: AutoTuner candidate merges
+                # always run with cache_patches="disabled" by design, and the
+                # message reads as if the USER's setting were being ignored
+                logging.info("[LoRA Optimizer] Patch cache disabled — RAM freed after merge")
 
         # Save report to disk for later reference
         lora_combo = [[item["name"], item["strength"]] for item in active_loras]
@@ -7157,7 +7680,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                         for item in sub_stack:
                             resolved.append(item)
                 elif len(sub_stack) == 1:
-                    item = sub_stack[0]
+                    # Copy before overriding strength — the item is shared
+                    # with normalized_stack (and possibly other groups)
+                    item = dict(sub_stack[0])
                     if child["weight"] is not None:
                         item["strength"] = child["weight"]
                     resolved.append(item)
@@ -7230,9 +7755,9 @@ class LoRAMergeSettings:
                     "default": "enabled",
                     "tooltip": "Ensures LoRAs from different training tools (Kohya, PEFT, etc.) work together. Keep enabled unless you have a specific reason to disable."
                 }),
-                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                "architecture_preset": (["auto", "sd_unet", "dit", "acestep_dit", "llm"], {
                     "default": "auto",
-                    "tooltip": "Tells the optimizer what type of model you're using so it can pick the best merge settings. 'auto' detects it for you. Only change if auto-detection gets it wrong."
+                    "tooltip": "Tells the optimizer what type of model you're using so it can pick the best merge settings. 'auto' detects it for you. 'acestep_dit' is tuned for ACE-Step music LoRA merging with voice preservation. Only change if auto-detection gets it wrong."
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
@@ -7425,11 +7950,11 @@ class LoRAAutoTunerSettings:
                     "default": 0.5, "min": 0.1, "max": 0.9, "step": 0.05,
                     "tooltip": "How much of your free RAM the diff cache can use (in 'auto' mode). 0.5 = up to half your available RAM."
                 }),
-                "community_cache": (["disabled", "upload_and_download"], {
+                "community_cache": (["disabled", "upload_only", "upload_and_download"], {
                     "default": "disabled",
                     "tooltip": "Community cache: share and reuse LoRA analysis results via Hugging Face.\n"
-                               "download_only: anonymously download cached results before analysis — no account needed.\n"
-                               "upload_and_download: also upload your results after tuning. Requires HF_TOKEN environment variable."
+                               "upload_only: run locally and upload results; do NOT replay HF cache hits. Useful for backfilling enriched configs.\n"
+                               "upload_and_download: download cached results before analysis and upload new ones after. Requires HF_TOKEN environment variable."
                 }),
                 "memory_mode": (["disabled", "auto", "auto_ignore_strength", "read_only", "clear_and_run"], {
                     "default": "auto",
@@ -7443,6 +7968,13 @@ class LoRAAutoTunerSettings:
                     "default": 1, "min": 1, "max": 10, "step": 1,
                     "tooltip": "Which ranked configuration to apply (1 = top-ranked). "
                                "Change this to try a different config without re-running the full sweep."
+                }),
+                "record_dataset": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Append analysis metrics and all scored configs to "
+                               "user/lora_optimizer_reports/autotuner_dataset.jsonl for "
+                               "threshold-tuning research. Entries are recorded only when "
+                               "a full sweep runs (cache/memory replays don't add entries)."
                 }),
             },
             "optional": {
@@ -7467,7 +7999,7 @@ class LoRAAutoTunerSettings:
     def build_settings(self, top_n, scoring_svd, scoring_device,
                        scoring_speed, scoring_formula,
                        diff_cache_mode, diff_cache_ram_pct, community_cache,
-                       memory_mode="disabled", selection=1,
+                       memory_mode="disabled", selection=1, record_dataset="disabled",
                        merge_settings=None, evaluator=None):
         ms = merge_settings if merge_settings is not None else LoRAMergeSettings._DEFAULTS
         return ({
@@ -7491,6 +8023,7 @@ class LoRAAutoTunerSettings:
             "evaluator": evaluator,
             "memory_mode": memory_mode,
             "selection": selection,
+            "record_dataset": record_dataset,
         },)
 
 
@@ -7625,6 +8158,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                     evaluator=settings.get("evaluator"),
                     memory_mode=settings.get("memory_mode", "disabled"),
                     selection=settings.get("selection", 1),
+                    record_dataset=settings.get("record_dataset", "disabled"),
                 )
                 # Map 6-value AutoTuner return to 5-value Simple return
                 # (model, clip, report, analysis_report, tuner_data, lora_data)
@@ -7642,6 +8176,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
 
         # Priority 2: tuner_data connected (no settings)
         if tuner_data is not None and "top_n" in tuner_data and len(tuner_data["top_n"]) > 0:
+            _warn_stale_tuner_data(tuner_data, "LoRA Optimizer")
             entry = tuner_data["top_n"][0]
             config = entry["config"]
             strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
@@ -7660,6 +8195,7 @@ class LoRAOptimizerSimple(LoRAOptimizer):
                 normalize_keys=tuner_data.get("normalize_keys", "enabled"),
                 architecture_preset=tuner_data.get("architecture_preset", "auto"),
                 decision_smoothing=tuner_data.get("decision_smoothing", 0.25),
+                smooth_slerp_gate=tuner_data.get("smooth_slerp_gate", False),
                 cache_patches="enabled",
                 patch_compression="smart",
                 svd_device="gpu",
@@ -7746,9 +8282,9 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": "gpu",
                     "tooltip": "Device for scoring computations. GPU is much faster with SVD scoring modes."
                 }),
-                "architecture_preset": (["auto", "sd_unet", "dit", "llm"], {
+                "architecture_preset": (["auto", "sd_unet", "dit", "acestep_dit", "llm"], {
                     "default": "auto",
-                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys."
+                    "tooltip": "Architecture-aware threshold tuning. 'auto' detects from LoRA keys. 'acestep_dit' is tuned for ACE-Step music LoRA voice preservation."
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
@@ -7757,9 +8293,11 @@ class LoRAAutoTuner(LoRAOptimizer):
                 "evaluator": ("AUTOTUNER_EVALUATOR", {
                     "tooltip": "Optional external evaluator spec. Use this to blend prompt/reference scoring from your own generation code with the built-in merge metrics."
                 }),
-                "community_cache": (["disabled", "upload_and_download"], {
+                "community_cache": (["disabled", "upload_only", "upload_and_download"], {
                     "default": "disabled",
-                    "tooltip": "Community-backed cache on Hugging Face. Download precomputed results and contribute yours back. Requires huggingface-cli login or HF_TOKEN env var."
+                    "tooltip": "Community-backed cache on Hugging Face.\n"
+                               "upload_only: run locally and upload results; do NOT replay HF cache hits (useful for backfill reruns).\n"
+                               "upload_and_download: download precomputed results and contribute yours back. Requires huggingface-cli login or HF_TOKEN env var."
                 }),
                 "cache_patches": (["enabled", "disabled"], {
                     "default": "enabled",
@@ -7816,6 +8354,13 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "default": 1, "min": 1, "max": 10, "step": 1,
                     "tooltip": "Which ranked configuration to apply (1 = top-ranked). "
                                "Change this to try a different config without re-running the full sweep."
+                }),
+                "record_dataset": (["disabled", "enabled"], {
+                    "default": "disabled",
+                    "tooltip": "Append analysis metrics and all scored configs to "
+                               "user/lora_optimizer_reports/autotuner_dataset.jsonl for "
+                               "threshold-tuning research. Entries are recorded only when "
+                               "a full sweep runs (cache/memory replays don't add entries)."
                 }),
             },
         }
@@ -7878,8 +8423,74 @@ class LoRAAutoTuner(LoRAOptimizer):
                             f"{names_only_hash}.analysis.json")
 
     @staticmethod
-    def _analysis_cache_load(names_only_hash):
-        """Load analysis cache. Returns per_prefix dict or None on miss/stale."""
+    def _remap_analysis_indices(per_prefix, cached_source_loras, active_loras):
+        """
+        Remap index-keyed analysis-cache entries from the cached stack order
+        to the current stack order. The cache key (names_only_hash) is
+        order-independent, but entries are keyed by stack position — without
+        this remap, reordering the same LoRAs would silently attribute one
+        LoRA's stats to another.
+
+        Returns the remapped per_prefix dict, or None if the cached order
+        cannot be established (caller treats as cache miss).
+        """
+        if not per_prefix or not cached_source_loras:
+            return None
+        try:
+            cached_names = [l["name"] for l in cached_source_loras]
+            current_names = [l["name"] for l in active_loras]
+        except (TypeError, KeyError):
+            return None
+        if sorted(cached_names) != sorted(current_names):
+            return None
+        if cached_names == current_names:
+            return per_prefix  # common case: same order, nothing to do
+
+        # Old->new index map; duplicate names matched in occurrence order
+        # (entries for the same file are interchangeable — stats are unit-strength)
+        slots = {}
+        for idx, name in enumerate(current_names):
+            slots.setdefault(name, []).append(idx)
+        index_map = {old_idx: slots[name].pop(0)
+                     for old_idx, name in enumerate(cached_names)}
+
+        try:
+            remapped = {}
+            for prefix, entry in per_prefix.items():
+                new_entry = dict(entry)
+                for field in ("per_lora_norm_sq", "magnitude_samples_unscaled",
+                              "ranks", "strength_signs"):
+                    value = entry.get(field)
+                    if isinstance(value, dict):
+                        new_entry[field] = {str(index_map[int(k)]): v
+                                            for k, v in value.items()}
+                pc = entry.get("pair_conflicts")
+                if isinstance(pc, dict):
+                    new_pc = {}
+                    for key_str, metrics in pc.items():
+                        a, b = (int(x) for x in key_str.split(","))
+                        na, nb = index_map[a], index_map[b]
+                        if na > nb:
+                            # norm_a_sq/norm_b_sq follow the (i, j) key order
+                            metrics = dict(metrics)
+                            metrics["norm_a_sq"], metrics["norm_b_sq"] = (
+                                metrics["norm_b_sq"], metrics["norm_a_sq"])
+                            na, nb = nb, na
+                        new_pc[f"{na},{nb}"] = metrics
+                    new_entry["pair_conflicts"] = new_pc
+                remapped[prefix] = new_entry
+        except (KeyError, ValueError, TypeError) as e:
+            logging.warning(f"[AutoTuner Analysis Cache] Index remap failed: {e}")
+            return None
+        logging.info("[AutoTuner Analysis Cache] Remapped cached entries to "
+                     "current stack order")
+        return remapped
+
+    @staticmethod
+    def _analysis_cache_load(names_only_hash, active_loras=None):
+        """Load analysis cache. Returns per_prefix dict or None on miss/stale.
+        When active_loras is given, entries are remapped from the cached stack
+        order to the current one (miss if the order can't be established)."""
         path = LoRAAutoTuner._analysis_cache_path(names_only_hash)
         if not os.path.exists(path):
             return None
@@ -7889,16 +8500,40 @@ class LoRAAutoTuner(LoRAOptimizer):
             if data.get("algo_version") != ANALYSIS_CACHE_VERSION:
                 logging.info("[AutoTuner Analysis Cache] Stale algo version, ignoring")
                 return None
-            return data.get("per_prefix")
+            per_prefix = data.get("per_prefix")
+            if per_prefix is not None and active_loras is not None:
+                per_prefix = LoRAAutoTuner._remap_analysis_indices(
+                    per_prefix, data.get("source_loras"), active_loras)
+            if per_prefix is not None:
+                LoRAAutoTuner._touch(path)
+            return per_prefix
         except Exception as e:
             logging.warning(f"[AutoTuner Analysis Cache] Failed to load: {e}")
             return None
 
     @staticmethod
     def _analysis_cache_save(names_only_hash, per_prefix, source_loras):
-        """Atomic write of analysis cache to disk."""
+        """Atomic write of analysis cache to disk.
+
+        Merge-on-write: current on-disk entries are remapped to the caller's
+        stack order and overlaid (caller wins), so concurrent processes
+        tuning overlapping stacks don't drop each other's prefixes."""
         from datetime import datetime
         path = LoRAAutoTuner._analysis_cache_path(names_only_hash)
+        try:
+            with open(path) as f:
+                disk = json.load(f)
+            if disk.get("algo_version") == ANALYSIS_CACHE_VERSION:
+                disk_pp = LoRAAutoTuner._remap_analysis_indices(
+                    disk.get("per_prefix"), disk.get("source_loras"), source_loras)
+                if disk_pp:
+                    merged = dict(disk_pp)
+                    merged.update(per_prefix)
+                    per_prefix = merged
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logging.warning(f"[AutoTuner Analysis Cache] Merge-on-write skipped: {e}")
         entry = {
             "analysis_version": 1,
             "algo_version": ANALYSIS_CACHE_VERSION,
@@ -7925,8 +8560,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                             f"{names_only_hash}.analysis.partial.json")
 
     @staticmethod
-    def _analysis_partial_load(names_only_hash):
-        """Load partial analysis checkpoint. Returns per_prefix dict or None."""
+    def _analysis_partial_load(names_only_hash, active_loras=None):
+        """Load partial analysis checkpoint. Returns per_prefix dict or None.
+        When active_loras is given, entries are remapped from the cached stack
+        order to the current one (miss if the order can't be established)."""
         path = LoRAAutoTuner._analysis_partial_path(names_only_hash)
         if not os.path.exists(path):
             return None
@@ -7936,7 +8573,11 @@ class LoRAAutoTuner(LoRAOptimizer):
             if data.get("algo_version") != ANALYSIS_CACHE_VERSION:
                 logging.info("[AutoTuner Analysis Partial] Stale algo version, ignoring")
                 return None
-            return data.get("per_prefix")
+            per_prefix = data.get("per_prefix")
+            if per_prefix is not None and active_loras is not None:
+                per_prefix = LoRAAutoTuner._remap_analysis_indices(
+                    per_prefix, data.get("source_loras"), active_loras)
+            return per_prefix
         except Exception as e:
             logging.warning(f"[AutoTuner Analysis Partial] Failed to load: {e}")
             return None
@@ -7993,22 +8634,100 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     # --- Community cache: content-based hashing ---
 
+    _gc_done = False
+
+    @staticmethod
+    def _gc_autotuner_memory(max_age_days=90):
+        """Best-effort GC of re-derivable cache files. Identity-hash keyed
+        files (.lora/.pair/.analysis) are orphaned forever by any retrain or
+        touch of the source LoRA, so the directory grows without bound.
+        Files touched on cache hits stay alive; runs once per process.
+        Memory entries (*.memory.json) are kept — small and user-facing."""
+        if LoRAAutoTuner._gc_done:
+            return
+        LoRAAutoTuner._gc_done = True
+        try:
+            cutoff = time.time() - max_age_days * 86400
+            n_removed = 0
+            for pattern in ("*.lora.json", "*.pair.json", "*.analysis.json",
+                            "*.analysis.partial.json"):
+                for path in glob.glob(os.path.join(AUTOTUNER_MEMORY_DIR, pattern)):
+                    try:
+                        if os.path.getmtime(path) < cutoff:
+                            os.unlink(path)
+                            n_removed += 1
+                    except OSError:
+                        pass
+            # Prune content-hash entries whose file is gone or has changed
+            cache = LoRAAutoTuner._load_content_hash_cache()
+            pruned = {}
+            for key, value in cache.items():
+                try:
+                    path_part, mtime_s, size_s = key.rsplit("|", 2)
+                    st = os.stat(path_part)
+                    if f"{st.st_mtime}" == mtime_s and f"{st.st_size}" == size_s:
+                        pruned[key] = value
+                except (OSError, ValueError):
+                    continue
+            n_pruned = len(cache) - len(pruned)
+            if n_pruned:
+                LoRAAutoTuner._save_content_hash_cache(pruned, merge=False)
+            if n_removed or n_pruned:
+                logging.info(f"[AutoTuner GC] Removed {n_removed} stale cache file(s), "
+                             f"pruned {n_pruned} dead content-hash entries")
+        except Exception as e:
+            logging.warning(f"[AutoTuner GC] Failed: {e}")
+
+    @staticmethod
+    def _touch(path):
+        """Refresh a cache file's mtime on hit so GC keeps live entries."""
+        try:
+            os.utime(path, None)
+        except OSError:
+            pass
+
     @staticmethod
     def _content_hash_cache_path():
         return os.path.join(AUTOTUNER_MEMORY_DIR, ".content_hashes.json")
 
-    @staticmethod
-    def _load_content_hash_cache():
-        try:
-            with open(LoRAAutoTuner._content_hash_cache_path(), "r") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+    # Per-process memo of the content-hash file: rerun scans call
+    # _lora_content_hash hundreds of times and re-parsing the JSON each
+    # call dominated the cost. Keyed by path so a relocated cache dir
+    # (e.g. in tests) invalidates it.
+    _content_hash_mem = None  # (path, dict)
 
     @staticmethod
-    def _save_content_hash_cache(cache):
+    def _load_content_hash_cache():
+        path = LoRAAutoTuner._content_hash_cache_path()
+        mem = LoRAAutoTuner._content_hash_mem
+        if mem is not None and mem[0] == path:
+            return mem[1]
         try:
-            path = LoRAAutoTuner._content_hash_cache_path()
+            with open(path, "r") as f:
+                cache = json.load(f)
+        except Exception:
+            cache = {}
+        LoRAAutoTuner._content_hash_mem = (path, cache)
+        return cache
+
+    @staticmethod
+    def _save_content_hash_cache(cache, merge=True):
+        """merge=True overlays the caller's keys onto the current on-disk
+        ones so concurrent processes don't drop each other's hashes; the GC
+        passes merge=False so pruned dead keys aren't resurrected."""
+        path = LoRAAutoTuner._content_hash_cache_path()
+        if merge:
+            try:
+                with open(path, "r") as f:
+                    disk = json.load(f)
+                if isinstance(disk, dict):
+                    merged = dict(disk)
+                    merged.update(cache)
+                    cache = merged
+            except Exception:
+                pass
+        LoRAAutoTuner._content_hash_mem = (path, cache)
+        try:
             tmp = path + ".tmp"
             with open(tmp, "w") as f:
                 json.dump(cache, f, separators=(",", ":"))
@@ -8044,10 +8763,17 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     # --- Community cache: network I/O ---
 
+    # When a download fails for connectivity reasons (timeout, DNS, refused),
+    # skip further downloads until this monotonic-ish deadline — otherwise a
+    # 3-LoRA run stalls ~70s on serial 10s timeouts before falling back local
+    _community_offline_until = 0.0
+
     @staticmethod
     def _community_download(path_in_repo):
         """Download a JSON file from the community cache repo. Returns dict or None."""
         import urllib.request, urllib.error
+        if time.time() < LoRAAutoTuner._community_offline_until:
+            return None
         url = f"{COMMUNITY_CACHE_BASE_URL}/{path_in_repo}"
         try:
             with urllib.request.urlopen(url, timeout=10) as resp:
@@ -8058,38 +8784,72 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.warning(f"[AutoTuner Community] Download failed ({e.code}): {url}")
             return None
         except Exception as e:
-            logging.warning(f"[AutoTuner Community] Download error: {e}")
+            LoRAAutoTuner._community_offline_until = time.time() + 300
+            logging.warning(f"[AutoTuner Community] Download error: {e} — "
+                            "skipping community downloads for 5 minutes")
             return None
 
     @staticmethod
     def _community_upload(path_in_repo, data, token):
         """Upload a JSON file to the community cache repo. Returns True on success."""
+        return LoRAAutoTuner._community_upload_batch([(path_in_repo, data)], token) == 1
+
+    @staticmethod
+    def _community_upload_batch(files, token, commit_message="AutoTuner community cache update"):
+        """Upload multiple JSON files in a single commit. files: [(path, dict)].
+        Returns the number of files uploaded (all-or-nothing per commit)."""
+        if not files:
+            return 0
         try:
-            from huggingface_hub import HfApi
+            from huggingface_hub import HfApi, CommitOperationAdd
         except ImportError:
             logging.warning("[AutoTuner Community] huggingface_hub not installed — "
                             "skipping upload. Install it with: pip install huggingface_hub")
-            return False
+            return 0
         try:
             import io
-            content = json.dumps(data, separators=(",", ":")).encode()
-            HfApi(token=token).upload_file(
-                path_or_fileobj=io.BytesIO(content),
-                path_in_repo=path_in_repo,
+            operations = [
+                CommitOperationAdd(
+                    path_in_repo=path,
+                    path_or_fileobj=io.BytesIO(
+                        json.dumps(data, separators=(",", ":")).encode()),
+                )
+                for path, data in files
+            ]
+            HfApi(token=token).create_commit(
                 repo_id=COMMUNITY_CACHE_REPO,
                 repo_type="dataset",
+                operations=operations,
+                commit_message=commit_message,
             )
-            logging.info(f"[AutoTuner Community] Uploaded: {path_in_repo}")
-            return True
+            logging.info(f"[AutoTuner Community] Uploaded {len(operations)} file(s) "
+                         f"in one commit")
+            return len(operations)
         except Exception as e:
-            logging.warning(f"[AutoTuner Community] Upload failed for {path_in_repo}: {e}")
-            return False
+            logging.warning(f"[AutoTuner Community] Upload failed: {e}")
+            return 0
+
+    @staticmethod
+    def _swap_pair_norms(per_prefix):
+        """Copy of pair entries with norm_a_sq/norm_b_sq swapped — used to
+        convert between local identity-hash orientation and the content-hash
+        orientation used by community pair files."""
+        out = {}
+        for k, m in per_prefix.items():
+            m2 = dict(m)
+            if "norm_a_sq" in m2 and "norm_b_sq" in m2:
+                m2["norm_a_sq"], m2["norm_b_sq"] = m2["norm_b_sq"], m2["norm_a_sq"]
+            out[k] = m2
+        return out
 
     @staticmethod
     def _community_download_caches(active_loras, content_hashes, lora_caches,
-                                    pair_caches, arch_preset, top_n):
+                                    pair_caches, arch_preset, top_n,
+                                    lora_hashes=None):
         """Download community pair/lora caches and config. Mutates lora_caches and
-        pair_caches in place (fill-missing-only — local data always wins).
+        pair_caches in place (fill-missing-only — local data always wins) and
+        persists merged entries to the local cache files so the next run does
+        not re-download them.
         Returns reconstructed tuner_data if a config hit occurs, else None."""
         n_loras = len(active_loras)
         n_pairs = n_loras * (n_loras - 1) // 2
@@ -8104,10 +8864,14 @@ class LoRAAutoTuner(LoRAOptimizer):
                 data = LoRAAutoTuner._community_download(f"lora/{ch}.lora.json")
                 if (data and data.get("algo_version") == ANALYSIS_CACHE_VERSION
                         and "per_prefix" in data):
+                    merged_any = False
                     for k, v in data["per_prefix"].items():
                         if k not in lora_caches[i]:
                             lora_caches[i][k] = v
+                            merged_any = True
                     n_lora_hits += 1
+                    if merged_any and lora_hashes is not None:
+                        LoRAAutoTuner._lora_cache_save(lora_hashes[i], lora_caches[i])
             except Exception as e:
                 logging.warning(f"[AutoTuner Community] Error merging lora cache {i}: {e}")
 
@@ -8121,12 +8885,26 @@ class LoRAAutoTuner(LoRAOptimizer):
                     data = LoRAAutoTuner._community_download(f"pair/{ha}_{hb}.pair.json")
                     if (data and data.get("algo_version") == ANALYSIS_CACHE_VERSION
                             and "per_prefix" in data):
+                        entries = data["per_prefix"]
+                        # Community files orient norm_a to the smaller CONTENT
+                        # hash; local caches orient to the smaller IDENTITY
+                        # hash. Re-orient when the two conventions disagree.
+                        if lora_hashes is not None:
+                            content_min_is_i = content_hashes[i] <= content_hashes[j]
+                            identity_min_is_i = lora_hashes[i] <= lora_hashes[j]
+                            if content_min_is_i != identity_min_is_i:
+                                entries = LoRAAutoTuner._swap_pair_norms(entries)
                         cache = pair_caches.get((i, j), {})
-                        for k, v in data["per_prefix"].items():
+                        merged_any = False
+                        for k, v in entries.items():
                             if k not in cache:
                                 cache[k] = v
+                                merged_any = True
                         pair_caches[(i, j)] = cache
                         n_pair_hits += 1
+                        if merged_any and lora_hashes is not None:
+                            LoRAAutoTuner._pair_cache_save(
+                                lora_hashes[i], lora_hashes[j], cache)
                 except Exception as e:
                     logging.warning(f"[AutoTuner Community] Error merging pair cache ({i},{j}): {e}")
 
@@ -8145,18 +8923,62 @@ class LoRAAutoTuner(LoRAOptimizer):
                 logging.info(f"[AutoTuner Community] Config version mismatch "
                              f"({data.get('algo_version')} != {AUTOTUNER_ALGO_VERSION}), ignoring")
                 return None
-            if "config" not in data or "score" not in data:
+            config = data.get("config")
+            score = data.get("score")
+            # Validate before the replay hard-indexes these fields — a
+            # malformed upload must degrade to a full sweep, not a crash
+            required = ("merge_mode", "optimization_mode", "auto_strength",
+                        "sparsification", "sparsification_density",
+                        "dare_dampening", "merge_refinement")
+            if (not isinstance(config, dict) or not isinstance(score, (int, float))
+                    or any(k not in config for k in required)):
                 logging.warning("[AutoTuner Community] Config entry malformed, ignoring")
                 return None
-            logging.info(f"[AutoTuner Community] Config HIT — score={data['score']:.4f}, "
+            logging.info(f"[AutoTuner Community] Config HIT — score={score:.4f}, "
                          f"arch={arch_preset}")
-            return {
+            # Rebuild the full candidate list when the uploader recorded one,
+            # so selection/top_n > 1 work on community hits
+            top_entries = []
+            for idx, cand in enumerate(data.get("candidates") or []):
+                if not isinstance(cand, dict):
+                    continue
+                cfg = cand.get("config")
+                if not isinstance(cfg, dict) or any(k not in cfg for k in required):
+                    continue
+                top_entries.append({
+                    "rank": cand.get("rank", idx + 1),
+                    "score_heuristic": cand.get("score_heuristic", 0.0),
+                    "score_measured": cand.get("score_measured", 0.0),
+                    "score_external": None,
+                    "score_final": cand.get("score_final", 0.0),
+                    "config": cfg,
+                    "metrics": {},
+                    "external_details": None,
+                    "per_prefix_decisions": cand.get("per_prefix_decisions", {}),
+                })
+            top_entries.sort(key=lambda e: e["rank"])
+            if not top_entries:
+                top_entries = [{
+                    "rank": 1,
+                    "score_heuristic": 0.0,
+                    "score_measured": score,
+                    "score_external": None,
+                    "score_final": score,
+                    "config": config,
+                    "metrics": {},
+                    "external_details": None,
+                }]
+            # Match auto_tune's lora_hash so downstream consumers (Selector)
+            # can verify the stack hasn't changed
+            _hash_input = json.dumps(
+                [(l["name"], l["strength"]) for l in active_loras], sort_keys=True)
+            tuner_data = {
                 "version": 1,
-                "lora_hash": "",
-                "source_loras": [],
+                "algo_version": AUTOTUNER_ALGO_VERSION,
+                "lora_hash": hashlib.sha256(_hash_input.encode()).hexdigest()[:16],
+                "source_loras": [{"name": l["name"], "strength": l["strength"]}
+                                 for l in active_loras],
                 "architecture_preset": data.get("arch_preset", arch_preset),
-                "auto_strength_floor": -1.0,
-                "decision_smoothing": 0.25,
                 "analysis_summary": {
                     "n_loras": len(active_loras),
                     "prefix_count": 0,
@@ -8165,31 +8987,39 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "avg_subspace_overlap": 0.0,
                     "avg_cosine_sim": 0.0,
                     "magnitude_ratio": 1.0,
-                    "decision_smoothing": 0.25,
                 },
-                "top_n": [{
-                    "rank": 1,
-                    "score_heuristic": 0.0,
-                    "score_measured": data["score"],
-                    "score_external": None,
-                    "score_final": data["score"],
-                    "config": data["config"],
-                    "metrics": {},
-                    "external_details": None,
-                }],
+                "top_n": top_entries,
             }
+            # Only carry tuning settings the uploader actually recorded —
+            # omitted keys make the replay fall back to the user's local
+            # values instead of silently overriding them with constants
+            for key in ("auto_strength_floor", "decision_smoothing",
+                        "normalize_keys", "smooth_slerp_gate",
+                        "scoring_formula"):
+                if key in data:
+                    tuner_data[key] = data[key]
+            if data.get("uploaded_at") or data.get("scoring_formula"):
+                logging.info(f"[AutoTuner Community] Config uploaded "
+                             f"{data.get('uploaded_at', '?')} "
+                             f"(scoring_formula={data.get('scoring_formula', '?')})")
+            if "decision_smoothing" in data:
+                tuner_data["analysis_summary"]["decision_smoothing"] = data["decision_smoothing"]
+            return tuner_data
         except Exception as e:
             logging.warning(f"[AutoTuner Community] Error downloading config: {e}")
             return None
 
     @staticmethod
     def _community_upload_results(new_lora_entries, new_pair_entries, content_hashes,
-                                   lora_hashes, tuner_data, arch_preset, token):
-        """Upload newly computed lora/pair caches and (if best) a winning config."""
+                                   lora_hashes, tuner_data, arch_preset, token,
+                                   base_model_family=None):
+        """Upload newly computed lora/pair caches and (if best) a winning config.
+        All files go up in a single commit to avoid commit spam on the repo."""
         logging.info("[AutoTuner Community] Uploading results...")
+        pending = []  # (path_in_repo, payload) — committed in one batch below
         n_lora_uploaded = 0
         n_pair_uploaded = 0
-        # Upload new lora caches
+        # Collect new lora caches
         for i, new_entries in new_lora_entries.items():
             if not new_entries or i not in content_hashes:
                 continue
@@ -8198,16 +9028,15 @@ class LoRAAutoTuner(LoRAOptimizer):
                 existing = LoRAAutoTuner._lora_cache_load(lora_hashes[i]) or {}
                 existing.update({k: v for k, v in new_entries.items() if v is not None})
                 if existing:
-                    if LoRAAutoTuner._community_upload(
+                    pending.append((
                         f"lora/{ch}.lora.json",
                         {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": existing},
-                        token,
-                    ):
-                        n_lora_uploaded += 1
+                    ))
+                    n_lora_uploaded += 1
             except Exception as e:
-                logging.warning(f"[AutoTuner Community] Error uploading lora cache {i}: {e}")
+                logging.warning(f"[AutoTuner Community] Error preparing lora cache {i}: {e}")
 
-        # Upload new pair caches
+        # Collect new pair caches
         for (i, j), new_entries in new_pair_entries.items():
             if not new_entries or i not in content_hashes or j not in content_hashes:
                 continue
@@ -8216,18 +9045,25 @@ class LoRAAutoTuner(LoRAOptimizer):
                 existing = LoRAAutoTuner._pair_cache_load(lora_hashes[i], lora_hashes[j]) or {}
                 existing.update(new_entries)
                 if existing:
-                    if LoRAAutoTuner._community_upload(
+                    # Local entries orient norm_a to the smaller IDENTITY hash;
+                    # community files orient to the smaller CONTENT hash
+                    content_min_is_i = content_hashes[i] <= content_hashes[j]
+                    identity_min_is_i = lora_hashes[i] <= lora_hashes[j]
+                    upload_entries = (LoRAAutoTuner._swap_pair_norms(existing)
+                                      if content_min_is_i != identity_min_is_i
+                                      else existing)
+                    pending.append((
                         f"pair/{ha}_{hb}.pair.json",
-                        {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": existing},
-                        token,
-                    ):
-                        n_pair_uploaded += 1
+                        {"algo_version": ANALYSIS_CACHE_VERSION, "per_prefix": upload_entries},
+                    ))
+                    n_pair_uploaded += 1
             except Exception as e:
-                logging.warning(f"[AutoTuner Community] Error uploading pair cache ({i},{j}): {e}")
+                logging.warning(f"[AutoTuner Community] Error preparing pair cache ({i},{j}): {e}")
 
         # Upload config if local score beats community
         try:
             if not tuner_data.get("top_n"):
+                LoRAAutoTuner._community_upload_batch(pending, token)
                 return
             best = tuner_data["top_n"][0]
             local_score = best.get("score_final", 0.0)
@@ -8235,9 +9071,18 @@ class LoRAAutoTuner(LoRAOptimizer):
             joined = "_".join(sorted_hashes)
             config_path = f"config/{joined}_{arch_preset}.config.json"
             existing_config = LoRAAutoTuner._community_download(config_path)
-            if existing_config and existing_config.get("score", 0.0) >= local_score:
+            # Only defer to an existing config from the SAME algo version AND
+            # scoring formula — scores across versions/formulas aren't
+            # comparable, and an old higher score would otherwise block
+            # uploads forever (downloaders reject mismatched versions anyway)
+            local_formula = tuner_data.get("scoring_formula")
+            if (existing_config
+                    and existing_config.get("algo_version") == AUTOTUNER_ALGO_VERSION
+                    and existing_config.get("scoring_formula") == local_formula
+                    and existing_config.get("score", 0.0) >= local_score):
                 logging.info(f"[AutoTuner Community] Config not uploaded — community score "
                              f"({existing_config.get('score', 0.0):.4f}) >= local ({local_score:.4f})")
+                LoRAAutoTuner._community_upload_batch(pending, token)
                 return
             candidates = [
                 {
@@ -8246,26 +9091,38 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "score_heuristic": entry.get("score_heuristic", 0.0),
                     "score_measured": entry.get("score_measured", 0.0),
                     "score_final": entry.get("score_final", 0.0),
+                    "per_prefix_decisions": entry.get("per_prefix_decisions", {}),
                 }
                 for idx, entry in enumerate(tuner_data["top_n"])
                 if "config" in entry
             ]
-            LoRAAutoTuner._community_upload(
-                config_path,
-                {
-                    "algo_version": AUTOTUNER_ALGO_VERSION,
-                    "arch_preset": arch_preset,
-                    "lora_content_hashes": sorted_hashes,
-                    "score": local_score,
-                    "config": best["config"],
-                    "candidates": candidates,
-                },
-                token,
-            )
+            payload = {
+                "algo_version": AUTOTUNER_ALGO_VERSION,
+                "arch_preset": arch_preset,
+                "base_model_family": base_model_family or "unknown",
+                "lora_content_hashes": sorted_hashes,
+                "score": local_score,
+                "config": best["config"],
+                "candidates": candidates,
+            }
+            # Record the tuning settings the sweep ran with so downloaders
+            # can replay faithfully instead of guessing
+            for key in ("auto_strength_floor", "decision_smoothing",
+                        "normalize_keys", "smooth_slerp_gate",
+                        "scoring_formula"):
+                if key in tuner_data:
+                    payload[key] = tuner_data[key]
+            from datetime import datetime as _dt
+            payload["uploaded_at"] = _dt.now().isoformat(timespec="seconds")
+            pending.append((config_path, payload))
+            LoRAAutoTuner._community_upload_batch(pending, token)
             logging.info(f"[AutoTuner Community] Upload complete — {n_lora_uploaded} lora, "
                          f"{n_pair_uploaded} pair, config score={local_score:.4f}")
         except Exception as e:
             logging.warning(f"[AutoTuner Community] Error uploading config: {e}")
+            # Still commit the lora/pair files prepared above
+            if pending:
+                LoRAAutoTuner._community_upload_batch(pending, token)
 
     @staticmethod
     def _lora_cache_path(lora_hash):
@@ -8283,6 +9140,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if data.get("algo_version") != ANALYSIS_CACHE_VERSION:
                 logging.info("[AutoTuner Lora Cache] Stale algo version, ignoring")
                 return None
+            LoRAAutoTuner._touch(path)
             return data.get("per_prefix")
         except Exception as e:
             logging.warning(f"[AutoTuner Lora Cache] Failed to load: {e}")
@@ -8290,13 +9148,23 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     @staticmethod
     def _lora_cache_save(lora_hash, per_prefix):
-        """Atomic write of per-LoRA cache to disk."""
+        """Atomic write of per-LoRA cache to disk.
+
+        Merge-on-write: re-reads the current on-disk entries and overlays the
+        caller's (caller wins; None never clobbers a real entry). Entries are
+        content-derived, so same-key collisions between concurrent ComfyUI
+        processes hold equivalent data — this removes lost updates without
+        cross-platform file locking."""
         from datetime import datetime
         path = LoRAAutoTuner._lora_cache_path(lora_hash)
+        merged = LoRAAutoTuner._lora_cache_load(lora_hash) or {}
+        for k, v in per_prefix.items():
+            if v is not None or k not in merged:
+                merged[k] = v
         entry = {
             "algo_version": ANALYSIS_CACHE_VERSION,
             "created_at": datetime.now().isoformat(timespec="seconds"),
-            "per_prefix": per_prefix,
+            "per_prefix": merged,
         }
         tmp_path = path + ".tmp"
         try:
@@ -8328,6 +9196,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if data.get("algo_version") != ANALYSIS_CACHE_VERSION:
                 logging.info("[AutoTuner Pair Cache] Stale algo version, ignoring")
                 return None
+            LoRAAutoTuner._touch(path)
             return data.get("per_prefix")
         except Exception as e:
             logging.warning(f"[AutoTuner Pair Cache] Failed to load: {e}")
@@ -8335,13 +9204,16 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     @staticmethod
     def _pair_cache_save(hash_a, hash_b, per_prefix):
-        """Atomic write of per-pair cache to disk."""
+        """Atomic write of per-pair cache to disk. Merge-on-write (caller
+        wins) — see _lora_cache_save for the rationale."""
         from datetime import datetime
         path = LoRAAutoTuner._pair_cache_path(hash_a, hash_b)
+        merged = LoRAAutoTuner._pair_cache_load(hash_a, hash_b) or {}
+        merged.update(per_prefix)
         entry = {
             "algo_version": ANALYSIS_CACHE_VERSION,
             "created_at": datetime.now().isoformat(timespec="seconds"),
-            "per_prefix": per_prefix,
+            "per_prefix": merged,
         }
         tmp_path = path + ".tmp"
         try:
@@ -8365,35 +9237,45 @@ class LoRAAutoTuner(LoRAOptimizer):
         try:
             with open(path, "r") as f:
                 data = json.load(f)
+
+            # Version check
+            if data.get("algo_version") != AUTOTUNER_ALGO_VERSION:
+                logging.info(f"[AutoTuner Memory] Stale algo version "
+                             f"({data.get('algo_version')} != {AUTOTUNER_ALGO_VERSION}), ignoring")
+                return None
+            if data.get("memory_version") != AUTOTUNER_MEMORY_VERSION:
+                logging.info("[AutoTuner Memory] Stale memory version, ignoring")
+                return None
+
+            tuner_data = data.get("tuner_data")
+            if not isinstance(tuner_data, dict) or "top_n" not in tuner_data:
+                return None
+
+            # top_n count check — stored must have enough entries
+            if len(tuner_data["top_n"]) < requested_top_n:
+                logging.info(f"[AutoTuner Memory] Stored top_n={len(tuner_data['top_n'])} "
+                             f"< requested={requested_top_n}, ignoring")
+                return None
+
+            # Provenance in the log so "why did it reuse saved data?" is
+            # answerable without opening the file
+            logging.info(f"[AutoTuner Memory] Entry created {data.get('created_at', '?')} "
+                         f"(algo {data.get('algo_version', '?')})")
+            return tuner_data
         except Exception:
             logging.warning(f"[AutoTuner Memory] Corrupt memory file, ignoring: {path}")
             return None
 
-        # Version check
-        if data.get("algo_version") != AUTOTUNER_ALGO_VERSION:
-            logging.info(f"[AutoTuner Memory] Stale algo version "
-                         f"({data.get('algo_version')} != {AUTOTUNER_ALGO_VERSION}), ignoring")
-            return None
-        if data.get("memory_version") != AUTOTUNER_MEMORY_VERSION:
-            logging.info("[AutoTuner Memory] Stale memory version, ignoring")
-            return None
-
-        tuner_data = data.get("tuner_data")
-        if not tuner_data or "top_n" not in tuner_data:
-            return None
-
-        # top_n count check — stored must have enough entries
-        if len(tuner_data["top_n"]) < requested_top_n:
-            logging.info(f"[AutoTuner Memory] Stored top_n={len(tuner_data['top_n'])} "
-                         f"< requested={requested_top_n}, ignoring")
-            return None
-
-        return tuner_data
-
     @staticmethod
-    def _memory_find_by_names(lora_names_sorted, settings_hash, requested_top_n):
-        """Scan for any strength-sensitive entry whose LoRA names match, ignoring strengths.
-        Among matches, returns the entry with the highest total absolute strength."""
+    def _memory_find_by_names(lora_names_sorted, settings_hash, requested_top_n,
+                              lora_signs_sorted=None):
+        """Scan for any strength-sensitive entry whose LoRA names match, ignoring
+        strength magnitudes. Among matches, returns the entry with the highest
+        total absolute strength.
+
+        lora_signs_sorted: optional sorted [(name, sign)] of the current stack.
+        Conflict/decision data is sign-dependent (the analysis layer invalidates
+        on sign flips), so entries tuned with different signs are rejected."""
         import glob as _glob
         pattern = os.path.join(AUTOTUNER_MEMORY_DIR, f"*_{settings_hash}.memory.json")
         candidates = []
@@ -8401,21 +9283,28 @@ class LoRAAutoTuner(LoRAOptimizer):
             try:
                 with open(path, "r") as f:
                     data = json.load(f)
+                if data.get("algo_version") != AUTOTUNER_ALGO_VERSION:
+                    continue
+                if data.get("memory_version") != AUTOTUNER_MEMORY_VERSION:
+                    continue
+                tuner_data = data.get("tuner_data")
+                if not isinstance(tuner_data, dict) or "top_n" not in tuner_data:
+                    continue
+                if len(tuner_data["top_n"]) < requested_top_n:
+                    continue
+                source_loras = data.get("source_loras", [])
+                if sorted([l["name"] for l in source_loras]) != lora_names_sorted:
+                    continue
+                if lora_signs_sorted is not None:
+                    cached_signs = sorted(
+                        (l["name"], 1 if l.get("strength", 0) >= 0 else -1)
+                        for l in source_loras)
+                    if cached_signs != lora_signs_sorted:
+                        continue
+                total_strength = sum(abs(l.get("strength", 0)) for l in source_loras)
             except Exception:
+                logging.warning(f"[AutoTuner Memory] Corrupt memory file, skipping: {path}")
                 continue
-            if data.get("algo_version") != AUTOTUNER_ALGO_VERSION:
-                continue
-            if data.get("memory_version") != AUTOTUNER_MEMORY_VERSION:
-                continue
-            tuner_data = data.get("tuner_data")
-            if not tuner_data or "top_n" not in tuner_data:
-                continue
-            if len(tuner_data["top_n"]) < requested_top_n:
-                continue
-            source_loras = data.get("source_loras", [])
-            if sorted([l["name"] for l in source_loras]) != lora_names_sorted:
-                continue
-            total_strength = sum(abs(l.get("strength", 0)) for l in source_loras)
             candidates.append((total_strength, tuner_data))
         if not candidates:
             return None
@@ -8455,20 +9344,21 @@ class LoRAAutoTuner(LoRAOptimizer):
     def _memory_clear(lora_hash=None, settings_hash=None):
         """Delete memory files. Both None = clear all. lora_hash only = all for that combo."""
         if lora_hash and settings_hash:
-            path = LoRAAutoTuner._memory_file_path(lora_hash, settings_hash)
-            if os.path.exists(path):
-                os.unlink(path)
-                logging.info(f"[AutoTuner Memory] Deleted: {path}")
+            paths = [LoRAAutoTuner._memory_file_path(lora_hash, settings_hash)]
         elif lora_hash:
             pattern = os.path.join(AUTOTUNER_MEMORY_DIR, f"{lora_hash}_*.memory.json")
-            for path in glob.glob(pattern):
-                os.unlink(path)
-                logging.info(f"[AutoTuner Memory] Deleted: {path}")
+            paths = glob.glob(pattern)
         else:
             pattern = os.path.join(AUTOTUNER_MEMORY_DIR, "*.memory.json")
-            for path in glob.glob(pattern):
+            paths = glob.glob(pattern)
+        for path in paths:
+            try:
                 os.unlink(path)
-            logging.info("[AutoTuner Memory] Cleared all memory files")
+                logging.info(f"[AutoTuner Memory] Deleted: {path}")
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                logging.warning(f"[AutoTuner Memory] Could not delete {path}: {e}")
 
     def _build_memory_hit_report(self, lora_hash, tuner_data, output_strength,
                                  scoring_speed="full", applied_rank=1):
@@ -8496,20 +9386,20 @@ class LoRAAutoTuner(LoRAOptimizer):
                   diff_cache_mode="disabled", diff_cache_ram_pct=0.5, vram_budget=0.0,
                   scoring_speed="full", scoring_formula="v2", output_mode="merge",
                   decision_smoothing=0.25, smooth_slerp_gate=False,
-                  memory_mode="disabled", selection=1,
+                  memory_mode="disabled", selection=1, record_dataset="disabled",
                   _is_sub_merge=False, _suppress_pbar=False):
         import hashlib, json
 
-        # Free stale cached models when the input model changes
-        current_mid = id(model) if model is not None else None
-        prev_mid = getattr(self, '_cached_model_id', None)
-        if prev_mid is not None and current_mid != prev_mid:
+        # Best-effort cleanup of orphaned cache files (once per process)
+        self._gc_autotuner_memory()
+
+        # Free stale cached models when the input model/clip changes
+        if self._track_model_identity(model, clip):
             if hasattr(self, '_merge_cache') and self._merge_cache:
                 self._merge_cache.clear()
             if hasattr(self, '_autotuner_cache') and getattr(self, '_autotuner_cache', None):
                 self._autotuner_cache.clear()
             gc.collect()
-        self._cached_model_id = current_mid
 
         # --- Extract merge formula before normalization ---
         merge_formula = None
@@ -8529,6 +9419,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             return (model, clip, "No active LoRAs in stack.", "", None, None)
 
         # --- Formula-based hierarchical auto-tune ---
+        preset_key = None  # bound in the formula branch; None means "not resolved"
         if merge_formula and len(active_loras) >= 2:
             try:
                 tree = _parse_merge_formula(merge_formula, len(normalized_stack))
@@ -8594,6 +9485,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                         smooth_slerp_gate=smooth_slerp_gate,
                         memory_mode=memory_mode,
                         selection=selection,
+                        record_dataset=record_dataset,
                         _is_sub_merge=_is_sub_merge,
                         _suppress_pbar=_suppress_pbar,
                     )
@@ -8631,7 +9523,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 model, normalized_stack, output_strength,
                 clip=clip, clip_strength_multiplier=clip_strength_multiplier,
                 normalize_keys=normalize_keys, strategy_set="full",
-                architecture_preset=preset_key if merge_formula else architecture_preset, vram_budget=vram_budget,
+                architecture_preset=preset_key if preset_key is not None else architecture_preset, vram_budget=vram_budget,
                 auto_strength_floor=auto_strength_floor,
                 decision_smoothing=decision_smoothing,
                 smooth_slerp_gate=smooth_slerp_gate,
@@ -8646,16 +9538,18 @@ class LoRAAutoTuner(LoRAOptimizer):
         lora_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
         names_only_hash, _ = self._compute_names_only_hash(active_loras)
-        cached_analysis = self._analysis_cache_load(names_only_hash)
+        cached_analysis = self._analysis_cache_load(names_only_hash, active_loras)
         using_partial = False
         if cached_analysis is not None:
             logging.info(
                 f"[AutoTuner Analysis Cache] HIT — {len(cached_analysis)} prefixes cached")
         else:
-            cached_analysis = self._analysis_partial_load(names_only_hash)
+            cached_analysis = self._analysis_partial_load(names_only_hash, active_loras)
             if cached_analysis is not None:
                 using_partial = True
-                self._analysis_partial_delete(names_only_hash)
+                # Keep the checkpoint on disk until the full cache is saved —
+                # deleting it now would lose all resume data if this run
+                # crashes before the first new prefix completes
                 logging.info(
                     f"[AutoTuner Analysis Partial] Resume — "
                     f"{len(cached_analysis)} prefixes already done")
@@ -8672,24 +9566,83 @@ class LoRAAutoTuner(LoRAOptimizer):
                 json.dumps(_mem_key, separators=(",", ":")).encode()
             ).hexdigest()[:16]
 
-        evaluator_hash = self._stable_data_hash(evaluator) if evaluator is not None else ""
+        evaluator_hash = ""
+        if evaluator is not None:
+            evaluator_hash = (self._stable_data_hash(evaluator) + "|"
+                              + _evaluator_file_fingerprint(evaluator.get("module_path")))
 
         # Check AutoTuner cache
+        # Per-LoRA fields that affect the merge but are not in lora_hash
+        # (lora_hash stays name+strength — tuner_data/selector compare it)
+        stack_fp = hashlib.sha256(json.dumps(
+            [[l["name"], l["strength"], l.get("clip_strength"),
+              l.get("conflict_mode", "all"), l.get("key_filter", "all")]
+             for l in active_loras], separators=(",", ":")).encode()
+        ).hexdigest()[:16]
         at_cache_key = hashlib.sha256(
-            f"{lora_hash}|os={output_strength}|csm={clip_strength_multiplier}"
+            f"{lora_hash}|sfp={stack_fp}|os={output_strength}|csm={clip_strength_multiplier}"
             f"|top_n={top_n}|nk={normalize_keys}|ss={scoring_svd}"
             f"|ap={architecture_preset}|vb={vram_budget}"
-            f"|spd={scoring_speed}|mid={id(model)}|asf={auto_strength_floor}|ds={decision_smoothing}|eh={evaluator_hash}"
-            f"|mm={memory_mode}|sel={selection}".encode()
+            f"|spd={scoring_speed}|mid={id(model)}|cid={id(clip)}"
+            f"|asf={auto_strength_floor}|ds={decision_smoothing}|eh={evaluator_hash}"
+            f"|sf={scoring_formula}|ssg={smooth_slerp_gate}"
+            f"|mm={memory_mode}".encode()
         ).hexdigest()[:16]
+        # selection is deliberately NOT in the key: changing it replays the
+        # selected config from the cached sweep instead of re-sweeping
         if cache_patches == "enabled" and hasattr(self, '_autotuner_cache') and at_cache_key in self._autotuner_cache:
-            cached_result, cached_mode = self._autotuner_cache[at_cache_key]
+            cached_result, cached_mode, cached_selection = self._autotuner_cache[at_cache_key]
+            cached_tuner = cached_result[4]
+            top_list = cached_tuner.get("top_n") if isinstance(cached_tuner, dict) else None
             if output_mode == "tuning_only":
                 logging.info("[LoRA AutoTuner] Using cached result (tuning_only passthrough)")
-                return (model, clip, cached_result[2], "", cached_result[4], None)
-            if cached_mode == "merge":
+                report = cached_result[2]
+                if selection != cached_selection and top_list:
+                    sel_idx = min(selection, len(top_list)) - 1
+                    report = self._build_autotuner_report(
+                        top_list, cached_tuner["analysis_summary"], output_strength,
+                        scoring_speed=scoring_speed, applied_rank=sel_idx + 1)
+                return (model, clip, report, "", cached_tuner, None)
+            if cached_mode == "merge" and selection == cached_selection:
                 logging.info("[LoRA AutoTuner] Using cached result")
                 return cached_result
+            if top_list:
+                # Cached sweep exists but a different selection (or a merge
+                # after a tuning_only run) is requested — replay the selected
+                # config without re-running analysis or Phase 2
+                sel_idx = min(selection, len(top_list)) - 1
+                sel_config = top_list[sel_idx]["config"]
+                logging.info(f"[LoRA AutoTuner] Cached sweep hit — replaying "
+                             f"config #{sel_idx + 1} without re-sweeping")
+                strategy_override = (sel_config["merge_mode"]
+                                     if sel_config["optimization_mode"] == "global" else "")
+                replay_model, replay_clip, replay_report, _, replay_lora_data = super().optimize_merge(
+                    model, lora_stack, output_strength,
+                    clip=clip,
+                    clip_strength_multiplier=clip_strength_multiplier,
+                    auto_strength=sel_config["auto_strength"],
+                    auto_strength_floor=cached_tuner.get("auto_strength_floor", auto_strength_floor),
+                    optimization_mode=sel_config["optimization_mode"],
+                    sparsification=sel_config["sparsification"],
+                    sparsification_density=sel_config["sparsification_density"],
+                    dare_dampening=sel_config["dare_dampening"],
+                    merge_refinement=sel_config["merge_refinement"],
+                    merge_strategy_override=strategy_override,
+                    strategy_set=sel_config.get("strategy_set", "full"),
+                    normalize_keys=cached_tuner.get("normalize_keys", normalize_keys),
+                    architecture_preset=cached_tuner.get("architecture_preset", architecture_preset),
+                    decision_smoothing=cached_tuner.get("decision_smoothing", decision_smoothing),
+                    smooth_slerp_gate=cached_tuner.get("smooth_slerp_gate", smooth_slerp_gate),
+                    cache_patches=cache_patches,
+                    vram_budget=vram_budget,
+                )
+                report = self._build_autotuner_report(
+                    top_list, cached_tuner["analysis_summary"], output_strength,
+                    scoring_speed=scoring_speed, applied_rank=sel_idx + 1)
+                result = (replay_model, replay_clip, report,
+                          replay_report, cached_tuner, replay_lora_data)
+                self._autotuner_cache[at_cache_key] = (result, "merge", selection)
+                return result
 
         # Load pair/lora caches and run community cache check before any early returns
         pairs_for_cache = [(i, j) for i in range(len(active_loras))
@@ -8701,10 +9654,10 @@ class LoRAAutoTuner(LoRAOptimizer):
         pair_caches = {(i, j): self._pair_cache_load(lora_hashes[i], lora_hashes[j]) or {}
                        for i, j in pairs_for_cache}
 
-        # --- Community cache download ---
+        # --- Community cache: hash computation + optional download ---
         _community_tuner_data = None
         content_hashes = {}
-        if community_cache == "upload_and_download" and not _is_sub_merge:
+        if community_cache in ("upload_and_download", "upload_only") and not _is_sub_merge:
             logging.info(f"[AutoTuner Community] Mode: {community_cache} — computing content hashes "
                          f"for {len(active_loras)} LoRA(s)...")
             _all_hashed = True
@@ -8720,9 +9673,11 @@ class LoRAAutoTuner(LoRAOptimizer):
             if _all_hashed:
                 _arch_key_for_community, _ = _resolve_arch_preset(
                     architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
-                _community_tuner_data = self._community_download_caches(
-                    active_loras, content_hashes, lora_caches, pair_caches,
-                    arch_preset=_arch_key_for_community, top_n=top_n)
+                if community_cache == "upload_and_download":
+                    _community_tuner_data = self._community_download_caches(
+                        active_loras, content_hashes, lora_caches, pair_caches,
+                        arch_preset=_arch_key_for_community, top_n=top_n,
+                        lora_hashes=lora_hashes)
             else:
                 content_hashes = {}
 
@@ -8730,13 +9685,50 @@ class LoRAAutoTuner(LoRAOptimizer):
             _comm_score = _community_tuner_data["top_n"][0].get("score_final", 0.0)
             logging.info(f"[AutoTuner Community] COMMUNITY CACHE HIT — "
                          f"replaying config (score={_comm_score:.4f}), skipping full sweep")
+            # Keep the full candidate list for the local-memory promotion below
+            _comm_full = dict(_community_tuner_data)
+            _comm_full["top_n"] = list(_community_tuner_data["top_n"])
             if len(_community_tuner_data["top_n"]) > top_n:
                 _community_tuner_data["top_n"] = _community_tuner_data["top_n"][:top_n]
+
+            # Promote the community result into local persistent memory:
+            # without this, community-hit runs never write a local entry, so
+            # later runs with community_cache=disabled re-sweep from scratch
+            # even though the result was already known.
+            if (memory_mode in ("auto", "auto_ignore_strength", "clear_and_run")
+                    and not _is_sub_merge):
+                _mem_settings = {
+                    "normalize_keys": normalize_keys,
+                    "scoring_svd": scoring_svd,
+                    "scoring_device": scoring_device,
+                    "architecture_preset": architecture_preset,
+                    "auto_strength_floor": auto_strength_floor,
+                    "scoring_speed": scoring_speed,
+                    "scoring_formula": scoring_formula,
+                    "decision_smoothing": decision_smoothing,
+                    "smooth_slerp_gate": smooth_slerp_gate,
+                    "evaluator_hash": evaluator_hash,
+                }
+                self._memory_save(
+                    memory_lora_hash, self._memory_settings_hash(_mem_settings),
+                    _mem_settings, active_loras, _comm_full)
             _sel_idx = min(selection, len(_community_tuner_data["top_n"])) - 1
+            _comm_formula = _community_tuner_data.get("scoring_formula")
+            _formula_note = ""
+            if _comm_formula is not None and _comm_formula != scoring_formula:
+                _formula_note = (
+                    f"  NOTE: ranked with scoring_formula={_comm_formula} "
+                    f"(local widget: {scoring_formula}).\n"
+                )
+                logging.info(f"[AutoTuner Community] Config was ranked with "
+                             f"scoring_formula={_comm_formula}, local setting is "
+                             f"{scoring_formula} — set community_cache='disabled' "
+                             f"to re-rank locally")
             _comm_banner = (
                 "=" * 54 + "\n"
                 "  COMMUNITY CACHE HIT — Results from HF community cache\n"
                 "  Set community_cache='disabled' to run locally.\n"
+                + _formula_note +
                 "=" * 54 + "\n\n"
             )
             _comm_report = _comm_banner + self._build_autotuner_report(
@@ -8748,7 +9740,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 if cache_patches == "enabled":
                     if not hasattr(self, '_autotuner_cache'):
                         self._autotuner_cache = {}
-                    self._autotuner_cache[at_cache_key] = (_comm_result, "tuning_only")
+                    self._autotuner_cache[at_cache_key] = (_comm_result, "tuning_only", selection)
                 return _comm_result
 
             _comm_config = _community_tuner_data["top_n"][_sel_idx]["config"]
@@ -8782,7 +9774,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             if cache_patches == "enabled":
                 if not hasattr(self, '_autotuner_cache'):
                     self._autotuner_cache = {}
-                self._autotuner_cache[at_cache_key] = (_comm_result, "merge")
+                self._autotuner_cache[at_cache_key] = (_comm_result, "merge", selection)
             return _comm_result
 
         # --- Persistent memory lookup ---
@@ -8804,11 +9796,29 @@ class LoRAAutoTuner(LoRAOptimizer):
             if memory_mode == "clear_and_run":
                 self._memory_clear(memory_lora_hash, settings_hash)
                 analysis_path = self._analysis_cache_path(names_only_hash)
-                if os.path.exists(analysis_path):
+                try:
                     os.unlink(analysis_path)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    logging.warning(f"[AutoTuner Memory] Could not delete {analysis_path}: {e}")
                 self._analysis_partial_delete(names_only_hash)
                 cached_analysis = None
                 using_partial = False
+                # Also clear per-LoRA/pair caches for this stack — "re-tune
+                # from scratch" must not silently reconstruct analysis from them
+                for i, h in lora_hashes.items():
+                    try:
+                        os.unlink(self._lora_cache_path(h))
+                    except OSError:
+                        pass
+                    lora_caches[i] = {}
+                for (i, j) in pairs_for_cache:
+                    try:
+                        os.unlink(self._pair_cache_path(lora_hashes[i], lora_hashes[j]))
+                    except OSError:
+                        pass
+                    pair_caches[(i, j)] = {}
 
             if memory_mode in ("auto", "auto_ignore_strength", "read_only"):
                 cached_tuner_data = self._memory_load(
@@ -8817,8 +9827,12 @@ class LoRAAutoTuner(LoRAOptimizer):
                     # Fallback: find any strength-sensitive entry with matching LoRA names,
                     # preferring the one trained at the highest absolute strengths
                     lora_names_sorted = sorted([l["name"] for l in active_loras])
+                    lora_signs_sorted = sorted(
+                        (l["name"], 1 if l["strength"] >= 0 else -1)
+                        for l in active_loras)
                     cached_tuner_data = self._memory_find_by_names(
-                        lora_names_sorted, settings_hash, top_n)
+                        lora_names_sorted, settings_hash, top_n,
+                        lora_signs_sorted=lora_signs_sorted)
                     if cached_tuner_data is not None:
                         logging.info("[AutoTuner Memory] HIT (strength-sensitive fallback) — "
                                      "using highest-strength cached entry")
@@ -8827,6 +9841,11 @@ class LoRAAutoTuner(LoRAOptimizer):
                                           memory_settings, active_loras, cached_tuner_data)
                 if cached_tuner_data is not None:
                     logging.info("[AutoTuner Memory] HIT — loading cached tuning results")
+                    # Keep the full candidate list for the community upload
+                    # below — uploading a truncated top_n would replace a
+                    # richer community entry with a poorer one
+                    untruncated_tuner_data = dict(cached_tuner_data)
+                    untruncated_tuner_data["top_n"] = list(cached_tuner_data["top_n"])
                     # Truncate top_n if needed
                     if len(cached_tuner_data["top_n"]) > top_n:
                         cached_tuner_data["top_n"] = cached_tuner_data["top_n"][:top_n]
@@ -8841,7 +9860,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                         if cache_patches == "enabled":
                             if not hasattr(self, '_autotuner_cache'):
                                 self._autotuner_cache = {}
-                            self._autotuner_cache[at_cache_key] = (result, "tuning_only")
+                            self._autotuner_cache[at_cache_key] = (result, "tuning_only", selection)
                         return result
 
                     # Replay the selected config via optimize_merge
@@ -8878,11 +9897,11 @@ class LoRAAutoTuner(LoRAOptimizer):
                     if cache_patches == "enabled":
                         if not hasattr(self, '_autotuner_cache'):
                             self._autotuner_cache = {}
-                        self._autotuner_cache[at_cache_key] = (result, "merge")
+                        self._autotuner_cache[at_cache_key] = (result, "merge", selection)
 
                     # Upload config from memory hit — lora/pair entries not available here
                     # but the winning config + score can still be contributed
-                    if (community_cache == "upload_and_download"
+                    if (community_cache in ("upload_and_download", "upload_only")
                             and len(content_hashes) == len(active_loras)):
                         _hf_token = (os.environ.get("HF_TOKEN")
                                      or os.environ.get("HUGGING_FACE_HUB_TOKEN"))
@@ -8895,7 +9914,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                         if _hf_token:
                             self._community_upload_results(
                                 {}, {}, content_hashes, lora_hashes,
-                                cached_tuner_data, _arch_key_for_community, _hf_token)
+                                untruncated_tuner_data, _arch_key_for_community, _hf_token,
+                                base_model_family=getattr(self, '_detected_arch', None))
                         else:
                             logging.warning("[AutoTuner Community] No HF token found. "
                                             "Run 'huggingface-cli login' or set HF_TOKEN to enable uploads.")
@@ -8917,10 +9937,22 @@ class LoRAAutoTuner(LoRAOptimizer):
         compute_device = self._get_compute_device()
         use_gpu = compute_device.type != "cpu"
 
+        # Diff cache for Phase 2 — created before Pass 1 so analysis warms it:
+        # the per-alias diffs computed for analysis are exactly the ones
+        # candidate #1 would otherwise recompute from scratch.
+        _diff_cache = None
+        if diff_cache_mode != "disabled":
+            _diff_cache = _DiffCache(mode=diff_cache_mode, ram_pct=diff_cache_ram_pct)
+            _dc_limit = getattr(_diff_cache, "_ram_limit", None)
+            logging.info(f"[LoRA AutoTuner] Diff cache enabled (mode={diff_cache_mode}"
+                         + (f", RAM limit {_dc_limit / (1024**3):.1f} GB"
+                            if _dc_limit else "") + ")")
+
         logging.info(f"[LoRA AutoTuner] Pass 1: Analyzing {len(target_groups)} target groups...")
         t_start = time.time()
-        # Progress bar: analysis groups + top_n merges (+ 1 final merge when subsampling)
-        n_pbar_merges = top_n + (1 if scoring_speed != "full" and top_n > 1 and output_mode != "tuning_only" else 0)
+        # Progress bar: analysis groups + top_n merges (+ 1 final winner merge —
+        # candidates are discarded after scoring whenever there is more than one)
+        n_pbar_merges = top_n + (1 if top_n > 1 and output_mode != "tuning_only" else 0)
         if _suppress_pbar:
             class _NullPbar:
                 def update(self, n): pass
@@ -8929,11 +9961,18 @@ class LoRAAutoTuner(LoRAOptimizer):
             pbar = comfy.utils.ProgressBar(len(target_groups) + n_pbar_merges)
         source_loras_for_cache = [{"name": item["name"]} for item in active_loras]
         partial_accumulated = dict(cached_analysis or {})
+        # Throttle checkpoint writes: each save serializes the whole
+        # accumulated dict (O(P) JSON per write → O(P²) over a run); a crash
+        # loses at most the last few seconds of analysis
+        _partial_last_save = [0.0]
 
         def _on_prefix_done(prefix, entry):
             partial_accumulated[prefix] = entry
-            self._analysis_partial_save(
-                names_only_hash, partial_accumulated, source_loras_for_cache)
+            now = time.monotonic()
+            if now - _partial_last_save[0] >= 5.0:
+                _partial_last_save[0] = now
+                self._analysis_partial_save(
+                    names_only_hash, partial_accumulated, source_loras_for_cache)
 
         analysis_data = self._run_group_analysis(
             target_groups, active_loras, model, clip, compute_device,
@@ -8947,6 +9986,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             lora_caches=lora_caches,
             pair_caches=pair_caches,
             lora_hashes=lora_hashes,
+            diff_cache=_diff_cache,
         )
         all_key_targets = analysis_data["all_key_targets"]
         target_groups = analysis_data["target_groups"]
@@ -9057,13 +10097,20 @@ class LoRAAutoTuner(LoRAOptimizer):
         # --- Phase 1: Score all parameter combos (heuristic, fast) ---
         logging.info("[LoRA AutoTuner] Phase 1: Scoring parameter grid...")
         grid = _generate_param_grid()
+        # Identical for every config — hoisted out of the ~1k-config loop
+        _decision_conflicts = [
+            ps.get("decision_conflict", ps.get("excess_conflict", ps.get("conflict_ratio", 0.0)))
+            for ps in prefix_stats.values()
+            if ps.get("n_loras", 0) > 1
+        ] if prefix_stats else []
         scored = []
         for config in grid:
             h_score = _score_config_heuristic(
                 config, avg_conflict_ratio, avg_cos_sim,
                 magnitude_ratio, prefix_stats, arch_preset=tuner_arch_preset,
                 avg_excess_conflict=avg_excess_conflict,
-                avg_subspace_overlap=avg_subspace_overlap)
+                avg_subspace_overlap=avg_subspace_overlap,
+                decision_conflicts=_decision_conflicts)
             scored.append((h_score, config))
         scored.sort(key=lambda x: x[0], reverse=True)
         logging.info(f"[LoRA AutoTuner] Scored {len(grid)} combos in {time.time() - t_start:.1f}s")
@@ -9127,14 +10174,69 @@ class LoRAAutoTuner(LoRAOptimizer):
                          f"{len(subsampled_multi)}/{len(multi_lora_targets)} multi-LoRA)")
 
         # --- Phase 2: Merge top-N and measure ---
-        # Initialize diff cache for Phase 2
-        _diff_cache = None
-        if diff_cache_mode != "disabled":
-            _diff_cache = _DiffCache(mode=diff_cache_mode, ram_pct=diff_cache_ram_pct)
-            logging.info(f"[LoRA AutoTuner] Diff cache enabled (mode={diff_cache_mode})")
+        # (diff cache already created before Pass 1, warmed during analysis)
+
+        # --- Candidate dedup ---
+        # per_prefix configs differing only in strategy_set produce identical
+        # merges whenever every multi-LoRA prefix resolves to the same
+        # (mode, density, sign) decision (common for orthogonal stacks, where
+        # all three sets tie in the heuristic). Predict the decision maps from
+        # prefix_stats — the same inputs Pass 2 uses — and skip duplicates so
+        # Phase 2 slots go to behaviorally distinct configs.
+        _avg_ranks = [(sum(s["ranks"]) / len(s["ranks"]) if s["ranks"] else 0)
+                      for s in per_lora_stats]
+        _global_avg_rank = (sum(_avg_ranks) / len(_avg_ranks)) if _avg_ranks else 0
+        # Achievable effective-rank budget for v2 scoring: a merged patch is a
+        # sum of per-LoRA low-rank updates, so its rank (and thus its
+        # Roy-Vetterli effective rank) is bounded by the summed source ranks
+        _rank_budget = max(sum(_avg_ranks), 1.0)
+        _fr_preset = tuner_arch_preset.get("full_rank", {})
+        _is_full_rank = _global_avg_rank >= _fr_preset.get("rank_threshold", 512)
+        _strategy_signatures = {}
+
+        def _strategy_signature(strat_set):
+            if strat_set in _strategy_signatures:
+                return _strategy_signatures[strat_set]
+            sig = []
+            try:
+                for pfx in sorted(prefix_stats):
+                    pf = prefix_stats[pfx]
+                    if pf.get("n_loras", 0) <= 1:
+                        continue
+                    mode, dens, sign, _, _ = self._decide_prefix_mode(
+                        pf, strat_set, tuner_arch_preset, smooth_slerp_gate,
+                        _is_full_rank, _fr_preset)
+                    sig.append((pfx, mode, round(dens, 4), sign))
+                signature = tuple(sig)
+            except Exception as e:
+                logging.warning(f"[LoRA AutoTuner] Decision-map precompute failed: {e}")
+                signature = ("unique", strat_set)  # disable dedup for this set
+            _strategy_signatures[strat_set] = signature
+            return signature
 
         # Only keep the current best in memory to avoid accumulating ~40GB per candidate.
-        top_candidates = scored[:top_n]
+        top_candidates = []
+        _seen_behaviors = set()
+        _n_dedup_skipped = 0
+        for h_score, config in scored:
+            if len(top_candidates) >= top_n:
+                break
+            shared = (config["sparsification"], config["sparsification_density"],
+                      config["dare_dampening"], config["merge_refinement"],
+                      config["auto_strength"])
+            if config["optimization_mode"] == "per_prefix":
+                behavior = shared + ("per_prefix",
+                                     _strategy_signature(config.get("strategy_set", "full")))
+            else:
+                behavior = shared + ("global", config["merge_mode"])
+            if behavior in _seen_behaviors:
+                _n_dedup_skipped += 1
+                continue
+            _seen_behaviors.add(behavior)
+            top_candidates.append((h_score, config))
+        if _n_dedup_skipped:
+            logging.info(f"[LoRA AutoTuner] Skipped {_n_dedup_skipped} duplicate candidate(s) "
+                         f"with identical per-prefix decisions — slots given to distinct configs")
         results = []
         best_model = None
         best_clip = None
@@ -9142,7 +10244,162 @@ class LoRAAutoTuner(LoRAOptimizer):
         best_analysis_report = ""
         best_score = -1.0
         best_config = None
+        # With multiple candidates, every candidate is merged, scored, and
+        # DISCARDED; the winner is re-merged once after the sweep (caches
+        # freed first). Keeping the running best alive doubled peak RAM by a
+        # full patch set — on video-scale models that filled whole machines.
+        # A single candidate keeps the old keep-it path (re-merge would only
+        # duplicate work).
+        _discard_candidates = len(top_candidates) > 1
         logging.info(f"[LoRA AutoTuner] Phase 2: Merging and measuring top {len(top_candidates)} candidates...")
+
+        # Pre-identify single-LoRA target keys for scoring cache.
+        # Single-LoRA patches are identical across candidates (merge strategies
+        # don't apply — early return at _merge_diffs line 2868). Score once, reuse.
+        single_lora_keys = set()
+        for pfx, info in all_key_targets.items():
+            if prefix_stats.get(pfx, {}).get("n_loras", 0) <= 1:
+                single_lora_keys.add(info[0])  # info is (target_key, is_clip)
+        _cached_sl_baselines = {}
+
+        # Single-LoRA merge result cache: reuse actual patches across candidates.
+        # Keyed by (label_prefix, auto_strength) since auto_scale is the only
+        # candidate-dependent factor for single-LoRA prefixes. RAM-budgeted
+        # (10% of available, 8GB max): dense single-LoRA patches under
+        # sparsified candidates made this the last unbounded sweep holder.
+        _sl_patch_cache = None
+        if len(single_lora_keys) > 0:
+            try:
+                import psutil
+                _sl_budget = min(int(psutil.virtual_memory().available * 0.10),
+                                 8 * 1024 ** 3)
+            except ImportError:
+                _sl_budget = 2 * 1024 ** 3
+            _sl_patch_cache = {"store": {}, "bytes": 0, "budget": _sl_budget,
+                               "budget_skips": 0}
+
+        # --- Scoring invariants (identical for every candidate — hoisted) ---
+        is_ortho_score = (
+            abs(avg_cos_sim) < tuner_arch_preset["orthogonal_cos_sim_max"]
+            and avg_subspace_overlap < 0.35
+        )
+        # Skip SVD for orthogonal LoRAs — SLERP vs average produce different
+        # rank profiles that don't correlate with generation quality
+        compute_svd = scoring_svd in ("merge_quality", "full") and not is_ortho_score
+        compute_lora_svd = scoring_svd in ("lora_rank", "full")
+        score_dev = torch.device("cuda") if scoring_device == "gpu" and torch.cuda.is_available() else None
+        score_arch = tuner_arch_preset if scoring_formula == "v2" else None
+
+        # v2 expected-energy baseline (weighted_average expectation from
+        # branch_energy) — depends only on the stack and analysis, not the
+        # candidate config. Auto-strength cancels in WA normalization, so the
+        # same baseline applies to all candidates.
+        _expected_energy = 0.0
+        if scoring_formula == "v2":
+            _v2_model_strengths = [item["strength"] for item in active_loras]
+            _v2_clip_strengths = [
+                item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
+                for item in active_loras
+            ]
+            _v2_total_model_w = sum(abs(s) for s in _v2_model_strengths)
+            _v2_total_clip_w = sum(abs(s) for s in _v2_clip_strengths)
+            expected_model_sq = sum(
+                _v2_model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
+                for i in range(len(active_loras))
+            )
+            expected_clip_sq = sum(
+                _v2_clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
+                for i in range(len(active_loras))
+            )
+            if not is_ortho_score:
+                # Non-orthogonal: include cross-terms (orthogonal stacks are
+                # Pythagorean — no cross-terms)
+                for (i, j), dot in branch_energy["model"]["dot"].items():
+                    expected_model_sq += 2.0 * _v2_model_strengths[i] * _v2_model_strengths[j] * dot
+                for (i, j), dot in branch_energy["clip"]["dot"].items():
+                    expected_clip_sq += 2.0 * _v2_clip_strengths[i] * _v2_clip_strengths[j] * dot
+            # Divide by total_weight^2 per branch for weighted_average baseline
+            if _v2_total_model_w > 0:
+                expected_model_sq = max(expected_model_sq, 0.0) / (_v2_total_model_w ** 2)
+            if _v2_total_clip_w > 0:
+                expected_clip_sq = max(expected_clip_sq, 0.0) / (_v2_total_clip_w ** 2)
+            _expected_energy = math.sqrt(expected_model_sq + expected_clip_sq)
+            # Scale expected energy by prefix fraction when subsampling
+            if use_subsampling and prefix_count > 0:
+                prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
+                _expected_energy *= math.sqrt(prefix_fraction)
+
+        # --- Cross-candidate group patch cache planning ---
+        # Candidates frequently share per-group merge decisions: strategy-set
+        # siblings overlap on most prefixes, and auto_strength pairs produce
+        # IDENTICAL patches for scale-invariant modes (the merge math
+        # normalizes a uniform branch scale away). Predict each candidate's
+        # group keys with the same decision logic Pass 2 uses, then cache
+        # merges whose key recurs; entries evict after their last planned
+        # use, so peak memory is bounded by the genuinely shared patches.
+        _group_cache = None
+        if len(top_candidates) > 1:
+            try:
+                _scoring_targets = scoring_cache.get("all_key_targets", all_key_targets)
+                _g_sel = None  # global-mode (mode, density, sign), resolved lazily
+                _plan = {}
+                for _h, _cfg in top_candidates:
+                    _setting = _cfg["auto_strength"]
+                    _refn = _cfg["merge_refinement"]
+                    for _pfx, _tinfo in _scoring_targets.items():
+                        _pf = prefix_stats.get(_pfx)
+                        if not _pf or _pf.get("n_loras", 0) <= 1:
+                            continue
+                        if _cfg["optimization_mode"] == "global":
+                            if _g_sel is None:
+                                _g_sel = self._auto_select_params(
+                                    avg_conflict_ratio, magnitude_ratio,
+                                    magnitude_samples=[],
+                                    avg_cos_sim=avg_cos_sim, strategy_set="full",
+                                    avg_excess_conflict=avg_excess_conflict,
+                                    avg_subspace_overlap=avg_subspace_overlap,
+                                    arch_preset=tuner_arch_preset)
+                            _mode = _cfg["merge_mode"]
+                            _dens, _sign = _g_sel[1], _g_sel[2]
+                            _quality = _refn
+                        else:
+                            _mode, _dens, _sign, _ortho, _opp = self._decide_prefix_mode(
+                                _pf, _cfg.get("strategy_set", "full"), tuner_arch_preset,
+                                smooth_slerp_gate, _is_full_rank, _fr_preset)
+                            _quality = ("none" if (_mode == "weighted_average" and _opp)
+                                        else _refn)
+                        _k = _group_merge_cache_key(
+                            _pfx, _tinfo[1], _mode, _dens, _sign, _quality,
+                            _cfg["sparsification"], _cfg["sparsification_density"],
+                            _cfg["dare_dampening"], _refn, _setting)
+                        _plan[_k] = _plan.get(_k, 0) + 1
+                _plan = {k: c for k, c in _plan.items() if c >= 2}
+                if _plan:
+                    # RAM budget: shared patches live until their last user, so
+                    # without a cap the cache can hold ~a full patch set OUTSIDE
+                    # the diff-cache budget. Cap at 25% of available RAM with a
+                    # 16GB hard max (no user knob — it stores at most ~one
+                    # shared patch set and skips gracefully when exhausted, so
+                    # further keys simply re-merge per candidate).
+                    try:
+                        import psutil
+                        _gc_budget = min(int(psutil.virtual_memory().available * 0.25),
+                                         16 * 1024 ** 3)
+                    except ImportError:
+                        _gc_budget = 4 * 1024 ** 3
+                    _group_cache = {"plan": _plan, "store": {}, "hits": 0, "misses": 0,
+                                    "bytes": 0, "budget": _gc_budget, "budget_skips": 0,
+                                    "peak_bytes": 0}
+                    logging.info(
+                        f"[LoRA AutoTuner] Group cache: {len(_plan)} shared group "
+                        f"merges planned, up to "
+                        f"{sum(_plan.values()) - len(_plan)} replays across "
+                        f"{len(top_candidates)} candidates "
+                        f"(RAM budget {_gc_budget / (1024**3):.1f} GB)")
+            except Exception as e:
+                logging.warning(f"[LoRA AutoTuner] Group-cache planning failed "
+                                f"(sweep continues uncached): {e}")
+                _group_cache = None
 
         for rank_idx, (h_score, config) in enumerate(top_candidates):
             logging.info(f"[LoRA AutoTuner]   Candidate {rank_idx + 1}/{len(top_candidates)}: "
@@ -9154,6 +10411,13 @@ class LoRAAutoTuner(LoRAOptimizer):
             # In per_prefix mode, let the optimizer auto-select strategy per prefix.
             # merge_strategy_override would force one mode everywhere, defeating per-prefix logic.
             strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
+
+            # Score-during-merge collector: enabled when merge and scoring run
+            # on the same device class, so inline stats are the exact values
+            # _score_merge_result would have measured after the round-trip.
+            _collector = None
+            if (score_dev is not None) == use_gpu:
+                _collector = {"stats": {}, "compute_svd": compute_svd}
 
             merged_model, merged_clip, _report, _, lora_data = super().optimize_merge(
                 model, lora_stack, output_strength,
@@ -9179,30 +10443,67 @@ class LoRAAutoTuner(LoRAOptimizer):
                 smooth_slerp_gate=smooth_slerp_gate,
                 _analysis_cache=scoring_cache,
                 _diff_cache=_diff_cache,
-                _skip_report=True,
+                # Discarded candidates never need a report (the final winner
+                # merge rebuilds it); only a kept single candidate does
+                _skip_report=_discard_candidates or output_mode == "tuning_only",
                 _skip_qkv_refusion=_is_sub_merge,
+                _sl_patch_cache=_sl_patch_cache,
+                _score_collector=_collector,
+                # Candidates that are scored and discarded never need the
+                # patched model clone (evaluator is the only other consumer)
+                _skip_model_apply=((_discard_candidates or output_mode == "tuning_only")
+                                   and evaluator is None),
+                _group_patch_cache=_group_cache,
             )
+            _inline = _collector["stats"] if _collector is not None else None
 
             # Measure output quality (single-LoRA prefixes may still produce
             # LoRAAdapter patches; _score_merge_result handles both formats)
             m_patches = lora_data["model_patches"] if lora_data else {}
             c_patches = lora_data["clip_patches"] if lora_data else {}
-            is_ortho_score = (
-                abs(avg_cos_sim) < tuner_arch_preset["orthogonal_cos_sim_max"]
-                and avg_subspace_overlap < 0.35
+            # Snapshot per-prefix decisions now — lora_data may be freed below.
+            cand_per_prefix_decisions = (
+                dict(lora_data.get("per_prefix_decisions", {})) if lora_data else {}
             )
-            # Skip SVD for orthogonal LoRAs — SLERP vs average produce different
-            # rank profiles that don't correlate with generation quality
-            compute_svd = scoring_svd in ("merge_quality", "full") and not is_ortho_score
-            compute_lora_svd = scoring_svd in ("lora_rank", "full")
-            score_dev = torch.device("cuda") if scoring_device == "gpu" and torch.cuda.is_available() else None
             t_score = time.time()
-            score_arch = tuner_arch_preset if scoring_formula == "v2" else None
-            measured = _score_merge_result(
-                m_patches, c_patches, compute_svd=compute_svd,
-                score_device=score_dev, arch_preset=score_arch,
-                lora_svd=compute_lora_svd
-            )
+
+            if single_lora_keys:
+                m_multi = {k: v for k, v in m_patches.items()
+                           if k not in single_lora_keys}
+                c_multi = {k: v for k, v in c_patches.items()
+                           if k not in single_lora_keys}
+
+                # Single-LoRA patches depend on auto_strength (same reason
+                # _sl_patch_cache is keyed by it) — keep one baseline per setting
+                _sl_key = config["auto_strength"]
+                if _sl_key not in _cached_sl_baselines:
+                    m_single = {k: v for k, v in m_patches.items()
+                                if k in single_lora_keys}
+                    c_single = {k: v for k, v in c_patches.items()
+                                if k in single_lora_keys}
+                    sl_measured = _score_merge_result(
+                        m_single, c_single, compute_svd=compute_svd,
+                        score_device=score_dev, arch_preset=score_arch,
+                        lora_svd=compute_lora_svd, _return_raw=True,
+                        _inline_stats=_inline)
+                    _cached_sl_baselines[_sl_key] = sl_measured.get("_raw")
+                    del m_single, c_single, sl_measured
+
+                measured = _score_merge_result(
+                    m_multi, c_multi, compute_svd=compute_svd,
+                    score_device=score_dev, arch_preset=score_arch,
+                    lora_svd=compute_lora_svd,
+                    _baseline=_cached_sl_baselines[_sl_key],
+                    _inline_stats=_inline)
+                # Drop refs now — otherwise these dicts keep this candidate's
+                # patch tensors alive through the next candidate's merge
+                del m_multi, c_multi
+            else:
+                measured = _score_merge_result(
+                    m_patches, c_patches, compute_svd=compute_svd,
+                    score_device=score_dev, arch_preset=score_arch,
+                    lora_svd=compute_lora_svd,
+                    _inline_stats=_inline)
             t_score_elapsed = time.time() - t_score
             # --- Post-scoring adjustments ---
             if scoring_formula == "v1":
@@ -9220,54 +10521,13 @@ class LoRAAutoTuner(LoRAOptimizer):
                         cv_s * 0.5 + measured["sparsity_fit"] * 0.5
                     )
             else:
-                # v2: energy-aware scoring with arch-aware sparsity baseline
-                # Compute energy_preservation from branch_energy (model + clip).
-                # Baseline = weighted_average expected energy (not weighted_sum).
-                # Auto-strength cancels in WA normalization, so same formula for all.
+                # v2: energy-aware scoring with arch-aware sparsity baseline.
+                # The weighted_average expected-energy baseline is hoisted
+                # above the candidate loop (_expected_energy) — only the
+                # measured side is per-candidate.
                 measured_energy_sq = measured.get("norm_energy_sq", 0.0)
                 measured_energy = math.sqrt(max(measured_energy_sq, 0.0))
-                model_strengths = [item["strength"] for item in active_loras]
-                clip_strengths = [
-                    item["clip_strength"] if item["clip_strength"] is not None else item["strength"]
-                    for item in active_loras
-                ]
-                total_model_w = sum(abs(s) for s in model_strengths)
-                total_clip_w = sum(abs(s) for s in clip_strengths)
-                if is_ortho_score:
-                    # Orthogonal: Pythagorean — no cross-terms
-                    expected_model_sq = sum(
-                        model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                    expected_clip_sq = sum(
-                        clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                else:
-                    # Non-orthogonal: include cross-terms
-                    expected_model_sq = sum(
-                        model_strengths[i] ** 2 * branch_energy["model"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                    for (i, j), dot in branch_energy["model"]["dot"].items():
-                        expected_model_sq += 2.0 * model_strengths[i] * model_strengths[j] * dot
-                    expected_clip_sq = sum(
-                        clip_strengths[i] ** 2 * branch_energy["clip"]["norm_sq"][i]
-                        for i in range(len(active_loras))
-                    )
-                    for (i, j), dot in branch_energy["clip"]["dot"].items():
-                        expected_clip_sq += 2.0 * clip_strengths[i] * clip_strengths[j] * dot
-                # Divide by total_weight^2 per branch for weighted_average baseline
-                if total_model_w > 0:
-                    expected_model_sq = max(expected_model_sq, 0.0) / (total_model_w ** 2)
-                if total_clip_w > 0:
-                    expected_clip_sq = max(expected_clip_sq, 0.0) / (total_clip_w ** 2)
-                expected_energy = math.sqrt(expected_model_sq + expected_clip_sq)
-                # Scale expected energy by prefix fraction when subsampling
-                if use_subsampling and prefix_count > 0:
-                    prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
-                    expected_energy *= math.sqrt(prefix_fraction)
-                energy_ratio = measured_energy / expected_energy if expected_energy > 0 else 1.0
+                energy_ratio = measured_energy / _expected_energy if _expected_energy > 0 else 1.0
                 # One-sided: only penalize energy loss below WA baseline (ratio < 1)
                 # SLERP legitimately boosts energy above WA — don't penalize that
                 energy_preservation = min(energy_ratio, 1.0)
@@ -9276,19 +10536,33 @@ class LoRAAutoTuner(LoRAOptimizer):
                 # Discount sparsity_fit when sparsification artificially inflates it
                 if config["sparsification"] != "disabled":
                     measured["sparsity_fit"] *= 0.5
-                # Recompute composite score
+                # Recompute composite score.
+                # Energy preservation is gated on orthogonality, not on SVD
+                # availability: for orthogonal LoRAs SLERP-vs-WA energy doesn't
+                # track generation quality, but for correlated LoRAs it detects
+                # destructive merges even with scoring_svd=disabled (the default).
                 cv_s = max(0.0, 1.0 - measured["norm_cv"])
                 if measured.get("effective_rank_mean", 0) > 0:
-                    # Non-orthogonal (with SVD): energy helps detect destructive merges
-                    rank_s = min(measured["effective_rank_mean"] / 40.0, 1.0)
+                    # SVD available: rank + consistency + energy + sparsity.
+                    # Normalize effective rank by the stack's achievable rank
+                    # budget (sum of per-LoRA avg ranks): a merge of two
+                    # rank-16 LoRAs can never exceed erank 32, so a fixed /40
+                    # meant a different score per stack. Roy-Vetterli erank is
+                    # bounded by true rank <= sum of source ranks.
+                    rank_s = min(measured["effective_rank_mean"] / _rank_budget, 1.0)
                     measured["composite_score"] = (
                         rank_s * 0.30 + cv_s * 0.25
                         + energy_preservation * 0.20 + measured["sparsity_fit"] * 0.25
                     )
+                elif not is_ortho_score:
+                    # Non-orthogonal without SVD: energy still discriminates
+                    measured["composite_score"] = (
+                        cv_s * 0.40 + energy_preservation * 0.20
+                        + measured["sparsity_fit"] * 0.40
+                    )
                 else:
-                    # Orthogonal (without SVD): energy doesn't predict quality here
-                    # (SLERP vs WA energy ≠ quality for orthogonal LoRAs).
-                    # Arch-aware sparsity_fit is the primary discriminator.
+                    # Orthogonal: energy ≠ quality (SLERP legitimately differs
+                    # from WA); arch-aware sparsity_fit is the discriminator.
                     measured["composite_score"] = (
                         cv_s * 0.50 + measured["sparsity_fit"] * 0.50
                     )
@@ -9317,8 +10591,9 @@ class LoRAAutoTuner(LoRAOptimizer):
                          f"(merge {t_elapsed - t_score_elapsed:.1f}s + score {t_score_elapsed:.1f}s)")
             pbar.update(1)
 
-            if use_subsampling or output_mode == "tuning_only":
-                # When subsampling, discard all candidates — final full merge comes after
+            if _discard_candidates or output_mode == "tuning_only":
+                # Discard every candidate — the winner is re-merged after the
+                # sweep with caches freed, capping peak RAM at one candidate
                 del merged_model, merged_clip, lora_data
             elif final_score > best_score:
                 # Keep only the best model in memory, free the rest immediately
@@ -9335,17 +10610,21 @@ class LoRAAutoTuner(LoRAOptimizer):
                 best_score = final_score
                 best_config = config
             del m_patches, c_patches  # Drop patch-dict references so tensors can free
-            gc.collect()
-            if use_gpu:
-                torch.cuda.empty_cache()
-            # Log memory usage to help diagnose leaks on large models
+            _collector = None
+            _inline = None
+            gc.collect(0)  # gen-0 only: ~10x faster, catches fresh cycles from ModelPatcher
+            # Log memory usage per candidate to diagnose growth
             try:
                 import psutil
                 proc = psutil.Process()
                 rss_gb = proc.memory_info().rss / (1024**3)
                 dc_mb = _diff_cache.size_mb() if _diff_cache else 0
+                gcache_mb = (_group_cache["bytes"] / (1024**2)) if _group_cache else 0
+                sl_mb = (_sl_patch_cache["bytes"] / (1024**2)) if _sl_patch_cache else 0
                 logging.info(f"[LoRA AutoTuner]   Memory: process={rss_gb:.1f}GB"
-                             f"{f', diff_cache={dc_mb:.0f}MB' if dc_mb > 0 else ''}")
+                             f"{f', diff_cache={dc_mb:.0f}MB' if dc_mb > 0 else ''}"
+                             f"{f', group_cache={gcache_mb:.0f}MB' if gcache_mb > 0 else ''}"
+                             f"{f', sl_cache={sl_mb:.0f}MB' if sl_mb > 0 else ''}")
             except ImportError:
                 pass
 
@@ -9356,6 +10635,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 "score_external": external_score,
                 "score_final": final_score,
                 "config": config,
+                "per_prefix_decisions": cand_per_prefix_decisions,
                 "metrics": {
                     "norm_preservation": measured.get("norm_mean", 0.0),
                     "effective_rank_mean": measured.get("effective_rank_mean", 0.0),
@@ -9370,9 +10650,41 @@ class LoRAAutoTuner(LoRAOptimizer):
             })
             del measured
 
-        # Final full merge when subsampling was used
+        # Free the sweep caches BEFORE the winner re-merge: the final merge
+        # deliberately runs cacheless (full-precision diffs), so holding
+        # group/diff/single-LoRA caches through it only inflates peak RAM
+        if _group_cache is not None:
+            _gc_skip_note = (f", {_group_cache['budget_skips']} skipped (RAM budget)"
+                             if _group_cache.get("budget_skips") else "")
+            logging.info(f"[LoRA AutoTuner] Group cache: {_group_cache['hits']} replayed, "
+                         f"{_group_cache['misses']} merged, "
+                         f"peak {_group_cache.get('peak_bytes', 0) / (1024**2):.0f} MB, "
+                         f"{len(_group_cache['store'])} entries left unclaimed"
+                         f"{_gc_skip_note}")
+            _group_cache["store"].clear()
+            _group_cache = None
+        if _diff_cache is not None:
+            n_ram = len(_diff_cache._ram_store)
+            n_disk = len(_diff_cache._disk_store)
+            logging.info(f"[LoRA AutoTuner] Diff cache: {n_ram + n_disk} entries, "
+                         f"{_diff_cache.size_mb():.1f} MB "
+                         f"({n_ram} ram, {n_disk} disk)")
+            _diff_cache.clear()
+            _diff_cache = None
+        if _sl_patch_cache is not None:
+            if _sl_patch_cache.get("budget_skips"):
+                logging.info(f"[LoRA AutoTuner] Single-LoRA cache: "
+                             f"{_sl_patch_cache['budget_skips']} stores skipped (RAM budget)")
+            _sl_patch_cache["store"].clear()
+            _sl_patch_cache = None
+        _cached_sl_baselines.clear()
+        gc.collect()
+        if use_gpu:
+            torch.cuda.empty_cache()
+
+        # Final full merge with the winning config (candidates were discarded)
         # Skip if selection != 1 — the replay merge below will handle it
-        if use_subsampling and best_config is not None and output_mode != "tuning_only" and selection == 1:
+        if _discard_candidates and best_config is not None and output_mode != "tuning_only" and selection == 1:
             logging.info(f"[LoRA AutoTuner] Final merge with winning config "
                          f"({best_config['merge_mode']}, {best_config['merge_refinement']})...")
             t_final = time.time()
@@ -9400,21 +10712,15 @@ class LoRAAutoTuner(LoRAOptimizer):
                 decision_smoothing=decision_smoothing,
                 smooth_slerp_gate=smooth_slerp_gate,
                 _analysis_cache=_analysis_cache,
-                _diff_cache=_diff_cache,
-                _skip_report=True,
+                # No diff cache here: the shipped model must be built from
+                # full-precision diffs, identical to a cacheless run
+                _diff_cache=None,
+                _skip_report=False,  # this report is the analysis_report output
                 _skip_qkv_refusion=_is_sub_merge,
             )
             logging.info(f"[LoRA AutoTuner] Final merge complete ({time.time() - t_final:.1f}s)")
             pbar.update(1)
 
-        if _diff_cache is not None:
-            n_ram = len(_diff_cache._ram_store)
-            n_disk = len(_diff_cache._disk_store)
-            logging.info(f"[LoRA AutoTuner] Diff cache: {n_ram + n_disk} entries, "
-                         f"{_diff_cache.size_mb():.1f} MB "
-                         f"({n_ram} ram, {n_disk} disk)")
-            _diff_cache.clear()
-            del _diff_cache
         del all_magnitude_samples
         del _analysis_cache
         self.loaded_loras.clear()
@@ -9435,12 +10741,15 @@ class LoRAAutoTuner(LoRAOptimizer):
         # Build TUNER_DATA (exclude model/clip objects)
         tuner_data = {
             "version": 1,
+            "algo_version": AUTOTUNER_ALGO_VERSION,
             "lora_hash": lora_hash,
             "source_loras": [{"name": l["name"], "strength": l["strength"]} for l in active_loras],
             "normalize_keys": normalize_keys,
             "architecture_preset": architecture_preset,
             "auto_strength_floor": auto_strength_floor,
             "decision_smoothing": decision_smoothing,
+            "smooth_slerp_gate": smooth_slerp_gate,
+            "scoring_formula": scoring_formula,
             "analysis_summary": analysis_summary,
             "top_n": [{
                 "rank": r["rank"],
@@ -9451,8 +10760,16 @@ class LoRAAutoTuner(LoRAOptimizer):
                 "config": r["config"],
                 "metrics": r["metrics"],
                 "external_details": r.get("external_details"),
+                "per_prefix_decisions": r.get("per_prefix_decisions", {}),
             } for r in results],
         }
+
+        if record_dataset == "enabled" and not _is_sub_merge:
+            self._save_tuner_dataset_entry(
+                tuner_data, active_loras, prefix_stats,
+                getattr(self, '_detected_arch', None),
+                names_only_hash=names_only_hash,
+                new_analysis_entries=new_analysis_entries)
 
         prefix_stats.clear()
 
@@ -9475,7 +10792,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                               memory_settings, active_loras, tuner_data)
 
         # --- Community cache upload ---
-        if (community_cache == "upload_and_download" and not _is_sub_merge
+        if (community_cache in ("upload_and_download", "upload_only") and not _is_sub_merge
                 and len(content_hashes) == len(active_loras)):
             _hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
             if not _hf_token:
@@ -9490,7 +10807,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             else:
                 self._community_upload_results(
                     new_lora_entries, new_pair_entries,
-                    content_hashes, lora_hashes, tuner_data, _arch_key_for_community, _hf_token)
+                    content_hashes, lora_hashes, tuner_data, _arch_key_for_community, _hf_token,
+                    base_model_family=getattr(self, '_detected_arch', None))
 
         # Clamp selection to available results
         sel_idx = min(selection, len(results)) - 1
@@ -9514,7 +10832,7 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.info("[LoRA AutoTuner] tuning_only mode — returning base model (no merge)")
             result = (model, clip, report, "", tuner_data, None)
             if cache_patches == "enabled" and not _is_sub_merge:
-                self._autotuner_cache = {at_cache_key: (result, "tuning_only")}
+                self._autotuner_cache = {at_cache_key: (result, "tuning_only", selection)}
             elif not _is_sub_merge:
                 self._autotuner_cache = {}
             return result
@@ -9573,7 +10891,7 @@ class LoRAAutoTuner(LoRAOptimizer):
 
         result = (ret_model, ret_clip, report, ret_analysis_report, tuner_data, ret_lora_data)
         if cache_patches == "enabled" and not _is_sub_merge:
-            self._autotuner_cache = {at_cache_key: (result, "merge")}
+            self._autotuner_cache = {at_cache_key: (result, "merge", selection)}
         elif not _is_sub_merge:
             self._autotuner_cache = {}
             logging.info("[LoRA AutoTuner] Patch cache disabled — RAM freed after merge")
@@ -9654,10 +10972,17 @@ class LoRAAutoTuner(LoRAOptimizer):
                         logging.warning(
                             f"[LoRA AutoTuner] Sub-merge auto_tune failed: {e} — "
                             "falling back to flat merge for this sub-group")
-                        for item in sub_stack:
+                        # Same passthrough as the sub_lora_data-is-None branch:
+                        # copy items and honor the formula's group weight
+                        for sub_item in sub_stack:
+                            item = dict(sub_item)
+                            if child.get("weight") is not None:
+                                item["strength"] = child["weight"]
                             resolved.append(item)
                 elif len(sub_stack) == 1:
-                    item = sub_stack[0]
+                    # Copy before overriding strength — the item is shared
+                    # with normalized_stack (and possibly other groups)
+                    item = dict(sub_stack[0])
                     if child["weight"] is not None:
                         item["strength"] = child["weight"]
                     resolved.append(item)
@@ -9829,14 +11154,95 @@ class LoRAAutoTuner(LoRAOptimizer):
                    diff_cache_mode="disabled", diff_cache_ram_pct=0.5,
                    vram_budget=0.0, scoring_speed="full", scoring_formula="v2",
                    output_mode="merge", decision_smoothing=0.25,
-                   smooth_slerp_gate=False, memory_mode="disabled", selection=1):
-        evaluator_hash = cls._stable_data_hash(evaluator) if evaluator is not None else ""
+                   smooth_slerp_gate=False, memory_mode="disabled", selection=1,
+                   record_dataset="disabled"):
+        evaluator_hash = ""
+        if evaluator is not None:
+            evaluator_hash = (cls._stable_data_hash(evaluator) + "|"
+                              + _evaluator_file_fingerprint(evaluator.get("module_path")))
         return (id(model), id(lora_stack), output_strength, clip_strength_multiplier, top_n,
                 normalize_keys, scoring_svd, scoring_device,
                 architecture_preset,
                 vram_budget, community_cache, scoring_speed, scoring_formula, output_mode,
-                auto_strength_floor, decision_smoothing, evaluator_hash, memory_mode,
-                selection)
+                auto_strength_floor, decision_smoothing, smooth_slerp_gate, evaluator_hash,
+                memory_mode, selection, record_dataset)
+
+    def _run_phase1_for_estimator(self, model, clip, lora_stack,
+                                  normalize_keys="enabled",
+                                  clip_strength_multiplier=1.0,
+                                  decision_smoothing=0.25):
+        """Phase-1-only analysis pass for the Estimator pre-node.
+
+        Produces the same per-prefix shape the HF cache stores so the feature
+        extractor sees identical structure in online and offline contexts.
+
+        Returns None if the stack is empty or has no compatible target keys.
+        """
+        normalized_stack = self._normalize_stack(lora_stack, normalize_keys=normalize_keys)
+        active_loras = [item for item in normalized_stack if item["strength"] != 0]
+        if not active_loras:
+            return None
+
+        model_keys = self._get_model_keys(model)
+        clip_keys = {}
+        if clip is not None:
+            clip_keys = comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {})
+
+        all_lora_prefixes = self._collect_lora_prefixes(active_loras)
+        target_groups = self._build_target_groups(all_lora_prefixes, model_keys, clip_keys)
+        if not target_groups:
+            return None
+
+        pairs_for_cache = [(i, j)
+                           for i in range(len(active_loras))
+                           for j in range(i + 1, len(active_loras))]
+        lora_hashes = {i: self._lora_identity_hash(lora)
+                       for i, lora in enumerate(active_loras)}
+        lora_caches = {i: self._lora_cache_load(h) or {}
+                       for i, h in lora_hashes.items()}
+        pair_caches = {(i, j): self._pair_cache_load(lora_hashes[i], lora_hashes[j]) or {}
+                       for i, j in pairs_for_cache}
+
+        compute_device = self._get_compute_device()
+        analysis_data = self._run_group_analysis(
+            target_groups, active_loras, model, clip, compute_device,
+            clip_strength_multiplier=clip_strength_multiplier,
+            merge_refinement="none",
+            decision_smoothing=decision_smoothing,
+            track_new_entries=True,
+            lora_caches=lora_caches,
+            pair_caches=pair_caches,
+            lora_hashes=lora_hashes,
+        )
+
+        # Combine cached + freshly-computed per-prefix entries. The on-disk
+        # cache format and the estimator builder both key by prefix, so this
+        # matches load_phase1_for_config in scripts/build_estimator_index.py.
+        new_lora_entries = analysis_data.get("new_lora_entries", {})
+        new_pair_entries = analysis_data.get("new_pair_entries", {})
+
+        lora_stats = {}
+        for i in range(len(active_loras)):
+            combined = dict(lora_caches.get(i, {}))
+            for pfx, entry in new_lora_entries.get(i, {}).items():
+                if entry is not None:
+                    combined[pfx] = entry
+            lora_stats[i] = {"per_prefix": combined}
+
+        pair_stats = {}
+        for key in pairs_for_cache:
+            combined = dict(pair_caches.get(key, {}))
+            combined.update(new_pair_entries.get(key, {}))
+            pair_stats[key] = {"per_prefix": combined}
+
+        return {
+            "pair_stats": pair_stats,
+            "lora_stats": lora_stats,
+            "combo_size": len(active_loras),
+            "base_model_family": getattr(self, "_detected_arch", None) or "unknown",
+            "active_loras": active_loras,
+            "n_prefixes": analysis_data.get("prefix_count", len(target_groups)),
+        }
 
 
 class LoRAMergeSelector(LoRAOptimizer):
@@ -9908,6 +11314,7 @@ class LoRAMergeSelector(LoRAOptimizer):
 
         if tuner_data is None or "top_n" not in tuner_data:
             return (model, clip, "Error: No valid TUNER_DATA provided.", None)
+        _warn_stale_tuner_data(tuner_data, "Merge Selector")
 
         # Validate lora_hash (filter zero-strength to match AutoTuner)
         nk = tuner_data.get("normalize_keys", "disabled")
@@ -9929,7 +11336,13 @@ class LoRAMergeSelector(LoRAOptimizer):
         entry = top_n[selection - 1]
         config = entry["config"]
         resolved_smoothing = tuner_data.get("decision_smoothing", decision_smoothing)
-        resolved_auto_strength_floor = tuner_data.get("auto_strength_floor", auto_strength_floor)
+        # Per the tooltip: -1 means "use the AutoTuner's stored setting";
+        # an explicit widget value overrides it (the stored key is always
+        # present, so .get() with a widget fallback would never fire)
+        if auto_strength_floor != -1.0:
+            resolved_auto_strength_floor = auto_strength_floor
+        else:
+            resolved_auto_strength_floor = tuner_data.get("auto_strength_floor", -1.0)
 
         logging.info(f"[Merge Selector] Applying config #{selection}: "
                      f"{config['merge_mode']}, {config['merge_refinement']}")
@@ -9956,9 +11369,10 @@ class LoRAMergeSelector(LoRAOptimizer):
             patch_compression="smart",
             svd_device="gpu",
             normalize_keys=tuner_data.get("normalize_keys", "disabled"),
-            strategy_set="full",
+            strategy_set=config.get("strategy_set", "full"),
             architecture_preset=tuner_data.get("architecture_preset", "auto"),
             decision_smoothing=resolved_smoothing,
+            smooth_slerp_gate=tuner_data.get("smooth_slerp_gate", False),
         )
 
         # Build report for this selection
@@ -10390,6 +11804,8 @@ class BuildAutoTunerPythonEvaluator:
             "combine_mode": combine_mode,
             "weight": weight,
             "context_json": context_json,
+            # In-place edits to the evaluator file must invalidate caches
+            "file_fingerprint": _evaluator_file_fingerprint(module_path),
         })
 
 
@@ -10454,8 +11870,19 @@ class SaveTunerData:
                 save_path = f"{stem}_{counter:03d}{ext}"
                 counter += 1
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        with open(save_path, "w") as f:
-            json.dump(save_data, f, indent=2)
+        # Atomic write: external evaluator details can be arbitrary objects —
+        # a serialization error mid-write must not leave a truncated file
+        tmp_path = save_path + ".tmp"
+        try:
+            with open(tmp_path, "w") as f:
+                json.dump(save_data, f, indent=2, default=repr)
+            os.replace(tmp_path, save_path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
         logging.info(f"[Save Tuner Data] Saved to: {save_path}")
         return (save_path,)
 
@@ -10488,6 +11915,7 @@ class LoadTunerData:
             tuner_data = json.load(f)
         logging.info(f"[Load Tuner Data] Loaded from: {load_path} "
                      f"({len(tuner_data.get('top_n', []))} configs)")
+        _warn_stale_tuner_data(tuner_data, "Load Tuner Data")
 
         prompt = tuner_data.get("prompt", "")
         description = tuner_data.get("description", "")
@@ -10505,7 +11933,7 @@ class LoadTunerData:
             best = top_n[0]
             cfg = best.get("config", {})
             info_lines.append(f"best score: {best.get('score_final', 'N/A')}")
-            for k in ("mode", "optimization_mode", "auto_strength", "sparsification",
+            for k in ("merge_mode", "optimization_mode", "auto_strength", "sparsification",
                        "merge_refinement", "strategy_set"):
                 v = cfg.get(k)
                 if v is not None:
@@ -11943,6 +13371,412 @@ class LoRAExtractFromModel:
         return (lora_stack, lora_data)
 
 
+class LoRAEstimatorNode:
+    """Predict a merge config via k-NN retrieval over the HF community cache.
+
+    Runs Phase 1 (shared with AutoTuner) to build a combo feature vector,
+    retrieves similar past merges, aggregates their winning configs, and
+    emits a ``tuner_data`` struct the LoRA Optimizer consumes via
+    ``settings_source=from_tuner_data`` — skipping Phase 2 grid search.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "lora_stack": ("LORA_STACK",),
+                "k": ("INT", {"default": 5, "min": 1, "max": 20}),
+                "rebuild_index": (["auto", "force", "skip"], {"default": "auto"}),
+                "top_n_output": ("INT", {"default": 3, "min": 1, "max": 10}),
+            },
+            "optional": {
+                "clip": ("CLIP",),
+            },
+        }
+
+    RETURN_TYPES = ("TUNER_DATA", "STRING")
+    RETURN_NAMES = ("tuner_data", "estimator_report")
+    FUNCTION = "estimate"
+    CATEGORY = "LoRA/Optimization"
+
+    def _resolve_index_dir(self):
+        """Return the on-disk directory for index.pkl + meta.json (override in tests)."""
+        import tempfile as _tempfile
+        from pathlib import Path as _Path
+        try:
+            base = _Path(folder_paths.models_dir) / "estimator"
+        except Exception:
+            base = _Path(_tempfile.gettempdir()) / "lora_estimator"
+        base.mkdir(parents=True, exist_ok=True)
+        return base
+
+    @staticmethod
+    def _rebuild_index(index_dir):
+        """Snapshot-download the HF dataset and rebuild the index in place."""
+        from scripts.build_estimator_index import build_index
+        from huggingface_hub import HfApi, snapshot_download
+        import lora_estimator
+
+        info = HfApi().dataset_info(lora_estimator.HF_REPO_ID)
+        ds_dir = snapshot_download(
+            repo_id=lora_estimator.HF_REPO_ID,
+            repo_type="dataset",
+            allow_patterns=["config/*", "pair/*", "lora/*"],
+        )
+        build_index(ds_dir, index_dir, info.sha)
+
+    def estimate(self, model, lora_stack, k, rebuild_index, top_n_output, clip=None):
+        import lora_estimator
+        from lora_estimator import (
+            EstimatorFeatureExtractor, LoRAEstimator, ensure_index_fresh,
+        )
+
+        tuner = LoRAAutoTuner()
+        phase1 = tuner._run_phase1_for_estimator(model, clip, lora_stack)
+        if phase1 is None:
+            return (None, "[Estimator] No active LoRAs / no compatible targets. "
+                          "Fall back to AutoTuner or check your stack.")
+
+        index_dir = self._resolve_index_dir()
+        rebuild_callable = lambda: self._rebuild_index(index_dir)
+
+        if not (index_dir / "index.pkl").exists():
+            # First run — must build regardless of the requested mode (except skip).
+            if rebuild_index == "skip":
+                return (None, "[Estimator] No cached index found and rebuild_index=skip. "
+                              "Re-run with rebuild_index=auto or force.")
+            rebuild_callable()
+        else:
+            ensure_index_fresh(index_dir, rebuild_callable, mode=rebuild_index)
+
+        extractor = EstimatorFeatureExtractor()
+        feature_vec = extractor.featurize(phase1)
+
+        estimator = LoRAEstimator.from_disk(index_dir / "index.pkl")
+        neighbors = estimator.retrieve(
+            feature_vec,
+            base_model_family=phase1["base_model_family"],
+            combo_size=phase1["combo_size"],
+            k=int(k),
+        )
+        if not neighbors:
+            return (None, self._empty_report(phase1))
+
+        top_n = LoRAEstimator.aggregate_candidates(neighbors, top_n=int(top_n_output))
+        tuner_data = LoRAEstimator.emit_tuner_data(
+            top_n=top_n,
+            source_loras=[
+                {"name": item.get("name", ""), "strength": float(item.get("strength", 1.0))}
+                for item in phase1.get("active_loras", [])
+            ],
+            analysis_summary={
+                "n_prefixes": phase1.get("n_prefixes", len(phase1["pair_stats"])),
+                "combo_size": phase1["combo_size"],
+                "base_model_family": phase1["base_model_family"],
+                "mean_neighbor_distance": float(
+                    sum(n["distance"] for n in neighbors) / len(neighbors)
+                ),
+                "n_neighbors": len(neighbors),
+            },
+        )
+        return (tuner_data, self._report(phase1, neighbors, top_n))
+
+    @staticmethod
+    def _empty_report(phase1):
+        return (
+            "[Estimator] No neighbors matched "
+            f"(family={phase1['base_model_family']}, "
+            f"combo_size={phase1['combo_size']}). "
+            "This combo has no precedent in the community cache — fall back to AutoTuner."
+        )
+
+    @staticmethod
+    def _report(phase1, neighbors, top_n):
+        lines = ["[Estimator] === LoRA Merge Estimator Report ==="]
+        lines.append(
+            f"Combo: family={phase1['base_model_family']}, size={phase1['combo_size']}, "
+            f"prefixes={phase1.get('n_prefixes', '?')}"
+        )
+        lines.append(f"Retrieved {len(neighbors)} neighbor(s):")
+        for i, n in enumerate(neighbors, 1):
+            score = n["label"].get("score_final", 0.0)
+            lines.append(f"  #{i}: dist={n['distance']:.3f}  cached_score={score:.3f}")
+        lines.append(f"Predicted top {len(top_n)} config(s):")
+        for e in top_n:
+            cfg = e.get("config", {})
+            lines.append(
+                f"  rank {e['rank']}: {cfg.get('merge_mode', '?')}"
+                f" / {cfg.get('sparsification', '?')}"
+                f"  pred_score={e['score_final']:.3f}"
+            )
+        return "\n".join(lines)
+
+
+class LoRACombinationGenerator:
+    """Generate all 2-way and/or 3-way LoRA combinations for AutoTuner
+    dataset collection, with deterministic shuffling and progress tracking."""
+
+    def __init__(self):
+        self._progress_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "combo_progress.json"
+        )
+        self._enrichment_cache = {}
+        self._hf_files_cache = None
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "shuffle_order": ("INT", {"default": 0, "min": 0, "max": 2**31 - 1,
+                                  "tooltip": "Seed for shuffle order. Same value = same deterministic sequence."}),
+                "strength": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.05,
+                             "tooltip": "Default strength applied to all LoRAs in each combination."}),
+                "combo_size": (["2", "3", "2_and_3"], {
+                    "default": "2_and_3",
+                    "tooltip": "Generate pairs (2), triples (3), or both (2_and_3)."}),
+                "folder_filter": ("STRING", {
+                    "default": "",
+                    "tooltip": "Comma-separated prefixes to filter LoRAs (e.g. 'zit/,zib/' or 'sdxl/'). Empty = all LoRAs."}),
+                "rerun_mode": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "TEMPORARY: re-run all combos into a separate "
+                               "progress file (combo_progress_rerun.json). "
+                               "Use once to backfill per-prefix decisions, "
+                               "then disable and delete the side file."}),
+                "rerun_source": (["shuffle", "original_progress"], {
+                    "default": "shuffle",
+                    "tooltip": "Only meaningful when rerun_mode=True. "
+                               "'shuffle' iterates all combos in shuffle order. "
+                               "'original_progress' restricts iteration to combos "
+                               "present in the original combo_progress.json (replay "
+                               "exactly what was previously processed)."}),
+            },
+        }
+
+    RETURN_TYPES = ("LORA_STACK", "STRING")
+    RETURN_NAMES = ("lora_stack", "combo_info")
+    FUNCTION = "get_next_combo"
+    CATEGORY = "LoRA Optimizer"
+    DESCRIPTION = ("Generates all LoRA combinations for AutoTuner dataset "
+                   "collection. Tracks progress to avoid duplicates.")
+    @classmethod
+    def IS_CHANGED(cls, shuffle_order, strength, combo_size,
+                   folder_filter="", rerun_mode=False, rerun_source="shuffle"):
+        return float("nan")
+
+    @staticmethod
+    def _filter_by_original_progress(shuffled, original_completed):
+        """Return *shuffled* with order preserved, keeping only combos whose
+        hash is in *original_completed*."""
+        return [c for c in shuffled
+                if LoRACombinationGenerator._combo_hash(c) in original_completed]
+
+    def _resolve_progress_path(self, rerun_mode):
+        if rerun_mode:
+            return os.path.join(
+                os.path.dirname(self._progress_path),
+                "combo_progress_rerun.json",
+            )
+        return self._progress_path
+
+    def _list_hf_config_files(self):
+        if self._hf_files_cache is not None:
+            return self._hf_files_cache
+        try:
+            files = HfApi().list_repo_files(
+                repo_id=COMMUNITY_CACHE_REPO, repo_type="dataset",
+            )
+            self._hf_files_cache = [f for f in files if f.startswith("config/")]
+        except Exception as exc:
+            logging.warning("[LoRA Combo] HF file list failed (%s) — "
+                            "skip check disabled for this session.", exc)
+            self._hf_files_cache = []
+        return self._hf_files_cache
+
+    def _combo_already_enriched(self, combo):
+        content_hashes = []
+        for name in combo:
+            ch = LoRAAutoTuner._lora_content_hash({"name": name})
+            if ch is None:
+                return False
+            content_hashes.append(ch)
+        joined = "_".join(sorted(content_hashes))
+        if joined in self._enrichment_cache:
+            return self._enrichment_cache[joined]
+        prefix = f"config/{joined}_"
+        matching = [f for f in self._list_hf_config_files()
+                    if f.startswith(prefix)]
+        enriched = False
+        for path in matching:
+            data = LoRAAutoTuner._community_download(path)
+            if not data:
+                continue
+            for cand in data.get("candidates", []):
+                if cand.get("per_prefix_decisions"):
+                    enriched = True
+                    break
+            if enriched:
+                break
+        self._enrichment_cache[joined] = enriched
+        return enriched
+
+    def get_next_combo(self, shuffle_order, strength, combo_size,
+                        folder_filter="", rerun_mode=False,
+                        rerun_source="shuffle"):
+        lora_names = folder_paths.get_filename_list("loras")
+        if not folder_filter:
+            raise ValueError("folder_filter is required — specify one or more "
+                             "comma-separated prefixes (e.g. 'zit/,zib/').")
+        prefixes = tuple(p.strip() for p in folder_filter.split(",") if p.strip())
+        lora_names = [n for n in lora_names if n.startswith(prefixes)]
+        if len(lora_names) < 2:
+            raise ValueError(f"Need at least 2 LoRAs matching filter '{folder_filter}', "
+                             f"found {len(lora_names)}: {lora_names}")
+
+        progress_path = self._resolve_progress_path(rerun_mode)
+        combos = self._generate_combos(lora_names, combo_size)
+        shuffled = self._shuffle_combos(combos, shuffle_order)
+
+        if rerun_mode and rerun_source == "original_progress":
+            original_completed, _ = self._load_progress(self._progress_path)
+            pre_filter_count = len(shuffled)
+            shuffled = self._filter_by_original_progress(
+                shuffled, original_completed)
+            logging.info("[LoRA Combo] rerun_source=original_progress — "
+                         "filtered %d combos down to %d (present in %s).",
+                         pre_filter_count, len(shuffled), self._progress_path)
+
+        completed, _ = self._load_progress(progress_path)
+        total = len(shuffled)
+        logging.info("[LoRA Combo] shuffle_order=%d, pool=%d LoRAs, %d combos, "
+                     "%d already completed, rerun_mode=%s, rerun_source=%s, "
+                     "progress file: %s",
+                     shuffle_order, len(lora_names), total, len(completed),
+                     rerun_mode, rerun_source, progress_path)
+
+        combo = self._find_next(shuffled, completed)
+
+        while combo is not None:
+            lora_list = []
+            skip = False
+            for name in combo:
+                lora_path = folder_paths.get_full_path("loras", name)
+                if lora_path is None:
+                    logging.warning("[LoRA Combination Generator] Skipping combo — "
+                                    "LoRA '%s' not found, marking complete.", name)
+                    completed.add(self._combo_hash(combo))
+                    skip = True
+                    break
+                lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                lora_list.append({
+                    "name": name,
+                    "lora": lora,
+                    "strength": strength,
+                    "conflict_mode": "all",
+                    "key_filter": "all",
+                    "metadata": _read_safetensors_metadata(lora_path),
+                })
+
+            if not skip and rerun_mode:
+                if self._combo_already_enriched(combo):
+                    logging.info("[LoRA Combo] Already enriched on HF — "
+                                 "skipping: %s", " + ".join(combo))
+                    completed.add(self._combo_hash(combo))
+                    self._save_progress(progress_path, completed, total)
+                    skip = True
+
+            if not skip:
+                break
+            combo = self._find_next(shuffled, completed)
+
+        if combo is None:
+            self._save_progress(progress_path, completed, total)
+            logging.info("LoRACombinationGenerator: All %d combinations completed.",
+                         total)
+            raise comfy.model_management.InterruptProcessingException()
+
+        completed.add(self._combo_hash(combo))
+        self._save_progress(progress_path, completed, total)
+
+        done = len(completed)
+        info = (f"Combo {done}/{total} | "
+                f"{' + '.join(combo)} | "
+                f"Remaining: {total - done}")
+        logging.info("[LoRA Combo] Returning: %s", info)
+
+        return (lora_list, info)
+
+    @staticmethod
+    def _generate_combos(lora_names, combo_size):
+        """Return a sorted list of tuples from *lora_names*.
+
+        *combo_size* is a string: ``"2"``, ``"3"``, or ``"2_and_3"``
+        (ComfyUI dropdowns pass strings).  ``"2_and_3"`` returns pairs
+        followed by triples in a single list.
+
+        Names are sorted before generating combinations so output is
+        deterministic regardless of input order.
+        """
+        sorted_names = sorted(lora_names)
+        if combo_size == "2_and_3":
+            return (list(itertools.combinations(sorted_names, 2))
+                    + list(itertools.combinations(sorted_names, 3)))
+        return list(itertools.combinations(sorted_names, int(combo_size)))
+
+    @staticmethod
+    def _shuffle_combos(combos, seed):
+        """Return a new list with *combos* shuffled deterministically."""
+        out = list(combos)
+        random.Random(seed).shuffle(out)
+        return out
+
+    @staticmethod
+    def _combo_hash(combo):
+        """Order-independent hash of a combo tuple (12-char hex digest)."""
+        key = "|".join(sorted(combo))
+        return hashlib.sha256(key.encode()).hexdigest()[:12]
+
+    @staticmethod
+    def _find_next(shuffled_combos, completed):
+        """Return the first combo whose hash is not in *completed*, or None."""
+        for combo in shuffled_combos:
+            if LoRACombinationGenerator._combo_hash(combo) not in completed:
+                return combo
+        return None
+
+    @staticmethod
+    def _load_progress(path):
+        """Load completed set from progress JSON.  Returns (completed_set, total).
+
+        Returns ``(set(), 0)`` if the file is missing or unreadable.
+        """
+        if not os.path.exists(path):
+            return set(), 0
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return set(), 0
+        return set(data.get("completed", [])), data.get("total", 0)
+
+    @staticmethod
+    def _save_progress(path, completed, total):
+        """Save completed set to progress JSON."""
+        data = {
+            "completed": sorted(completed),
+            "total": total,
+        }
+        try:
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+            logging.info("[LoRA Combo] Progress saved: %d/%d completed → %s",
+                         len(completed), total, path)
+        except OSError as e:
+            logging.error("[LoRA Combo] Failed to save progress to %s: %s",
+                          path, e)
+
+
 # Node registration
 NODE_CLASS_MAPPINGS = {
     "LoRAStack": LoRAStack,
@@ -11966,6 +13800,8 @@ NODE_CLASS_MAPPINGS = {
     "LoRAMetadataReader": LoRAMetadataReader,
     "LoRAMergeFormula": LoRAMergeFormula,
     "LoRAExtractFromModel": LoRAExtractFromModel,
+    "LoRACombinationGenerator": LoRACombinationGenerator,
+    "LoRAEstimator": LoRAEstimatorNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -11990,4 +13826,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAMetadataReader": "LoRA Metadata Reader",
     "LoRAMergeFormula": "LoRA Merge Formula",
     "LoRAExtractFromModel": "LoRA Extract from Model",
+    "LoRACombinationGenerator": "LoRA Combination Generator",
+    "LoRAEstimator": "LoRA Merge Estimator",
 }

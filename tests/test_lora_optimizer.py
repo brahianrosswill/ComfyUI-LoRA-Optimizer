@@ -1,9 +1,11 @@
+import contextlib
 import importlib.util
 import json
 import math
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest import mock
@@ -124,6 +126,10 @@ if torch is not None:
     SPEC = importlib.util.spec_from_file_location("lora_optimizer_under_test", MODULE_PATH)
     lora_optimizer = importlib.util.module_from_spec(SPEC)
     SPEC.loader.exec_module(lora_optimizer)
+    # Register under the plain name too — otherwise mock.patch("lora_optimizer.X")
+    # imports a SECOND module instance and patches that one, silently making
+    # every such patch (e.g. AUTOTUNER_MEMORY_DIR tmpdir redirects) a no-op
+    sys.modules["lora_optimizer"] = lora_optimizer
 else:
     lora_optimizer = None
 
@@ -153,6 +159,21 @@ class LoRAOptimizerTests(unittest.TestCase):
     def setUp(self):
         self.optimizer = lora_optimizer.LoRAOptimizer()
         self.model = _make_model()
+
+    def test_lora_format_cache_avoids_repeated_detection(self):
+        """After detecting a LoRA's format once, subsequent prefixes should reuse it."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        lora_dict = {
+            "unet.a.lora_B.weight": torch.tensor([[1.0]], dtype=torch.float32),
+            "unet.a.lora_A.weight": torch.tensor([[1.0]], dtype=torch.float32),
+            "unet.b.lora_B.weight": torch.tensor([[2.0]], dtype=torch.float32),
+            "unet.b.lora_A.weight": torch.tensor([[1.0]], dtype=torch.float32),
+        }
+        result1 = optimizer._get_lora_key_info(lora_dict, "unet.a")
+        self.assertIsNotNone(result1)
+        self.assertIn(id(lora_dict), optimizer._lora_format_cache)
+        result2 = optimizer._get_lora_key_info(lora_dict, "unet.b")
+        self.assertIsNotNone(result2)
 
     def test_target_groups_merge_aliases_for_same_target(self):
         groups = self.optimizer._build_target_groups(
@@ -761,6 +782,37 @@ class LoRAOptimizerTests(unittest.TestCase):
             )
         self.assertEqual(len(result), 2)
 
+    def test_score_merge_result_baseline_matches_full(self):
+        """Scoring multi-LoRA patches with single-LoRA baseline should match full scoring."""
+        LoRAAdapter = lora_optimizer.LoRAAdapter
+        single_patches = {}
+        multi_patches = {}
+        all_patches = {}
+        for i in range(10):
+            up = torch.randn(8, 4)
+            down = torch.randn(4, 16)
+            adapter = LoRAAdapter(set(), (up, down, 4.0, None, None, None))
+            key = f"key{i}"
+            all_patches[key] = adapter
+            if i < 5:
+                single_patches[key] = adapter
+            else:
+                multi_patches[key] = adapter
+
+        full = lora_optimizer._score_merge_result(all_patches, {}, compute_svd=False)
+
+        sl = lora_optimizer._score_merge_result(
+            single_patches, {}, compute_svd=False, _return_raw=True)
+        baseline = sl["_raw"]
+        combined = lora_optimizer._score_merge_result(
+            multi_patches, {}, compute_svd=False, _baseline=baseline)
+
+        self.assertAlmostEqual(full["composite_score"], combined["composite_score"], places=6)
+        self.assertAlmostEqual(full["norm_mean"], combined["norm_mean"], places=6)
+        self.assertAlmostEqual(full["norm_cv"], combined["norm_cv"], places=6)
+        self.assertAlmostEqual(full["sparsity_mean"], combined["sparsity_mean"], places=6)
+        self.assertAlmostEqual(full["norm_energy_sq"], combined["norm_energy_sq"], places=4)
+
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
 class LoRASettingsNodeTests(unittest.TestCase):
@@ -843,6 +895,16 @@ class LoRASettingsNodeTests(unittest.TestCase):
         # Common settings should use defaults when merge_settings not connected
         self.assertEqual(settings["normalize_keys"], "enabled")
         self.assertEqual(settings["cache_patches"], "enabled")
+        self.assertEqual(settings["record_dataset"], "disabled")
+
+    def test_autotuner_settings_record_dataset_flows(self):
+        node = lora_optimizer.LoRAAutoTunerSettings()
+        inputs = lora_optimizer.LoRAAutoTunerSettings.INPUT_TYPES()
+        self.assertIn("record_dataset", inputs["required"])
+        defaults = self._build_defaults(inputs)
+        defaults["record_dataset"] = "enabled"
+        result = node.build_settings(**defaults)
+        self.assertEqual(result[0]["record_dataset"], "enabled")
 
     def test_autotuner_settings_with_evaluator(self):
         node = lora_optimizer.LoRAAutoTunerSettings()
@@ -1655,6 +1717,101 @@ class AnalysisCacheTests(unittest.TestCase):
                               entry["raw_analysis"]["per_prefix"]["prefix_a"])
 
 
+class TestAnalysisIndexRemap(unittest.TestCase):
+    """The names_only_hash is order-independent but cache entries are
+    index-keyed — reordering the stack must remap entries, not misattribute
+    one LoRA's stats to another."""
+
+    @staticmethod
+    def _entry(norm_a=1.5, norm_b=0.8):
+        return {
+            "pair_conflicts": {"0,1": {"overlap": 100, "conflict": 30,
+                                       "dot": 0.5,
+                                       "norm_a_sq": norm_a,
+                                       "norm_b_sq": norm_b,
+                                       "weighted_total": 0.8,
+                                       "weighted_conflict": 0.2,
+                                       "expected_conflict": 0.15,
+                                       "excess_conflict": 0.05,
+                                       "subspace_overlap": 0.3,
+                                       "subspace_weight": 1.0}},
+            "per_lora_norm_sq": {"0": norm_a, "1": norm_b},
+            "magnitude_samples_unscaled": {"0": [0.1, 0.2], "1": [0.3]},
+            "ranks": {"0": 16, "1": 32},
+            "target_key": "model.layer.weight",
+            "is_clip": False,
+            "raw_n": 2,
+            "skip_count": 0,
+            "strength_signs": {"0": 1, "1": 1},
+        }
+
+    def test_same_order_passthrough(self):
+        per_prefix = {"p": self._entry()}
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            per_prefix,
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}],
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}])
+        self.assertIs(out, per_prefix)
+
+    def test_reordered_stack_remaps_indices_and_pair_orientation(self):
+        per_prefix = {"p": self._entry(norm_a=1.5, norm_b=0.8)}
+        # Cached order [A, B]; current order [B, A]
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            per_prefix,
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}],
+            [{"name": "b.safetensors"}, {"name": "a.safetensors"}])
+        self.assertIsNotNone(out)
+        entry = out["p"]
+        # A (norm 1.5) is now index 1, B (norm 0.8) is index 0
+        self.assertEqual(entry["per_lora_norm_sq"]["1"], 1.5)
+        self.assertEqual(entry["per_lora_norm_sq"]["0"], 0.8)
+        self.assertEqual(entry["ranks"]["1"], 16)
+        self.assertEqual(entry["ranks"]["0"], 32)
+        self.assertEqual(entry["magnitude_samples_unscaled"]["1"], [0.1, 0.2])
+        # Pair key stays canonical (i < j) with a/b norms swapped to match
+        self.assertIn("0,1", entry["pair_conflicts"])
+        self.assertEqual(entry["pair_conflicts"]["0,1"]["norm_a_sq"], 0.8)
+        self.assertEqual(entry["pair_conflicts"]["0,1"]["norm_b_sq"], 1.5)
+        # Symmetric fields untouched
+        self.assertEqual(entry["pair_conflicts"]["0,1"]["dot"], 0.5)
+
+    def test_name_mismatch_returns_none(self):
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            {"p": self._entry()},
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}],
+            [{"name": "a.safetensors"}, {"name": "c.safetensors"}])
+        self.assertIsNone(out)
+
+    def test_missing_source_loras_returns_none(self):
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            {"p": self._entry()}, None,
+            [{"name": "a.safetensors"}, {"name": "b.safetensors"}])
+        self.assertIsNone(out)
+
+    def test_cache_load_remaps_for_reordered_active_loras(self):
+        """End-to-end: save under [A, B], load with [B, A] active order."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._analysis_cache_save(
+                    "reorder1", {"p": self._entry(norm_a=1.5, norm_b=0.8)},
+                    [{"name": "a.safetensors"}, {"name": "b.safetensors"}])
+                loaded = lora_optimizer.LoRAAutoTuner._analysis_cache_load(
+                    "reorder1",
+                    active_loras=[{"name": "b.safetensors", "strength": 1.0},
+                                  {"name": "a.safetensors", "strength": 0.5}])
+                self.assertIsNotNone(loaded)
+                self.assertEqual(loaded["p"]["per_lora_norm_sq"]["1"], 1.5)
+                self.assertEqual(loaded["p"]["per_lora_norm_sq"]["0"], 0.8)
+
+    def test_duplicate_names_matched_in_occurrence_order(self):
+        per_prefix = {"p": self._entry()}
+        out = lora_optimizer.LoRAAutoTuner._remap_analysis_indices(
+            per_prefix,
+            [{"name": "a.safetensors"}, {"name": "a.safetensors"}],
+            [{"name": "a.safetensors"}, {"name": "a.safetensors"}])
+        self.assertIs(out, per_prefix)
+
+
 class TestAnalysisPartialLifecycle(unittest.TestCase):
     """Integration tests for partial checkpoint create/resume/delete lifecycle."""
 
@@ -1947,6 +2104,95 @@ class TestPairCacheIO(unittest.TestCase):
                 path = lora_optimizer.LoRAAutoTuner._pair_cache_path("aaa", "bbb")
                 self.assertTrue(os.path.exists(path))
                 self.assertFalse(os.path.exists(path + ".tmp"))
+
+
+class TestClipStrengthCacheRoundTrip(unittest.TestCase):
+    """Clip prefixes scale/sign by the effective clip strength — extract and
+    reconstruct must agree, or clip magnitudes come back wrong."""
+
+    def _make_clip_result(self):
+        partial_stats = [(0, 16, 1.5, 2.25)]
+        magnitude_samples = [torch.tensor([0.5, 1.0])]  # scaled by |clip_strength|=0.5
+        return (
+            "clip_prefix", partial_stats, {}, magnitude_samples,
+            ("clip.layer.weight", True), 0, 1, {0: 2.25},
+        )
+
+    def test_analysis_cache_clip_rescale_uses_clip_strength(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": 0.5}]
+        entry = lora_optimizer.LoRAOptimizer._extract_for_analysis_cache(
+            self._make_clip_result(), active)
+        # Unscaled by |clip_strength|=0.5, not |strength|=1.0
+        self.assertEqual(entry["magnitude_samples_unscaled"]["0"], [1.0, 2.0])
+        result = lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "clip_prefix", entry, active)
+        self.assertIsNotNone(result)
+        # Round-trip restores the original clip-scaled samples
+        self.assertTrue(torch.allclose(result[3][0], torch.tensor([0.5, 1.0])))
+
+    def test_analysis_cache_clip_sign_flip_invalidates(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": 0.5}]
+        entry = lora_optimizer.LoRAOptimizer._extract_for_analysis_cache(
+            self._make_clip_result(), active)
+        # Model strength sign unchanged, clip sign flipped → must miss
+        flipped = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": -0.5}]
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "clip_prefix", entry, flipped))
+
+    def test_lora_cache_clip_ignores_multiplier(self):
+        # clip_strength=None → eff clip strength is the model strength, NOT
+        # strength * clip_strength_multiplier (the multiplier is applied
+        # globally at add_patches, never to the analyzed diffs)
+        active = [{"name": "a.safetensors", "strength": 2.0, "clip_strength": None}]
+        result = (
+            "clip_prefix", [(0, 16, 3.0, 9.0)], {},
+            [torch.tensor([2.0])],  # scaled by |strength|=2.0
+            ("clip.layer.weight", True), 0, 1, {0: 9.0},
+        )
+        entry = lora_optimizer.LoRAOptimizer._extract_for_lora_cache(
+            result, 0, active, clip_strength_multiplier=0.5)
+        self.assertEqual(entry["magnitude_samples_unscaled"], [1.0])
+
+
+class TestCacheValidationFallback(unittest.TestCase):
+    """Malformed cache entries (e.g. corrupt community downloads) must fall
+    back to fresh analysis, not crash the run."""
+
+    def test_analysis_reconstruct_malformed_returns_none(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": None}]
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "p", {"per_lora_norm_sq": {"0": "garbage"}}, active))
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_analysis_cache(
+            "p", {}, active))
+
+    def test_pair_lora_reconstruct_malformed_returns_none(self):
+        active = [{"name": "a.safetensors", "strength": 1.0, "clip_strength": None}]
+        self.assertIsNone(lora_optimizer.LoRAOptimizer._reconstruct_from_pair_lora_cache(
+            "p", {0: {"is_clip": False}}, {}, active, {0: "h0"}))
+
+
+class TestMemoryFindByNamesSigns(unittest.TestCase):
+    """auto_ignore_strength fallback must not replay entries tuned with
+    opposite strength signs — conflict data is sign-dependent."""
+
+    def _save_entry(self, strength):
+        tuner_data = {"top_n": [{"rank": 1, "config": {}, "score_final": 0.5}]}
+        lora_optimizer.LoRAAutoTuner._memory_save(
+            "hashx", "setty", {}, [{"name": "a.safetensors", "strength": strength}],
+            tuner_data)
+
+    def test_sign_mismatch_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                self._save_entry(strength=1.0)
+                found = lora_optimizer.LoRAAutoTuner._memory_find_by_names(
+                    ["a.safetensors"], "setty", 1,
+                    lora_signs_sorted=[("a.safetensors", -1)])
+                self.assertIsNone(found)
+                found = lora_optimizer.LoRAAutoTuner._memory_find_by_names(
+                    ["a.safetensors"], "setty", 1,
+                    lora_signs_sorted=[("a.safetensors", 1)])
+                self.assertIsNotNone(found)
 
 
 class TestCacheExtraction(unittest.TestCase):
@@ -2329,6 +2575,1606 @@ class TestPairLoraCacheAutoTune(unittest.TestCase):
                 loaded = tuner._lora_cache_load("hash_x")
                 self.assertIn("prefix_a", loaded)
                 self.assertIn("prefix_b", loaded)
+
+    def test_score_merge_result_lora_adapter_on_device(self):
+        """_score_merge_result should handle LoRAAdapter patches correctly."""
+        LoRAAdapter = lora_optimizer.LoRAAdapter
+        up = torch.randn(8, 4)
+        down = torch.randn(4, 16)
+        alpha = 4.0
+        adapter = LoRAAdapter(
+            loaded_keys=set(),
+            weights=(up, down, alpha, None, None, None),
+        )
+        patches = {("key1",): adapter}
+        result = lora_optimizer._score_merge_result(patches, {}, compute_svd=False)
+        self.assertIn("norm_mean", result)
+        self.assertGreater(result["norm_mean"], 0)
+        self.assertIn("composite_score", result)
+
+    def test_sample_pair_metrics_downsamples_large_vectors(self):
+        """Pair metrics should work correctly with large vectors that trigger downsampling."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        a = torch.randn(200000)
+        b = torch.randn(200000)
+        result = optimizer._sample_pair_metrics(a, b)
+        self.assertIn("overlap", result)
+        self.assertIn("conflict", result)
+        self.assertIn("dot", result)
+        self.assertGreater(result["overlap"], 0)
+        result2 = optimizer._sample_pair_metrics(a, b)
+        self.assertEqual(result["overlap"], result2["overlap"])
+        self.assertEqual(result["conflict"], result2["conflict"])
+        self.assertAlmostEqual(result["dot"], result2["dot"], places=4)
+
+
+    def test_sl_patch_cache_populates_and_hits(self):
+        """Single-LoRA patch cache should store results and reuse them on matching auto_strength."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        # Simulate a result tuple as returned by _merge_one_group
+        fake_patch = ("diff", (torch.randn(4, 4),))
+        fake_result = ("weight.key", False, fake_patch, "weighted_sum", "lora_unet_block", 0.0, 1, False, 1.0, 0.9)
+
+        cache = {}
+        prefix = "lora_unet_block"
+        auto_strength = "enabled"
+
+        # First access: miss → populate
+        key = (prefix, auto_strength)
+        self.assertNotIn(key, cache)
+        cache[key] = fake_result
+        self.assertIn(key, cache)
+        self.assertIs(cache[key], fake_result)
+
+        # Second access with same auto_strength: hit
+        self.assertIs(cache.get(key), fake_result)
+
+        # Different auto_strength: miss
+        key2 = (prefix, "disabled")
+        self.assertIsNone(cache.get(key2))
+
+        # Different prefix, same auto_strength: miss
+        key3 = ("lora_unet_other", auto_strength)
+        self.assertIsNone(cache.get(key3))
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestIdeogram4Support(unittest.TestCase):
+    """Ideogram 4 detection (must beat the Z-Image check — both are NextDiT
+    with layers.N.attention.qkv), key normalization, and preset routing."""
+
+    def _detect(self, sd):
+        return lora_optimizer._LoRAMergeBase._detect_architecture(sd)
+
+    @staticmethod
+    def _zeros_sd(keys):
+        return {k: torch.zeros(1) for k in keys}
+
+    def test_ai_toolkit_native_format_detected(self):
+        sd = self._zeros_sd([
+            "diffusion_model.layers.0.attention.qkv.lora_A.weight",
+            "diffusion_model.layers.0.attention.qkv.lora_B.weight",
+            "diffusion_model.layers.0.attention.o.lora_A.weight",
+            "diffusion_model.layers.0.attention.o.lora_B.weight",
+            "diffusion_model.layers.0.feed_forward.w1.lora_A.weight",
+            "diffusion_model.layers.0.feed_forward.w1.lora_B.weight",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_fal_conditional_transformer_prefix_detected(self):
+        sd = self._zeros_sd([
+            "conditional_transformer.layers.3.attention.qkv.lora_A.weight",
+            "conditional_transformer.layers.3.attention.qkv.lora_B.weight",
+            "conditional_transformer.layers.3.attention.qkv.alpha",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_lokr_output_proj_detected(self):
+        sd = self._zeros_sd([
+            "diffusion_model.layers.7.attention.o.lokr_w1",
+            "diffusion_model.layers.7.attention.o.lokr_w2",
+            "diffusion_model.layers.7.attention.o.alpha",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_lowercase_adaln_plus_ffn_detected(self):
+        sd = self._zeros_sd([
+            "diffusion_model.layers.2.adaln_modulation.lora_A.weight",
+            "diffusion_model.layers.2.feed_forward.w2.lora_A.weight",
+        ])
+        self.assertEqual(self._detect(sd), "ideogram4")
+
+    def test_qkv_only_disambiguated_by_fused_width(self):
+        # qkv-only LoRA: no o/adaln markers — the 13824-row (3x4608) fused
+        # up matrix is the Ideogram tell; 6912 (3x2304) is Z-Image Turbo
+        ideo = {
+            "diffusion_model.layers.0.attention.qkv.lora_A.weight": torch.zeros(8, 4608),
+            "diffusion_model.layers.0.attention.qkv.lora_B.weight": torch.zeros(13824, 8),
+        }
+        self.assertEqual(self._detect(ideo), "ideogram4")
+        zim = {
+            "diffusion_model.layers.0.attention.qkv.lora_A.weight": torch.zeros(8, 2304),
+            "diffusion_model.layers.0.attention.qkv.lora_B.weight": torch.zeros(6912, 8),
+        }
+        self.assertEqual(self._detect(zim), "zimage")
+
+    def test_zimage_keys_still_detect_zimage(self):
+        """Regression: Z-Image markers (attention.out, adaLN_modulation) must
+        not be claimed by the Ideogram 4 checks."""
+        sd = self._zeros_sd([
+            "diffusion_model.layers.0.attention.qkv.lora_up.weight",
+            "diffusion_model.layers.0.attention.qkv.lora_down.weight",
+            "diffusion_model.layers.0.attention.out.lora_up.weight",
+            "diffusion_model.layers.0.attention.out.lora_down.weight",
+            "diffusion_model.layers.0.adaLN_modulation.1.lora_up.weight",
+        ])
+        self.assertEqual(self._detect(sd), "zimage")
+
+    def test_normalize_fal_and_peft_prefixes(self):
+        norm = lora_optimizer._LoRAMergeBase._normalize_keys_ideogram4
+        sd = self._zeros_sd([
+            "conditional_transformer.layers.3.attention.qkv.lora_A.weight",
+            "transformer.layers.4.feed_forward.w3.lora_B.weight",
+            "base_model.model.layers.5.attention.o.lora_A.weight",
+            "layers.6.adaln_modulation.lora_B.weight",
+            "diffusion_model.layers.7.attention.qkv.lora_A.weight",  # passthrough
+        ])
+        out = norm(sd)
+        self.assertIn("diffusion_model.layers.3.attention.qkv.lora_A.weight", out)
+        self.assertIn("diffusion_model.layers.4.feed_forward.w3.lora_B.weight", out)
+        self.assertIn("diffusion_model.layers.5.attention.o.lora_A.weight", out)
+        self.assertIn("diffusion_model.layers.6.adaln_modulation.lora_B.weight", out)
+        self.assertIn("diffusion_model.layers.7.attention.qkv.lora_A.weight", out)
+        self.assertEqual(len(out), len(sd))
+
+    def test_normalize_kohya_underscores(self):
+        norm = lora_optimizer._LoRAMergeBase._normalize_keys_ideogram4
+        sd = self._zeros_sd([
+            "lora_unet_layers_0_attention_qkv.lora_down.weight",
+            "lora_unet_layers_12_feed_forward_w2.lora_up.weight",
+            "lora_unet_layers_3_adaln_modulation.alpha",
+        ])
+        out = norm(sd)
+        self.assertIn("diffusion_model.layers.0.attention.qkv.lora_down.weight", out)
+        self.assertIn("diffusion_model.layers.12.feed_forward.w2.lora_up.weight", out)
+        self.assertIn("diffusion_model.layers.3.adaln_modulation.alpha", out)
+
+    def test_preset_routes_to_dit(self):
+        key, preset = lora_optimizer._resolve_arch_preset("auto", "ideogram4")
+        self.assertEqual(key, "dit")
+
+    def test_normalize_dispatch(self):
+        sd = {"conditional_transformer.layers.0.attention.o.lora_A.weight": torch.zeros(1)}
+        out = lora_optimizer._LoRAMergeBase._normalize_keys(sd, "ideogram4")
+        self.assertIn("diffusion_model.layers.0.attention.o.lora_A.weight", out)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestAceStepDetection(unittest.TestCase):
+    """Test _detect_architecture for ACE-Step v1.0 and v1.5 key patterns."""
+
+    def _detect(self, keys):
+        sd = {k: torch.zeros(1) for k in keys}
+        return lora_optimizer._LoRAMergeBase._detect_architecture(sd)
+
+    # --- v1.5 PEFT format ---
+    def test_v15_peft_self_attn(self):
+        keys = [
+            "base_model.model.layers.0.self_attn.q_proj.lora_A.weight",
+            "base_model.model.layers.0.self_attn.q_proj.lora_B.weight",
+        ]
+        self.assertEqual(self._detect(keys), "acestep")
+
+    def test_v15_peft_cross_attn(self):
+        keys = [
+            "base_model.model.layers.12.cross_attn.k_proj.lora_A.weight",
+            "base_model.model.layers.12.cross_attn.k_proj.lora_B.weight",
+        ]
+        self.assertEqual(self._detect(keys), "acestep")
+
+    def test_v15_peft_mlp_only_not_detected(self):
+        """MLP-only LoRA without attn keys should not detect as acestep."""
+        keys = [
+            "base_model.model.layers.0.mlp.gate_proj.lora_A.weight",
+            "base_model.model.layers.0.mlp.gate_proj.lora_B.weight",
+        ]
+        # No self_attn/cross_attn keys, so won't match acestep pattern
+        self.assertNotEqual(self._detect(keys), "acestep")
+
+    def test_v15_bare_layers(self):
+        """v1.5 keys without base_model.model. prefix."""
+        keys = [
+            "layers.5.self_attn.v_proj.lora_up.weight",
+            "layers.5.self_attn.v_proj.lora_down.weight",
+        ]
+        self.assertEqual(self._detect(keys), "acestep")
+
+    # --- v1.0 diffusers format ---
+    def test_v10_transformer_blocks(self):
+        keys = [
+            "transformer_blocks.0.attn.to_q.lora_A.weight",
+            "transformer_blocks.0.attn.to_q.lora_B.weight",
+            "transformer_blocks.0.cross_attn.to_k.lora_A.weight",
+            "transformer_blocks.0.cross_attn.to_k.lora_B.weight",
+        ]
+        self.assertEqual(self._detect(keys), "acestep")
+
+    def test_v10_speaker_embedder(self):
+        keys = [
+            "speaker_embedder.lora_A.weight",
+            "speaker_embedder.lora_B.weight",
+        ]
+        self.assertEqual(self._detect(keys), "acestep")
+
+    def test_v10_lyric_encoder(self):
+        keys = [
+            "lyric_encoder.encoders.0.self_attn.linear_q.lora_A.weight",
+            "lyric_encoder.encoders.0.self_attn.linear_q.lora_B.weight",
+        ]
+        self.assertEqual(self._detect(keys), "acestep")
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestAceStepNormalization(unittest.TestCase):
+    """Test _normalize_keys_acestep for v1.0 and v1.5 key formats."""
+
+    def _norm(self, keys):
+        sd = {k: torch.zeros(1) for k in keys}
+        return lora_optimizer._LoRAMergeBase._normalize_keys_acestep(sd)
+
+    # --- v1.5 PEFT format ---
+    def test_v15_peft_strips_prefix(self):
+        result = self._norm([
+            "base_model.model.layers.0.self_attn.q_proj.lora_A.weight",
+        ])
+        self.assertIn("diffusion_model.layers.0.self_attn.q_proj.lora_A.weight", result)
+
+    def test_v15_bare_layers_adds_prefix(self):
+        result = self._norm(["layers.5.cross_attn.k_proj.lora_up.weight"])
+        self.assertIn("diffusion_model.layers.5.cross_attn.k_proj.lora_up.weight", result)
+
+    def test_v15_kohya_underscore(self):
+        result = self._norm(["lora_unet_layers_3_self_attn_q_proj.lora_down.weight"])
+        self.assertIn("diffusion_model.layers.3.self_attn.q_proj.lora_down.weight", result)
+
+    def test_v15_mlp_keys(self):
+        result = self._norm([
+            "base_model.model.layers.10.mlp.gate_proj.lora_A.weight",
+        ])
+        self.assertIn("diffusion_model.layers.10.mlp.gate_proj.lora_A.weight", result)
+
+    # --- v1.0 → v1.5 mapping ---
+    def test_v10_transformer_blocks_to_layers(self):
+        result = self._norm([
+            "transformer_blocks.7.attn.to_q.lora_A.weight",
+        ])
+        self.assertIn("diffusion_model.layers.7.self_attn.q_proj.lora_A.weight", result)
+
+    def test_v10_cross_attn_preserved(self):
+        result = self._norm([
+            "transformer_blocks.3.cross_attn.to_v.lora_B.weight",
+        ])
+        self.assertIn("diffusion_model.layers.3.cross_attn.v_proj.lora_B.weight", result)
+
+    def test_v10_to_out_0_to_o_proj(self):
+        result = self._norm([
+            "transformer_blocks.0.attn.to_out.0.lora_A.weight",
+        ])
+        self.assertIn("diffusion_model.layers.0.self_attn.o_proj.lora_A.weight", result)
+
+    def test_v10_cross_attn_to_out_0(self):
+        result = self._norm([
+            "transformer_blocks.5.cross_attn.to_out.0.lora_B.weight",
+        ])
+        self.assertIn("diffusion_model.layers.5.cross_attn.o_proj.lora_B.weight", result)
+
+    def test_v10_speaker_embedder(self):
+        result = self._norm(["speaker_embedder.lora_A.weight"])
+        self.assertIn("diffusion_model.speaker_embedder.lora_A.weight", result)
+
+    def test_v10_lyric_encoder(self):
+        result = self._norm([
+            "lyric_encoder.encoders.2.self_attn.linear_q.lora_A.weight",
+        ])
+        self.assertIn(
+            "diffusion_model.lyric_encoder.encoders.2.self_attn.q_proj.lora_A.weight",
+            result,
+        )
+
+    def test_v10_lyric_encoder_linear_v(self):
+        result = self._norm([
+            "lyric_encoder.encoders.0.self_attn.linear_v.lora_B.weight",
+        ])
+        self.assertIn(
+            "diffusion_model.lyric_encoder.encoders.0.self_attn.v_proj.lora_B.weight",
+            result,
+        )
+
+    # --- Mixed format: ensure no cross-contamination ---
+    def test_self_attn_not_double_prefixed(self):
+        """self_attn should not become self_self_attn."""
+        result = self._norm([
+            "transformer_blocks.0.cross_attn.to_q.lora_A.weight",
+        ])
+        key = list(result.keys())[0]
+        self.assertNotIn("self_self_attn", key)
+        self.assertNotIn("self_cross_attn", key)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestAceStepPreset(unittest.TestCase):
+    """Test ACE-Step architecture preset and auto-detection integration."""
+
+    def test_acestep_maps_to_dedicated_preset(self):
+        self.assertEqual(lora_optimizer._ARCH_TO_PRESET["acestep"], "acestep_dit")
+        self.assertIn("acestep_dit", lora_optimizer._ARCH_PRESETS)
+
+    def test_acestep_preset_has_wider_orthogonal_band(self):
+        dit = lora_optimizer._ARCH_PRESETS["dit"]
+        ace = lora_optimizer._ARCH_PRESETS["acestep_dit"]
+        self.assertGreater(ace["orthogonal_cos_sim_max"], dit["orthogonal_cos_sim_max"])
+
+    def test_acestep_preset_has_higher_ties_threshold(self):
+        dit = lora_optimizer._ARCH_PRESETS["dit"]
+        ace = lora_optimizer._ARCH_PRESETS["acestep_dit"]
+        self.assertGreater(ace["ties_conflict_threshold"], dit["ties_conflict_threshold"])
+
+    def test_acestep_preset_full_magnitude_preservation(self):
+        ace = lora_optimizer._ARCH_PRESETS["acestep_dit"]
+        self.assertEqual(ace["auto_strength_orthogonal_floor"], 1.0)
+
+    def test_resolve_arch_preset_acestep(self):
+        key, preset = lora_optimizer._resolve_arch_preset("auto", "acestep")
+        self.assertEqual(key, "acestep_dit")
+        self.assertEqual(preset["display_name"], "ACE-Step (Music DiT)")
+
+    def test_resolve_arch_preset_manual_override(self):
+        key, preset = lora_optimizer._resolve_arch_preset("acestep_dit", "unknown")
+        self.assertEqual(key, "acestep_dit")
+
+
+class TestLoRACombinationGenerator(unittest.TestCase):
+    """Tests for LoRACombinationGenerator static combo generation and tracking."""
+
+    def setUp(self):
+        self.lora_names = ["alpha.safetensors", "beta.safetensors",
+                           "gamma.safetensors", "delta.safetensors"]
+
+    # -- combo generation --
+
+    def test_generates_all_pairs_from_lora_list(self):
+        combos = lora_optimizer.LoRACombinationGenerator._generate_combos(
+            self.lora_names, combo_size="2",
+        )
+        self.assertEqual(len(combos), 6)  # C(4,2)
+        for c in combos:
+            self.assertEqual(len(c), 2)
+
+    def test_generates_all_triples_from_lora_list(self):
+        combos = lora_optimizer.LoRACombinationGenerator._generate_combos(
+            self.lora_names, combo_size="3",
+        )
+        self.assertEqual(len(combos), 4)  # C(4,3)
+        for c in combos:
+            self.assertEqual(len(c), 3)
+
+    def test_generates_both_pairs_and_triples(self):
+        all_combos = lora_optimizer.LoRACombinationGenerator._generate_combos(
+            self.lora_names, combo_size="2_and_3",
+        )
+        self.assertEqual(len(all_combos), 10)  # C(4,2)+C(4,3) = 6+4
+
+    # -- deterministic shuffle --
+
+    def test_shuffle_is_deterministic_with_seed(self):
+        combos = lora_optimizer.LoRACombinationGenerator._generate_combos(
+            self.lora_names, combo_size="2",
+        )
+        a = lora_optimizer.LoRACombinationGenerator._shuffle_combos(combos, seed=42)
+        b = lora_optimizer.LoRACombinationGenerator._shuffle_combos(combos, seed=42)
+        self.assertEqual(a, b)
+
+    def test_different_seeds_produce_different_order(self):
+        combos = lora_optimizer.LoRACombinationGenerator._generate_combos(
+            self.lora_names, combo_size="2",
+        )
+        a = lora_optimizer.LoRACombinationGenerator._shuffle_combos(combos, seed=42)
+        b = lora_optimizer.LoRACombinationGenerator._shuffle_combos(combos, seed=99)
+        # Same elements, different order
+        self.assertEqual(sorted(a), sorted(b))
+        self.assertNotEqual(a, b)
+
+    # -- combo hash --
+
+    def test_combo_hash_is_order_independent(self):
+        h1 = lora_optimizer.LoRACombinationGenerator._combo_hash(("a", "b"))
+        h2 = lora_optimizer.LoRACombinationGenerator._combo_hash(("b", "a"))
+        self.assertEqual(h1, h2)
+
+    # -- find_next --
+
+    def test_find_next_skips_completed(self):
+        combos = [("a", "b"), ("c", "d"), ("e", "f")]
+        done_hash = lora_optimizer.LoRACombinationGenerator._combo_hash(("a", "b"))
+        result = lora_optimizer.LoRACombinationGenerator._find_next(
+            combos, completed={done_hash},
+        )
+        self.assertEqual(result, ("c", "d"))
+
+    def test_find_next_returns_none_when_all_done(self):
+        combos = [("a", "b"), ("c", "d")]
+        completed = {
+            lora_optimizer.LoRACombinationGenerator._combo_hash(c) for c in combos
+        }
+        result = lora_optimizer.LoRACombinationGenerator._find_next(
+            combos, completed=completed,
+        )
+        self.assertIsNone(result)
+
+    # -- progress persistence --
+
+    def test_progress_save_and_load(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "progress.json")
+            completed = {"abc123", "def456"}
+            lora_optimizer.LoRACombinationGenerator._save_progress(
+                path, completed=completed, total=10,
+            )
+            loaded_completed, loaded_total = (
+                lora_optimizer.LoRACombinationGenerator._load_progress(path)
+            )
+            self.assertEqual(loaded_completed, completed)
+            self.assertEqual(loaded_total, 10)
+
+    def test_progress_load_missing_file_returns_empty(self):
+        completed, total = lora_optimizer.LoRACombinationGenerator._load_progress(
+            "/tmp/nonexistent_combo_progress_xyz.json",
+        )
+        self.assertEqual(completed, set())
+        self.assertEqual(total, 0)
+
+    def test_progress_persists_across_different_shuffle_orders(self):
+        """Completed combos are tracked regardless of shuffle_order."""
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "progress.json")
+            lora_optimizer.LoRACombinationGenerator._save_progress(
+                path, completed={"abc123"}, total=5,
+            )
+            # Loading should return the same completed set regardless
+            completed, total = (
+                lora_optimizer.LoRACombinationGenerator._load_progress(path)
+            )
+            self.assertEqual(completed, {"abc123"})
+            self.assertEqual(total, 5)
+
+    # -- node interface --
+
+    def test_input_types_has_required_fields(self):
+        inputs = lora_optimizer.LoRACombinationGenerator.INPUT_TYPES()
+        req = inputs["required"]
+        self.assertIn("shuffle_order", req)
+        self.assertIn("strength", req)
+        self.assertIn("combo_size", req)
+        self.assertIn("folder_filter", req)
+
+    def test_folder_filter_narrows_pool(self):
+        """Filtering by single prefix should reduce the combo pool."""
+        all_loras = [
+            "zit/style1.safetensors", "zit/style2.safetensors",
+            "zit/style3.safetensors", "sdxl/char1.safetensors",
+        ]
+        filtered = [n for n in all_loras if n.startswith("zit/")]
+        combos_all = lora_optimizer.LoRACombinationGenerator._generate_combos(all_loras, "2")
+        combos_filtered = lora_optimizer.LoRACombinationGenerator._generate_combos(filtered, "2")
+        self.assertEqual(len(combos_all), 6)   # C(4,2)
+        self.assertEqual(len(combos_filtered), 3)  # C(3,2)
+
+    def test_folder_filter_multiple_prefixes(self):
+        """Comma-separated prefixes should include LoRAs from all matching folders."""
+        all_loras = [
+            "zit/style1.safetensors", "zit/style2.safetensors",
+            "zib/base1.safetensors", "sdxl/char1.safetensors",
+        ]
+        prefixes = tuple(p.strip() for p in "zit/,zib/".split(",") if p.strip())
+        filtered = [n for n in all_loras if n.startswith(prefixes)]
+        combos = lora_optimizer.LoRACombinationGenerator._generate_combos(filtered, "2")
+        self.assertEqual(len(filtered), 3)  # 2 zit + 1 zib
+        self.assertEqual(len(combos), 3)    # C(3,2)
+
+    def test_return_types(self):
+        self.assertEqual(
+            lora_optimizer.LoRACombinationGenerator.RETURN_TYPES,
+            ("LORA_STACK", "STRING"),
+        )
+
+    def test_is_changed_returns_nan(self):
+        result = lora_optimizer.LoRACombinationGenerator.IS_CHANGED(
+            shuffle_order=0, strength=1.0, combo_size="2",
+        )
+        self.assertTrue(math.isnan(result))
+
+    # -- rerun mode --
+
+    def test_input_types_has_rerun_mode(self):
+        inputs = lora_optimizer.LoRACombinationGenerator.INPUT_TYPES()
+        req = inputs["required"]
+        self.assertIn("rerun_mode", req)
+        spec = req["rerun_mode"]
+        self.assertEqual(spec[0], "BOOLEAN")
+        self.assertEqual(spec[1]["default"], False)
+
+    def test_resolve_progress_path_default(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        path = gen._resolve_progress_path(rerun_mode=False)
+        self.assertTrue(path.endswith("combo_progress.json"))
+        self.assertFalse(path.endswith("combo_progress_rerun.json"))
+
+    def test_resolve_progress_path_rerun(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        path = gen._resolve_progress_path(rerun_mode=True)
+        self.assertTrue(path.endswith("combo_progress_rerun.json"))
+
+    def test_resolve_progress_path_rerun_same_dir_as_default(self):
+        """Rerun progress file lives next to the default one."""
+        gen = lora_optimizer.LoRACombinationGenerator()
+        default_dir = os.path.dirname(gen._resolve_progress_path(rerun_mode=False))
+        rerun_dir = os.path.dirname(gen._resolve_progress_path(rerun_mode=True))
+        self.assertEqual(default_dir, rerun_dir)
+
+    # -- rerun HF-enrichment skip --
+
+    def test_hf_file_list_is_memoized(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        call_count = {"n": 0}
+
+        def fake_list(*args, **kwargs):
+            call_count["n"] += 1
+            return ["config/aaa_bbb_dit.config.json", "lora/aaa.lora.json"]
+
+        with unittest.mock.patch.object(
+            lora_optimizer, "HfApi", create=True,
+            return_value=unittest.mock.MagicMock(list_repo_files=fake_list),
+        ):
+            first = gen._list_hf_config_files()
+            second = gen._list_hf_config_files()
+        self.assertEqual(first, ["config/aaa_bbb_dit.config.json"])
+        self.assertEqual(second, first)
+        self.assertEqual(call_count["n"], 1)
+
+    def test_combo_already_enriched_true_when_any_candidate_has_decisions(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        gen._hf_files_cache = ["config/aaa_bbb_dit.config.json"]
+        enriched = {
+            "candidates": [
+                {"per_prefix_decisions": {}},
+                {"per_prefix_decisions": {"layer.0": "ties"}},
+            ],
+        }
+        with unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_lora_content_hash",
+            side_effect=lambda item: {"a": "aaa", "b": "bbb"}[item["name"]],
+        ), unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_community_download",
+            return_value=enriched,
+        ):
+            self.assertTrue(gen._combo_already_enriched(("a", "b")))
+
+    def test_combo_already_enriched_false_when_candidates_lack_decisions(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        gen._hf_files_cache = ["config/aaa_bbb_dit.config.json"]
+        not_enriched = {"candidates": [{"per_prefix_decisions": {}}]}
+        with unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_lora_content_hash",
+            side_effect=lambda item: {"a": "aaa", "b": "bbb"}[item["name"]],
+        ), unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_community_download",
+            return_value=not_enriched,
+        ):
+            self.assertFalse(gen._combo_already_enriched(("a", "b")))
+
+    def test_combo_already_enriched_false_when_no_matching_hf_config(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        gen._hf_files_cache = ["config/zzz_yyy_dit.config.json"]
+        with unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_lora_content_hash",
+            side_effect=lambda item: {"a": "aaa", "b": "bbb"}[item["name"]],
+        ):
+            self.assertFalse(gen._combo_already_enriched(("a", "b")))
+
+    def test_combo_already_enriched_memoizes_result(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        gen._hf_files_cache = ["config/aaa_bbb_dit.config.json"]
+        download_calls = {"n": 0}
+
+        def fake_download(path):
+            download_calls["n"] += 1
+            return {"candidates": [{"per_prefix_decisions": {"l": "ties"}}]}
+
+        with unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_lora_content_hash",
+            side_effect=lambda item: {"a": "aaa", "b": "bbb"}[item["name"]],
+        ), unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_community_download",
+            side_effect=fake_download,
+        ):
+            self.assertTrue(gen._combo_already_enriched(("a", "b")))
+            self.assertTrue(gen._combo_already_enriched(("a", "b")))
+        self.assertEqual(download_calls["n"], 1)
+
+    def test_combo_already_enriched_handles_missing_content_hash(self):
+        """If any LoRA hash cannot be computed, fall back to 'not enriched'
+        so the combo still runs."""
+        gen = lora_optimizer.LoRACombinationGenerator()
+        gen._hf_files_cache = []
+        with unittest.mock.patch.object(
+            lora_optimizer.LoRAAutoTuner, "_lora_content_hash",
+            return_value=None,
+        ):
+            self.assertFalse(gen._combo_already_enriched(("a", "b")))
+
+    # -- rerun source filter --
+
+    def test_input_types_has_rerun_source(self):
+        inputs = lora_optimizer.LoRACombinationGenerator.INPUT_TYPES()
+        req = inputs["required"]
+        self.assertIn("rerun_source", req)
+        spec = req["rerun_source"]
+        self.assertEqual(spec[0], ["shuffle", "original_progress"])
+        self.assertEqual(spec[1]["default"], "shuffle")
+
+    def test_filter_shuffled_by_original_progress_keeps_only_completed(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        shuffled = [("a", "b"), ("c", "d"), ("e", "f")]
+        ab_hash = gen._combo_hash(("a", "b"))
+        ef_hash = gen._combo_hash(("e", "f"))
+        filtered = gen._filter_by_original_progress(
+            shuffled, original_completed={ab_hash, ef_hash},
+        )
+        self.assertEqual(filtered, [("a", "b"), ("e", "f")])
+
+    def test_filter_shuffled_by_original_progress_preserves_order(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        shuffled = [("c", "d"), ("a", "b"), ("e", "f")]
+        completed = {gen._combo_hash(c) for c in shuffled}
+        filtered = gen._filter_by_original_progress(shuffled, completed)
+        self.assertEqual(filtered, shuffled)
+
+    def test_filter_shuffled_by_original_progress_empty_original(self):
+        gen = lora_optimizer.LoRACombinationGenerator()
+        shuffled = [("a", "b"), ("c", "d")]
+        filtered = gen._filter_by_original_progress(shuffled, original_completed=set())
+        self.assertEqual(filtered, [])
+
+
+class TestCommunityCacheUploadOnly(unittest.TestCase):
+    """Tests for the community_cache='upload_only' mode."""
+
+    def test_autotuner_settings_enum_includes_upload_only(self):
+        inputs = lora_optimizer.LoRAAutoTunerSettings.INPUT_TYPES()
+        choices = inputs["required"]["community_cache"][0]
+        self.assertIn("upload_only", choices)
+        self.assertIn("upload_and_download", choices)
+        self.assertIn("disabled", choices)
+
+    def test_autotuner_node_enum_includes_upload_only(self):
+        inputs = lora_optimizer.LoRAAutoTuner.INPUT_TYPES()
+        choices = inputs["optional"]["community_cache"][0]
+        self.assertIn("upload_only", choices)
+        self.assertIn("upload_and_download", choices)
+        self.assertIn("disabled", choices)
+
+    def test_upload_only_defines_arch_key_without_download(self):
+        """Regression: _arch_key_for_community must be assigned in upload_only
+        mode (previously only set inside the upload_and_download branch,
+        leading to UnboundLocalError at upload time)."""
+        import inspect
+        src = inspect.getsource(lora_optimizer.LoRAAutoTuner.auto_tune)
+        # The arch-key assignment must not be gated on the download-only
+        # community_cache value — otherwise upload_only uploads crash.
+        self.assertNotIn(
+            'if _all_hashed and community_cache == "upload_and_download":',
+            src,
+            "arch-key assignment is gated on upload_and_download only — "
+            "upload_only will hit UnboundLocalError at upload time.",
+        )
+
+
+class TestExcessConflictBaseline(unittest.TestCase):
+    """excess_conflict must compare the UNWEIGHTED sign-mismatch fraction
+    against the unweighted arccos(rho)/pi baseline on the same position set
+    (Sheppard / degree-0 arc-cosine kernel)."""
+
+    def setUp(self):
+        self.opt = lora_optimizer.LoRAOptimizer()
+
+    def test_identical_vectors_no_excess(self):
+        g = torch.Generator().manual_seed(7)
+        a = torch.randn(20000, generator=g)
+        m = self.opt._sample_pair_metrics(a, a.clone())
+        self.assertAlmostEqual(m["excess_conflict"], 0.0, places=5)
+        self.assertAlmostEqual(m["expected_conflict"], 0.0, places=3)
+
+    def test_negated_vectors_no_excess(self):
+        g = torch.Generator().manual_seed(7)
+        a = torch.randn(20000, generator=g)
+        m = self.opt._sample_pair_metrics(a, -a)
+        # Mismatch fraction 1.0 is exactly what rho=-1 predicts
+        self.assertAlmostEqual(m["expected_conflict"], 1.0, places=3)
+        self.assertAlmostEqual(m["excess_conflict"], 0.0, places=3)
+
+    def test_independent_gaussians_no_excess(self):
+        g = torch.Generator().manual_seed(11)
+        a = torch.randn(50000, generator=g)
+        b = torch.randn(50000, generator=g)
+        m = self.opt._sample_pair_metrics(a, b)
+        # ~50% mismatch is the rho~0 base rate, not real conflict
+        self.assertLess(m["excess_conflict"], 0.03)
+
+    def test_count_conflict_detected_beyond_weighted_baseline(self):
+        """Mismatches concentrated on smaller (but above-noise-floor)
+        magnitudes: the old magnitude-weighted ratio sat BELOW the baseline
+        (excess clamped to 0); the unweighted fraction detects it."""
+        g = torch.Generator().manual_seed(3)
+        n = 20000
+        signs = torch.where(torch.rand(n, generator=g) < 0.5, 1.0, -1.0)
+        mag = torch.where(torch.arange(n) < n // 2,
+                          torch.full((n,), 2.0), torch.full((n,), 0.3))
+        a = signs * mag
+        b = a.clone()
+        # Flip half of the small-magnitude positions (25% of total count)
+        flip = torch.arange(n) >= (3 * n) // 4
+        b[flip] = -b[flip]
+        m = self.opt._sample_pair_metrics(a, b)
+        # Old weighted ratio: 0.25*0.3/(0.5*2+0.5*0.3) ~ 0.065 < baseline
+        # arccos(0.978)/pi ~ 0.067 -> old excess clamped to ~0.
+        # New unweighted: 0.25 - 0.067 ~ 0.18.
+        self.assertGreater(m["excess_conflict"], 0.10)
+
+
+class TestTiesSignElection(unittest.TestCase):
+    """Sign election is always the magnitude-weighted 'total' vote — the only
+    mechanism defined in the TIES paper (frequency is override-only)."""
+
+    def test_ties_mode_elects_total_regardless_of_magnitude_ratio(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        for mag_ratio in (1.0, 2.0, 10.0):
+            mode, _density, sign, _r = opt._auto_select_params(
+                0.6, mag_ratio, avg_cos_sim=0.5,
+                avg_excess_conflict=0.6, avg_subspace_overlap=0.8,
+                strategy_set="basic", precomputed_density=0.7)
+            self.assertEqual(mode, "ties")
+            self.assertEqual(sign, "total")
+
+
+class TestKarcherSlerp(unittest.TestCase):
+    """N>=3 slerp mode is a weighted Karcher mean: order-independent,
+    symmetric, magnitude-corrected. N=2 remains standard SLERP."""
+
+    def setUp(self):
+        self.opt = lora_optimizer.LoRAOptimizer()
+
+    def _merge(self, pairs):
+        return self.opt._merge_diffs([(t.clone(), w) for t, w in pairs], "slerp")
+
+    def test_two_vector_slerp_unchanged(self):
+        e1 = torch.zeros(8); e1[0] = 1.0
+        e2 = torch.zeros(8); e2[1] = 1.0
+        out = self._merge([(e1, 1.0), (e2, 1.0)])
+        expected = (e1 + e2) / math.sqrt(2.0)
+        self.assertTrue(torch.allclose(out, expected, atol=1e-5))
+
+    def test_three_orthogonal_symmetric_mean(self):
+        scale = 2.0
+        vecs = []
+        for i in range(3):
+            e = torch.zeros(8); e[i] = scale
+            vecs.append(e)
+        out = self._merge([(v, 1.0) for v in vecs])
+        # Direction: equal cosine to all three inputs; norm: weighted avg = 2.0
+        for v in vecs:
+            cos = torch.dot(out.flatten(), v.flatten()) / (out.norm() * v.norm())
+            self.assertAlmostEqual(cos.item(), 1.0 / math.sqrt(3.0), places=3)
+        self.assertAlmostEqual(out.norm().item(), scale, places=3)
+
+    def test_order_independence(self):
+        g = torch.Generator().manual_seed(5)
+        vs = [torch.randn(64, generator=g) for _ in range(4)]
+        ws = [1.0, 0.8, 0.6, 0.4]
+        out1 = self._merge(list(zip(vs, ws)))
+        perm = [2, 0, 3, 1]
+        out2 = self._merge([(vs[i], ws[i]) for i in perm])
+        self.assertTrue(torch.allclose(out1, out2, atol=1e-4),
+                        f"max diff {(out1 - out2).abs().max().item()}")
+
+    def test_weight_pulls_toward_heavier_vector(self):
+        e1 = torch.zeros(8); e1[0] = 1.0
+        e2 = torch.zeros(8); e2[1] = 1.0
+        e3 = torch.zeros(8); e3[2] = 1.0
+        out = self._merge([(e1, 10.0), (e2, 1.0), (e3, 1.0)])
+        u = out / out.norm()
+        self.assertGreater(torch.dot(u, e1).item(), torch.dot(u, e2).item())
+        self.assertGreater(torch.dot(u, e1).item(), 0.8)
+
+
+class TestMergeOnWrite(unittest.TestCase):
+    """Concurrent ComfyUI processes do read-modify-write on shared cache
+    files; saves merge with the on-disk state so neither loses entries."""
+
+    def test_lora_cache_save_preserves_other_writers_keys(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                # "Process A" writes prefix_a; "process B" (stale in-memory
+                # view) writes only prefix_b — A's key must survive
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"prefix_a": {"x": 1}})
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"prefix_b": {"x": 2}})
+                loaded = lora_optimizer.LoRAAutoTuner._lora_cache_load("h1")
+                self.assertEqual(set(loaded), {"prefix_a", "prefix_b"})
+
+    def test_lora_cache_save_none_never_clobbers_real_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"p": {"x": 1}})
+                lora_optimizer.LoRAAutoTuner._lora_cache_save("h1", {"p": None, "q": None})
+                loaded = lora_optimizer.LoRAAutoTuner._lora_cache_load("h1")
+                self.assertEqual(loaded["p"], {"x": 1})
+                self.assertIsNone(loaded["q"])
+
+    def test_pair_cache_save_merges(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._pair_cache_save("a", "b", {"p1": {"dot": 1}})
+                lora_optimizer.LoRAAutoTuner._pair_cache_save("a", "b", {"p2": {"dot": 2}})
+                loaded = lora_optimizer.LoRAAutoTuner._pair_cache_load("a", "b")
+                self.assertEqual(set(loaded), {"p1", "p2"})
+
+    def test_content_hash_save_merges_unless_gc(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+                lora_optimizer.LoRAAutoTuner._save_content_hash_cache({"k1": "v1"})
+                # Simulate another process's state not containing k1
+                lora_optimizer.LoRAAutoTuner._save_content_hash_cache({"k2": "v2"})
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+                loaded = lora_optimizer.LoRAAutoTuner._load_content_hash_cache()
+                self.assertEqual(set(loaded), {"k1", "k2"})
+                # GC prune path must NOT resurrect dropped keys
+                lora_optimizer.LoRAAutoTuner._save_content_hash_cache({"k2": "v2"}, merge=False)
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+                loaded = lora_optimizer.LoRAAutoTuner._load_content_hash_cache()
+                self.assertEqual(set(loaded), {"k2"})
+                lora_optimizer.LoRAAutoTuner._content_hash_mem = None
+
+
+class TestModelIdentityTracking(unittest.TestCase):
+
+    def test_same_object_not_changed(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        a = types.SimpleNamespace()
+        self.assertFalse(opt._track_model_identity(a))  # first sighting
+        self.assertFalse(opt._track_model_identity(a))  # unchanged
+
+    def test_new_object_changed(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        a, b = types.SimpleNamespace(), types.SimpleNamespace()
+        opt._track_model_identity(a)
+        self.assertTrue(opt._track_model_identity(b))
+
+    def test_clip_swap_detected(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        m = types.SimpleNamespace()
+        c1, c2 = types.SimpleNamespace(), types.SimpleNamespace()
+        opt._track_model_identity(m, c1)
+        self.assertTrue(opt._track_model_identity(m, c2))
+
+    def test_id_reuse_detected_via_dead_weakref(self):
+        import weakref, gc as _gc
+
+        class _Obj:
+            pass
+
+        opt = lora_optimizer.LoRAOptimizer()
+        b = _Obj()
+        # Simulate address reuse: stored id matches b but the original
+        # object the cache was built from is gone
+        dead = weakref.ref(_Obj())
+        _gc.collect()
+        self.assertIsNone(dead())
+        opt._cached_model_id = id(b)
+        opt._cached_clip_id = None
+        opt._cached_model_ref = dead
+        opt._cached_clip_ref = None
+        self.assertTrue(opt._track_model_identity(b))
+
+
+class TestRecordDatasetWiring(unittest.TestCase):
+
+    def test_widget_exists_and_signature_accepts(self):
+        import inspect
+        inputs = lora_optimizer.LoRAAutoTuner.INPUT_TYPES()
+        self.assertIn("record_dataset", inputs["optional"])
+        self.assertEqual(inputs["optional"]["record_dataset"][0],
+                         ["disabled", "enabled"])
+        sig = inspect.signature(lora_optimizer.LoRAAutoTuner.auto_tune)
+        self.assertIn("record_dataset", sig.parameters)
+        self.assertEqual(sig.parameters["record_dataset"].default, "disabled")
+        # The sweep must actually call the dataset writer when enabled
+        src = inspect.getsource(lora_optimizer.LoRAAutoTuner.auto_tune)
+        self.assertIn("_save_tuner_dataset_entry", src)
+
+
+class TestCommunityPairOrientation(unittest.TestCase):
+    """Community pair files are content-hash oriented; local caches are
+    identity-hash oriented. The swap helper must flip only norm_a/b."""
+
+    def test_swap_pair_norms(self):
+        entries = {"p": {"norm_a_sq": 1.0, "norm_b_sq": 2.0, "dot": 0.5}}
+        swapped = lora_optimizer.LoRAAutoTuner._swap_pair_norms(entries)
+        self.assertEqual(swapped["p"]["norm_a_sq"], 2.0)
+        self.assertEqual(swapped["p"]["norm_b_sq"], 1.0)
+        self.assertEqual(swapped["p"]["dot"], 0.5)
+        # Original untouched (must be a copy)
+        self.assertEqual(entries["p"]["norm_a_sq"], 1.0)
+
+
+class TestCommunityOfflineBackoff(unittest.TestCase):
+
+    def test_download_short_circuits_when_offline(self):
+        old = lora_optimizer.LoRAAutoTuner._community_offline_until
+        try:
+            lora_optimizer.LoRAAutoTuner._community_offline_until = time.time() + 60
+            # Must return None without attempting any network I/O
+            with mock.patch("urllib.request.urlopen",
+                            side_effect=AssertionError("network call attempted")):
+                self.assertIsNone(
+                    lora_optimizer.LoRAAutoTuner._community_download("config/x.json"))
+        finally:
+            lora_optimizer.LoRAAutoTuner._community_offline_until = old
+
+
+class TestCommunityCandidatesDownload(unittest.TestCase):
+    """A config with a recorded candidates list must rebuild the full top_n
+    so selection/top_n>1 work on community hits."""
+
+    def test_candidates_rebuild_top_n(self):
+        cfg = {"merge_mode": "ties", "optimization_mode": "global",
+               "auto_strength": "enabled", "sparsification": "disabled",
+               "sparsification_density": 0.7, "dare_dampening": 0.0,
+               "merge_refinement": "none"}
+        cfg2 = dict(cfg, merge_mode="weighted_average")
+        config_data = {
+            "algo_version": lora_optimizer.AUTOTUNER_ALGO_VERSION,
+            "config": cfg, "score": 0.9,
+            "candidates": [
+                {"rank": 1, "config": cfg, "score_final": 0.9},
+                {"rank": 2, "config": cfg2, "score_final": 0.8},
+                {"rank": 3, "config": {"malformed": True}},  # skipped
+            ],
+        }
+
+        def fake_download(path):
+            return config_data if path.startswith("config/") else None
+
+        active = [{"name": "a.safetensors", "strength": 1.0},
+                  {"name": "b.safetensors", "strength": 0.5}]
+        with mock.patch.object(lora_optimizer.LoRAAutoTuner, "_community_download",
+                               side_effect=fake_download):
+            tuner_data = lora_optimizer.LoRAAutoTuner._community_download_caches(
+                active, {0: "aaaa", 1: "bbbb"}, {0: {}, 1: {}}, {(0, 1): {}},
+                arch_preset="dit", top_n=3)
+        self.assertIsNotNone(tuner_data)
+        self.assertEqual(len(tuner_data["top_n"]), 2)
+        self.assertEqual(tuner_data["top_n"][0]["config"]["merge_mode"], "ties")
+        self.assertEqual(tuner_data["top_n"][1]["config"]["merge_mode"],
+                         "weighted_average")
+        self.assertNotEqual(tuner_data["lora_hash"], "")
+
+
+class TestAutotunerMemoryGC(unittest.TestCase):
+
+    def test_gc_removes_old_keeps_fresh(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+                old_path = os.path.join(tmpdir, "deadbeef.lora.json")
+                new_path = os.path.join(tmpdir, "cafebabe.lora.json")
+                mem_path = os.path.join(tmpdir, "aaaa_bbbb.memory.json")
+                for p in (old_path, new_path, mem_path):
+                    with open(p, "w") as f:
+                        json.dump({}, f)
+                stale = time.time() - 200 * 86400
+                os.utime(old_path, (stale, stale))
+                os.utime(mem_path, (stale, stale))
+                lora_optimizer.LoRAAutoTuner._gc_done = False
+                try:
+                    lora_optimizer.LoRAAutoTuner._gc_autotuner_memory(max_age_days=90)
+                finally:
+                    lora_optimizer.LoRAAutoTuner._gc_done = False
+                self.assertFalse(os.path.exists(old_path))
+                self.assertTrue(os.path.exists(new_path))
+                # Memory entries are never GC'd
+                self.assertTrue(os.path.exists(mem_path))
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestAutoStrengthFloor(unittest.TestCase):
+    """Explicit auto_strength_floor bounds the reduction on ANY stack;
+    only the -1 defaults stay gated on orthogonality."""
+
+    def _scale(self, dot, floor):
+        opt = lora_optimizer.LoRAOptimizer()
+        preset = lora_optimizer._ARCH_PRESETS["dit"]
+        info = opt._compute_branch_auto_scale(
+            "Model", [1.0, 1.0], [1.0, 1.0], {(0, 1): dot},
+            arch_preset=preset, detected_arch="wan",
+            auto_strength_floor=floor, is_full_rank=False)
+        return info["scale"]
+
+    def test_explicit_floor_applies_to_aligned_stacks(self):
+        # aligned (cos=0.5): unfloored auto scale is 1/sqrt(2+2*0.5) ~ 0.577
+        self.assertAlmostEqual(self._scale(0.5, -1.0), 1.0 / math.sqrt(3.0), places=4)
+        self.assertAlmostEqual(self._scale(0.5, 0.85), 0.85, places=6)
+        self.assertAlmostEqual(self._scale(0.5, 1.0), 1.0, places=6)
+
+    def test_explicit_floor_applies_to_orthogonal_stacks(self):
+        self.assertAlmostEqual(self._scale(0.0, 0.85), 0.85, places=6)
+        self.assertAlmostEqual(self._scale(0.0, 1.0), 1.0, places=6)
+
+    def test_default_floor_still_gated_on_orthogonality(self):
+        # orthogonal + default on wan -> video floor 1.0
+        self.assertAlmostEqual(self._scale(0.0, -1.0), 1.0, places=6)
+        # aligned + default -> no floor, raw auto scale
+        self.assertLess(self._scale(0.5, -1.0), 0.85)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestCommunityHitPromotesToLocalMemory(unittest.TestCase):
+    """A community-cache hit must also write the local memory entry —
+    otherwise later runs with community_cache=disabled re-sweep from
+    scratch despite the result being known."""
+
+    @staticmethod
+    def _make_setup():
+        class FakePatcher:
+            def __init__(self, model):
+                self.model = model
+
+            def clone(self):
+                return FakePatcher(self.model)
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        inner = types.SimpleNamespace(
+            layer=types.SimpleNamespace(weight=torch.zeros(16, 16)),
+            layer2=types.SimpleNamespace(weight=torch.zeros(16, 16)))
+
+        def make_lora(seed):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in ("alias_a", "alias_b"):
+                d[f"{prefix}.lora_up.weight"] = torch.randn(16, 4, generator=g) * 0.1
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, 16, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        stack = [{"name": "A", "lora": make_lora(1), "strength": 1.0},
+                 {"name": "B", "lora": make_lora(2), "strength": 0.8}]
+        return FakePatcher(inner), stack
+
+    def test_community_hit_writes_memory_and_local_run_hits_it(self):
+        fake_tuner_data = {
+            "version": 1, "algo_version": lora_optimizer.AUTOTUNER_ALGO_VERSION,
+            "lora_hash": "x",
+            "source_loras": [{"name": "A", "strength": 1.0}, {"name": "B", "strength": 0.8}],
+            "normalize_keys": "disabled", "architecture_preset": "auto",
+            "auto_strength_floor": -1.0, "decision_smoothing": 0.25,
+            "smooth_slerp_gate": False, "scoring_formula": "v2",
+            "analysis_summary": {
+                "n_loras": 2, "prefix_count": 2, "avg_conflict_ratio": 0.4,
+                "avg_excess_conflict": 0.0, "avg_subspace_overlap": 0.0,
+                "avg_cosine_sim": 0.0, "magnitude_ratio": 1.0,
+                "decision_smoothing": 0.25},
+            "top_n": [{
+                "rank": 1, "score_heuristic": 0.8, "score_measured": 0.7,
+                "score_external": None, "score_final": 0.7,
+                "config": {"merge_mode": "per_prefix_auto",
+                           "sparsification": "disabled",
+                           "sparsification_density": 0.7, "dare_dampening": 0.0,
+                           "merge_refinement": "none", "auto_strength": "disabled",
+                           "optimization_mode": "per_prefix", "strategy_set": "full"},
+                "metrics": {}, "external_details": None,
+                "per_prefix_decisions": {}}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):
+            model, stack = self._make_setup()
+            tuner = lora_optimizer.LoRAAutoTuner()
+            tuner._get_model_keys = lambda m: {
+                "alias_a": "layer.weight", "alias_b": "layer2.weight"}
+            with mock.patch.object(tuner, "_lora_content_hash",
+                                   side_effect=lambda l: "h_" + l["name"]), \
+                    mock.patch.object(tuner, "_community_download_caches",
+                                      return_value=fake_tuner_data):
+                res1 = tuner.auto_tune(
+                    model, stack, 1.0, clip=None, top_n=1,
+                    community_cache="upload_and_download", memory_mode="auto",
+                    cache_patches="disabled", record_dataset="disabled",
+                    diff_cache_mode="disabled")
+            self.assertIn("COMMUNITY CACHE HIT", res1[2])
+            mem_files = [f for f in os.listdir(tmpdir) if f.endswith(".memory.json")]
+            self.assertEqual(len(mem_files), 1, "community hit did not write local memory")
+
+            # Second run: community disabled, fresh node — must hit local memory
+            model2, stack2 = self._make_setup()
+            tuner2 = lora_optimizer.LoRAAutoTuner()
+            tuner2._get_model_keys = lambda m: {
+                "alias_a": "layer.weight", "alias_b": "layer2.weight"}
+            with self.assertLogs(level="INFO") as captured:
+                res2 = tuner2.auto_tune(
+                    model2, stack2, 1.0, clip=None, top_n=1,
+                    community_cache="disabled", memory_mode="auto",
+                    cache_patches="disabled", record_dataset="disabled",
+                    diff_cache_mode="disabled")
+            self.assertTrue(any("[AutoTuner Memory] HIT" in m for m in captured.output),
+                            captured.output[-8:])
+            self.assertEqual(res2[4]["top_n"][0]["score_final"], 0.7)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestGroupPatchCache(unittest.TestCase):
+    """Cross-candidate group patch cache: identical sweep results with the
+    cache active vs disabled, and sound key semantics."""
+
+    def test_key_shares_invariant_modes_across_auto_strength(self):
+        key = lora_optimizer._group_merge_cache_key
+        base = dict(label_prefix="p", is_clip=False, pf_density=0.7, pf_sign="total",
+                    sparsification="disabled", sparsification_density=0.7,
+                    dare_dampening=0.0, merge_refinement="none")
+        # Scale-invariant modes with quality "none": shared across settings
+        for mode in ("weighted_average", "normalize", "slerp", "consensus"):
+            k_on = key(pf_mode=mode, pf_quality="none", auto_strength_setting="enabled", **base)
+            k_off = key(pf_mode=mode, pf_quality="none", auto_strength_setting="disabled", **base)
+            self.assertEqual(k_on, k_off, mode)
+        # Linear modes: keyed per setting
+        for mode in ("weighted_sum", "ties"):
+            k_on = key(pf_mode=mode, pf_quality="none", auto_strength_setting="enabled", **base)
+            k_off = key(pf_mode=mode, pf_quality="none", auto_strength_setting="disabled", **base)
+            self.assertNotEqual(k_on, k_off, mode)
+        # Refinement breaks invariance (selfish additions scale)
+        k_on = key(pf_mode="weighted_average", pf_quality="refine",
+                   auto_strength_setting="enabled", **base)
+        k_off = key(pf_mode="weighted_average", pf_quality="refine",
+                    auto_strength_setting="disabled", **base)
+        self.assertNotEqual(k_on, k_off)
+        # CLIP groups never see the auto-strength scale
+        clip_base = dict(base, is_clip=True)
+        k_on = key(pf_mode="ties", pf_quality="none", auto_strength_setting="enabled", **clip_base)
+        k_off = key(pf_mode="ties", pf_quality="none", auto_strength_setting="disabled", **clip_base)
+        self.assertEqual(k_on, k_off)
+
+    def test_sweep_results_identical_with_and_without_cache(self):
+        n_groups = 5
+
+        class FakePatcher:
+            def __init__(self, model):
+                self.model = model
+
+            def clone(self):
+                return FakePatcher(self.model)
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        inner = types.SimpleNamespace(**{
+            f"layer{i}": types.SimpleNamespace(weight=torch.zeros(32, 32))
+            for i in range(n_groups)})
+
+        def make_lora(seed, scale):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for i in range(n_groups):
+                d[f"alias_{i}.lora_up.weight"] = torch.randn(32, 4, generator=g) * scale
+                d[f"alias_{i}.lora_down.weight"] = torch.randn(4, 32, generator=g)
+                d[f"alias_{i}.alpha"] = torch.tensor(4.0)
+            return d
+
+        def run(disable_cache):
+            stack = [
+                {"name": "A", "lora": make_lora(1, 0.10), "strength": 1.0},
+                {"name": "B", "lora": make_lora(2, 0.12), "strength": 0.8},
+            ]
+            tuner = lora_optimizer.LoRAAutoTuner()
+            tuner._get_model_keys = lambda m: {
+                f"alias_{i}": f"layer{i}.weight" for i in range(n_groups)}
+            ctx = (mock.patch.object(
+                lora_optimizer, "_group_merge_cache_key",
+                side_effect=lambda *a, **k: object())  # unique keys -> empty plan
+                if disable_cache else contextlib.nullcontext())
+            with ctx:
+                res = tuner.auto_tune(
+                    FakePatcher(inner), stack, 1.0, clip=None, top_n=6,
+                    scoring_svd="full", scoring_device="cpu",
+                    diff_cache_mode="disabled", scoring_speed="full",
+                    scoring_formula="v2", memory_mode="disabled",
+                    community_cache="disabled", cache_patches="disabled",
+                    record_dataset="disabled")
+            return res[4]["top_n"]
+
+        cached = run(disable_cache=False)
+        uncached = run(disable_cache=True)
+        self.assertEqual([r["config"] for r in cached],
+                         [r["config"] for r in uncached])
+        for rc, ru in zip(cached, uncached):
+            self.assertAlmostEqual(rc["score_final"], ru["score_final"], places=9)
+
+        # Exhausted RAM budget: storage skipped gracefully, results unchanged
+        fake_vm = types.SimpleNamespace(available=0)
+        with mock.patch("psutil.virtual_memory", return_value=fake_vm):
+            zero_budget = run(disable_cache=False)
+        self.assertEqual([r["config"] for r in cached],
+                         [r["config"] for r in zero_budget])
+        for rc, rz in zip(cached, zero_budget):
+            self.assertAlmostEqual(rc["score_final"], rz["score_final"], places=9)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestGlobalModeMergesWithDeclaredMode(unittest.TestCase):
+    """Regression: optimization_mode='global' must merge multi-LoRA groups
+    with the declared/overridden mode — pf_n_loras staying 0 used to force
+    the single-contributor weighted_sum fallback on every group."""
+
+    def _run(self, override):
+        class FakePatcher:
+            def __init__(self, model):
+                self.model = model
+
+            def clone(self):
+                return FakePatcher(self.model)
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        inner = types.SimpleNamespace(
+            layer=types.SimpleNamespace(weight=torch.zeros(32, 32)),
+            layer2=types.SimpleNamespace(weight=torch.zeros(32, 32)))
+        model = FakePatcher(inner)
+
+        def make_lora(seed, scale, prefixes):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in prefixes:
+                d[f"{prefix}.lora_up.weight"] = torch.randn(32, 4, generator=g) * scale
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, 32, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        stack = [
+            # alias_a is shared (2 LoRAs); alias_b is single-LoRA
+            {"name": "A", "lora": make_lora(1, 0.1, ("alias_a", "alias_b")), "strength": 1.0},
+            {"name": "B", "lora": make_lora(2, 0.1, ("alias_a",)), "strength": 0.8},
+        ]
+        opt = lora_optimizer.LoRAOptimizer()
+        opt._get_model_keys = lambda m: {"alias_a": "layer.weight", "alias_b": "layer2.weight"}
+        _, _, _, _, lora_data = opt.optimize_merge(
+            model, stack, 1.0,
+            optimization_mode="global", merge_strategy_override=override,
+            cache_patches="disabled", patch_compression="disabled")
+        return lora_data["per_prefix_decisions"]
+
+    def test_override_applies_to_multi_lora_groups(self):
+        for override in ("slerp", "ties", "consensus", "weighted_average"):
+            decisions = self._run(override)
+            self.assertEqual(decisions["alias_a"], override, decisions)
+            # Single-LoRA groups still fall back to weighted_sum
+            self.assertEqual(decisions["alias_b"], "weighted_sum", decisions)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestBatchedKarcher(unittest.TestCase):
+    """The batched Karcher implementation must match the per-unit reference
+    loop it replaced (same math, different reduction order)."""
+
+    @staticmethod
+    def _reference_karcher(vecs, weights):
+        """The pre-1.9.3 per-unit implementation, kept as the oracle."""
+        total_w = sum(weights)
+        units = []
+        for v, w in zip(vecs, weights):
+            vn = v.norm()
+            if vn.item() > 1e-12:
+                units.append((v / vn, w / total_w))
+        m = None
+        for u, wn in units:
+            m = u * wn if m is None else m.add_(u, alpha=wn)
+        m_norm = m.norm()
+        m = units[0][0].clone() if m_norm.item() < 1e-8 else m / m_norm
+        for _ in range(8):
+            tangent = torch.zeros_like(m)
+            for u, wn in units:
+                cos_i = torch.dot(u, m).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+                theta_i = torch.acos(cos_i)
+                if theta_i.item() < 1e-7:
+                    continue
+                coef = wn * (theta_i / torch.sin(theta_i))
+                tangent.add_(u - cos_i * m, alpha=coef.item())
+            t_norm = tangent.norm()
+            if t_norm.item() < 1e-7:
+                break
+            m = torch.cos(t_norm) * m + (torch.sin(t_norm) / t_norm) * tangent
+            m = m / m.norm().clamp(min=1e-12)
+        # norm correction as in _merge_diffs
+        input_norms = [(v.norm().item(), w) for v, w in zip(vecs, weights)]
+        target_norm = sum(n * w for n, w in input_norms) / total_w
+        cur = m.norm().item()
+        if cur > 1e-8:
+            m = m * (target_norm / cur)
+        return m
+
+    def test_batched_matches_reference(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        g = torch.Generator().manual_seed(11)
+        for n in (3, 4, 5):
+            vecs = [torch.randn(256, generator=g) for _ in range(n)]
+            weights = [1.0, 0.8, 0.6, 0.4, 0.9][:n]
+            ref = self._reference_karcher([v.clone() for v in vecs], weights)
+            out = opt._merge_diffs(list(zip([v.clone() for v in vecs], weights)), "slerp")
+            self.assertTrue(torch.allclose(out, ref, atol=1e-5),
+                            f"n={n} max diff {(out - ref).abs().max().item()}")
+
+    def test_zero_norm_vector_is_filtered(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        g = torch.Generator().manual_seed(12)
+        vecs = [torch.randn(64, generator=g), torch.zeros(64), torch.randn(64, generator=g)]
+        weights = [1.0, 0.7, 0.5]
+        out = opt._merge_diffs(list(zip([v.clone() for v in vecs], weights)), "slerp")
+        ref = self._reference_karcher([v.clone() for v in vecs], weights)
+        self.assertTrue(torch.allclose(out, ref, atol=1e-5))
+
+    def test_all_zero_vectors_return_zero(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        out = opt._merge_diffs(
+            [(torch.zeros(16), 1.0), (torch.zeros(16), 0.5), (torch.zeros(16), 0.3)],
+            "slerp")
+        self.assertTrue(torch.equal(out, torch.zeros(16)))
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestScoreDuringMerge(unittest.TestCase):
+    """Score-during-merge: inline stats must be exactly what
+    _score_merge_result would have measured itself."""
+
+    def _make_patches(self):
+        g = torch.Generator().manual_seed(7)
+        t1 = torch.randn(40, 40, generator=g)
+        t2 = torch.randn(40, 40, generator=g) * 0.3
+        return {"k1": ("diff", (t1,)), "k2": ("diff", (t2,))}
+
+    def test_inline_stats_metrics_identical(self):
+        patches = self._make_patches()
+        plain = lora_optimizer._score_merge_result(patches, {}, compute_svd=True)
+        inline = {}
+        for p in patches.values():
+            t = p[1][0]
+            inline[id(t)] = (t, lora_optimizer._diff_score_stats(t, True))
+        with_inline = lora_optimizer._score_merge_result(
+            patches, {}, compute_svd=True, _inline_stats=inline)
+        self.assertEqual(plain, with_inline)
+
+    def test_stale_id_entry_falls_back_to_direct_measurement(self):
+        patches = self._make_patches()
+        plain = lora_optimizer._score_merge_result(patches, {}, compute_svd=True)
+        # Entries whose held reference is NOT the patch tensor (stale id reuse)
+        # must be ignored — fake stats would otherwise poison the metrics
+        decoy = torch.ones(2, 2)
+        inline = {id(p[1][0]): (decoy, (999.0, 0.5, 12.0)) for p in patches.values()}
+        with_inline = lora_optimizer._score_merge_result(
+            patches, {}, compute_svd=True, _inline_stats=inline)
+        self.assertEqual(plain, with_inline)
+
+    @unittest.skipIf(torch is None or not torch.cuda.is_available(),
+                     "CUDA required for the deferral path")
+    def test_zimage_qkv_deferral_mechanics(self):
+        """Dense QKV component diffs must be deferred on GPU, fused by
+        refusion on GPU, scored in the post-refusion walk, and land on CPU
+        with their stats registered under the fused tensor's identity."""
+        lora_dim = 32
+
+        class FakePatcher:
+            def __init__(self):
+                self.model = types.SimpleNamespace()
+
+            def clone(self):
+                return FakePatcher()
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        prefixes = ["layers.0.attention.to_q", "layers.0.attention.to_k",
+                    "layers.0.attention.to_v"]
+
+        def make_lora(seed, scale):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in prefixes:
+                d[f"{prefix}.lora_up.weight"] = torch.randn(lora_dim, 4, generator=g) * scale
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, lora_dim, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        stack = [
+            {"name": "A", "lora": make_lora(1, 0.1), "strength": 1.0},
+            {"name": "B", "lora": make_lora(2, 0.12), "strength": 0.7},
+        ]
+        tuner = lora_optimizer.LoRAAutoTuner()
+        tuner._detect_architecture = lambda sd: "zimage"
+        tuner._get_model_keys = lambda m: {p: f"{p}.weight" for p in prefixes}
+        tuner._resolve_target_shape = (
+            lambda target_key, is_clip, model, clip: torch.Size([lora_dim, lora_dim]))
+        collector = {"stats": {}, "compute_svd": True}
+        # The comfy stub reports 0 free VRAM, which (correctly) disables the
+        # deferral budget — report real headroom for this test. Patch the
+        # module object lora_optimizer actually references: _load_module()
+        # tests reinstall stubs, so sys.modules may hold a NEWER stub object.
+        mm = lora_optimizer.comfy.model_management
+        with mock.patch.object(mm, "get_free_memory", return_value=8 * 1024**3):
+            # sparsification forces the dense-diff path (exact-linear is gated off)
+            _, _, _, _, lora_data = tuner.optimize_merge(
+                FakePatcher(), stack, 1.0,
+                sparsification="dare", sparsification_density=0.9,
+                patch_compression="disabled", cache_patches="disabled",
+                _score_collector=collector)
+
+        fused = [(k, p) for k, p in lora_data["model_patches"].items()
+                 if ".qkv." in (k if isinstance(k, str) else k[0])]
+        self.assertEqual(len(fused), 1)
+        _k, p = fused[0]
+        self.assertEqual(p[0], "diff")
+        t = p[1][0]
+        self.assertEqual(tuple(t.shape), (3 * lora_dim, lora_dim))
+        self.assertFalse(t.is_cuda)
+        # The walk must have registered stats under the FUSED tensor identity
+        entry = collector["stats"].get(id(t))
+        self.assertIsNotNone(entry)
+        self.assertIs(entry[0], t)
+        # Stats were measured on the GPU-resident fused tensor — must match a
+        # recompute on the same values
+        ref = lora_optimizer._diff_score_stats(t.cuda(), True)
+        for got, want in zip(entry[1], ref):
+            if got is None:
+                self.assertIsNone(want)
+            else:
+                self.assertAlmostEqual(got, want, places=6)
+
+    @unittest.skipIf(torch is None or not torch.cuda.is_available(),
+                     "CUDA required for the deferral path")
+    def test_zimage_qkv_deferral_end_to_end(self):
+        """Full sweep on a fake zimage stack: QKV components deferred on GPU,
+        fused by refusion, scored in the post-refusion walk; results must
+        match the collector-less CPU-scored sweep and contain no CUDA
+        tensors in the returned patches."""
+        lora_dim = 32
+
+        class FakePatcher:
+            def __init__(self):
+                self.model = types.SimpleNamespace()
+
+            def clone(self):
+                return FakePatcher()
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        prefixes = [
+            "layers.0.attention.to_q", "layers.0.attention.to_k",
+            "layers.0.attention.to_v", "layers.0.feed_forward.w1",
+        ]
+
+        def make_lora(seed, scale):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in prefixes:
+                d[f"{prefix}.lora_up.weight"] = torch.randn(lora_dim, 4, generator=g) * scale
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, lora_dim, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        def run(scoring_device):
+            stack = [
+                {"name": "A", "lora": make_lora(1, 0.1), "strength": 1.0},
+                {"name": "B", "lora": make_lora(2, 0.12), "strength": 0.7},
+            ]
+            tuner = lora_optimizer.LoRAAutoTuner()
+            tuner._detect_architecture = lambda sd: "zimage"
+            tuner._get_model_keys = lambda m: {p: f"{p}.weight" for p in prefixes}
+            tuner._resolve_target_shape = (
+                lambda target_key, is_clip, model, clip: torch.Size([lora_dim, lora_dim]))
+            res = tuner.auto_tune(
+                FakePatcher(), stack, 1.0,
+                clip=None, top_n=3,
+                scoring_svd="full", scoring_device=scoring_device,
+                diff_cache_mode="disabled", scoring_speed="full",
+                scoring_formula="v2", memory_mode="disabled",
+                community_cache="disabled", cache_patches="disabled",
+                record_dataset="disabled")
+            _, _, _, _, tuner_data, lora_data = res
+            return tuner_data, lora_data
+
+        tuner_data_gpu, lora_data_gpu = run("gpu")
+        # QKV components were fused (3 to_* keys -> 1 qkv key) and nothing
+        # returned to the caller may still live on the GPU
+        keys = [k if isinstance(k, str) else k[0]
+                for k in lora_data_gpu["model_patches"]]
+        self.assertTrue(any(".qkv." in k for k in keys), keys)
+        self.assertFalse(any(".to_q." in k for k in keys), keys)
+        for p in lora_data_gpu["model_patches"].values():
+            if isinstance(p, tuple) and p[0] == "diff":
+                self.assertFalse(p[1][0].is_cuda)
+
+        tuner_data_cpu, _ = run("cpu")
+        ranks_gpu = [(r["config"]["merge_mode"], r["config"]["sparsification"])
+                     for r in tuner_data_gpu["top_n"]]
+        ranks_cpu = [(r["config"]["merge_mode"], r["config"]["sparsification"])
+                     for r in tuner_data_cpu["top_n"]]
+        self.assertEqual(ranks_gpu, ranks_cpu)
+        for rg, rc in zip(tuner_data_gpu["top_n"], tuner_data_cpu["top_n"]):
+            self.assertAlmostEqual(rg["score_final"], rc["score_final"], places=5)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestDiffCacheRamLimit(unittest.TestCase):
+    def test_auto_mode_honors_ram_pct_without_absolute_cap(self):
+        """Regression: a 16GB hard cap used to silently override ram_pct on
+        high-memory machines (128GB box + pct 0.5 -> limit stuck at 16GB)."""
+        fake_vm = types.SimpleNamespace(available=100 * 1024 ** 3)
+        with mock.patch("psutil.virtual_memory", return_value=fake_vm):
+            cache = lora_optimizer._DiffCache(mode="auto", ram_pct=0.5)
+        self.assertEqual(cache._ram_limit, 50 * 1024 ** 3)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestDiffCacheWarming(unittest.TestCase):
+    """Pass 1 analysis warms the diff cache so Phase 2 candidate #1 skips
+    recomputing the per-alias diffs analysis just produced."""
+
+    def test_run_group_analysis_populates_diff_cache(self):
+        optimizer = lora_optimizer.LoRAOptimizer()
+        model = _make_model()
+        active_loras = [
+            _make_lora_entry({"alias_a": 1.0}, name="A"),
+            _make_lora_entry({"alias_a": 2.0}, name="B"),
+        ]
+        target_groups = optimizer._build_target_groups(
+            ["alias_a"], {"alias_a": "layer.weight"}, {})
+        cache = lora_optimizer._DiffCache(mode="ram")
+        analysis = optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, torch.device("cpu"),
+            diff_cache=cache)
+        self.assertEqual(analysis["prefix_count"], 1)
+        # Per-alias diffs for both LoRAs were cached during analysis
+        self.assertIn(("alias_a", 0), cache)
+        self.assertIn(("alias_a", 1), cache)
+
+    def test_analysis_results_identical_with_and_without_cache(self):
+        """The cache is write-only during analysis — results must not drift."""
+        optimizer = lora_optimizer.LoRAOptimizer()
+        model = _make_model()
+        active_loras = [
+            _make_lora_entry({"alias_a": 1.0}, name="A"),
+            _make_lora_entry({"alias_a": -0.5}, name="B"),
+        ]
+        target_groups = optimizer._build_target_groups(
+            ["alias_a"], {"alias_a": "layer.weight"}, {})
+        plain = optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, torch.device("cpu"))
+        cache = lora_optimizer._DiffCache(mode="ram")
+        warmed = optimizer._run_group_analysis(
+            target_groups, active_loras, model, None, torch.device("cpu"),
+            diff_cache=cache)
+        self.assertEqual(
+            plain["prefix_stats"]["alias_a"]["per_lora_norm_sq"],
+            warmed["prefix_stats"]["alias_a"]["per_lora_norm_sq"])
+        self.assertEqual(
+            plain["prefix_stats"]["alias_a"]["conflict_ratio"],
+            warmed["prefix_stats"]["alias_a"]["conflict_ratio"])
 
 
 if __name__ == "__main__":
