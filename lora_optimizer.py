@@ -106,7 +106,11 @@ AUTOTUNER_MEMORY_VERSION = 1
 # shift at reduction-order/ulp level vs 1.9.1
 # 1.9.3: batched Karcher mean for N>=3 slerp (matvec instead of per-unit
 # accumulation — same math, reduction-order fp drift ~1e-10)
-AUTOTUNER_ALGO_VERSION = "1.9.3"
+# 1.10.0: FIX global-mode candidates merging every group as weighted_sum
+# (pf_n_loras stayed 0 outside additive/per_prefix, tripping the single-
+# contributor fallback) — global slerp/ties/consensus/WA candidates are now
+# genuinely distinct in Phase 2 for the first time since 2026-03
+AUTOTUNER_ALGO_VERSION = "1.10.0"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -6824,6 +6828,15 @@ class LoRAOptimizer(_LoRAMergeBase):
             pf_opposing = False
             if optimization_mode == "additive":
                 pf_mode = "weighted_sum"
+                pf_n_loras = prefix_stats.get(label_prefix, {}).get("n_loras", 0)
+                pf_conflict = prefix_stats.get(label_prefix, {}).get("decision_conflict",
+                                                                     prefix_stats.get(label_prefix, {}).get("conflict_ratio", 0.0))
+            elif optimization_mode == "global":
+                # Global mode: the selected/overridden merge mode applies to
+                # multi-LoRA groups. pf_n_loras MUST be populated here — when
+                # it stayed 0, the single-contributor fallback below silently
+                # forced weighted_sum for EVERY group, so global-mode
+                # candidates never actually merged with their declared mode.
                 pf_n_loras = prefix_stats.get(label_prefix, {}).get("n_loras", 0)
                 pf_conflict = prefix_stats.get(label_prefix, {}).get("decision_conflict",
                                                                      prefix_stats.get(label_prefix, {}).get("conflict_ratio", 0.0))

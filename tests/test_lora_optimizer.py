@@ -3483,6 +3483,58 @@ class TestAutotunerMemoryGC(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestGlobalModeMergesWithDeclaredMode(unittest.TestCase):
+    """Regression: optimization_mode='global' must merge multi-LoRA groups
+    with the declared/overridden mode — pf_n_loras staying 0 used to force
+    the single-contributor weighted_sum fallback on every group."""
+
+    def _run(self, override):
+        class FakePatcher:
+            def __init__(self, model):
+                self.model = model
+
+            def clone(self):
+                return FakePatcher(self.model)
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        inner = types.SimpleNamespace(
+            layer=types.SimpleNamespace(weight=torch.zeros(32, 32)),
+            layer2=types.SimpleNamespace(weight=torch.zeros(32, 32)))
+        model = FakePatcher(inner)
+
+        def make_lora(seed, scale, prefixes):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in prefixes:
+                d[f"{prefix}.lora_up.weight"] = torch.randn(32, 4, generator=g) * scale
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, 32, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        stack = [
+            # alias_a is shared (2 LoRAs); alias_b is single-LoRA
+            {"name": "A", "lora": make_lora(1, 0.1, ("alias_a", "alias_b")), "strength": 1.0},
+            {"name": "B", "lora": make_lora(2, 0.1, ("alias_a",)), "strength": 0.8},
+        ]
+        opt = lora_optimizer.LoRAOptimizer()
+        opt._get_model_keys = lambda m: {"alias_a": "layer.weight", "alias_b": "layer2.weight"}
+        _, _, _, _, lora_data = opt.optimize_merge(
+            model, stack, 1.0,
+            optimization_mode="global", merge_strategy_override=override,
+            cache_patches="disabled", patch_compression="disabled")
+        return lora_data["per_prefix_decisions"]
+
+    def test_override_applies_to_multi_lora_groups(self):
+        for override in ("slerp", "ties", "consensus", "weighted_average"):
+            decisions = self._run(override)
+            self.assertEqual(decisions["alias_a"], override, decisions)
+            # Single-LoRA groups still fall back to weighted_sum
+            self.assertEqual(decisions["alias_b"], "weighted_sum", decisions)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestBatchedKarcher(unittest.TestCase):
     """The batched Karcher implementation must match the per-unit reference
     loop it replaced (same math, different reduction order)."""
