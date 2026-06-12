@@ -9892,8 +9892,9 @@ class LoRAAutoTuner(LoRAOptimizer):
 
         logging.info(f"[LoRA AutoTuner] Pass 1: Analyzing {len(target_groups)} target groups...")
         t_start = time.time()
-        # Progress bar: analysis groups + top_n merges (+ 1 final merge when subsampling)
-        n_pbar_merges = top_n + (1 if scoring_speed != "full" and top_n > 1 and output_mode != "tuning_only" else 0)
+        # Progress bar: analysis groups + top_n merges (+ 1 final winner merge —
+        # candidates are discarded after scoring whenever there is more than one)
+        n_pbar_merges = top_n + (1 if top_n > 1 and output_mode != "tuning_only" else 0)
         if _suppress_pbar:
             class _NullPbar:
                 def update(self, n): pass
@@ -10185,6 +10186,13 @@ class LoRAAutoTuner(LoRAOptimizer):
         best_analysis_report = ""
         best_score = -1.0
         best_config = None
+        # With multiple candidates, every candidate is merged, scored, and
+        # DISCARDED; the winner is re-merged once after the sweep (caches
+        # freed first). Keeping the running best alive doubled peak RAM by a
+        # full patch set — on video-scale models that filled whole machines.
+        # A single candidate keeps the old keep-it path (re-merge would only
+        # duplicate work).
+        _discard_candidates = len(top_candidates) > 1
         logging.info(f"[LoRA AutoTuner] Phase 2: Merging and measuring top {len(top_candidates)} candidates...")
 
         # Pre-identify single-LoRA target keys for scoring cache.
@@ -10366,16 +10374,15 @@ class LoRAAutoTuner(LoRAOptimizer):
                 smooth_slerp_gate=smooth_slerp_gate,
                 _analysis_cache=scoring_cache,
                 _diff_cache=_diff_cache,
-                # When subsampling, candidates are discarded (final merge
-                # rebuilds the report); otherwise the winner's report is the
-                # analysis_report output, so it must be built
-                _skip_report=use_subsampling or output_mode == "tuning_only",
+                # Discarded candidates never need a report (the final winner
+                # merge rebuilds it); only a kept single candidate does
+                _skip_report=_discard_candidates or output_mode == "tuning_only",
                 _skip_qkv_refusion=_is_sub_merge,
                 _sl_patch_cache=_sl_patch_cache,
                 _score_collector=_collector,
                 # Candidates that are scored and discarded never need the
                 # patched model clone (evaluator is the only other consumer)
-                _skip_model_apply=((use_subsampling or output_mode == "tuning_only")
+                _skip_model_apply=((_discard_candidates or output_mode == "tuning_only")
                                    and evaluator is None),
                 _group_patch_cache=_group_cache,
             )
@@ -10515,8 +10522,9 @@ class LoRAAutoTuner(LoRAOptimizer):
                          f"(merge {t_elapsed - t_score_elapsed:.1f}s + score {t_score_elapsed:.1f}s)")
             pbar.update(1)
 
-            if use_subsampling or output_mode == "tuning_only":
-                # When subsampling, discard all candidates — final full merge comes after
+            if _discard_candidates or output_mode == "tuning_only":
+                # Discard every candidate — the winner is re-merged after the
+                # sweep with caches freed, capping peak RAM at one candidate
                 del merged_model, merged_clip, lora_data
             elif final_score > best_score:
                 # Keep only the best model in memory, free the rest immediately
@@ -10536,17 +10544,25 @@ class LoRAAutoTuner(LoRAOptimizer):
             _collector = None
             _inline = None
             gc.collect(0)  # gen-0 only: ~10x faster, catches fresh cycles from ModelPatcher
-            # Log memory usage on first/last iteration to diagnose leaks
-            if rank_idx == 0 or rank_idx == len(top_candidates) - 1:
-                try:
-                    import psutil
-                    proc = psutil.Process()
-                    rss_gb = proc.memory_info().rss / (1024**3)
-                    dc_mb = _diff_cache.size_mb() if _diff_cache else 0
-                    logging.info(f"[LoRA AutoTuner]   Memory: process={rss_gb:.1f}GB"
-                                 f"{f', diff_cache={dc_mb:.0f}MB' if dc_mb > 0 else ''}")
-                except ImportError:
-                    pass
+            # Log memory usage per candidate to diagnose growth
+            try:
+                import psutil
+                proc = psutil.Process()
+                rss_gb = proc.memory_info().rss / (1024**3)
+                dc_mb = _diff_cache.size_mb() if _diff_cache else 0
+                gcache_mb = (_group_cache["bytes"] / (1024**2)) if _group_cache else 0
+                sl_mb = 0
+                if _sl_patch_cache:
+                    sl_mb = sum(
+                        self._estimate_single_patch_bytes(r[2])
+                        for r in _sl_patch_cache.values() if r is not None
+                    ) / (1024**2)
+                logging.info(f"[LoRA AutoTuner]   Memory: process={rss_gb:.1f}GB"
+                             f"{f', diff_cache={dc_mb:.0f}MB' if dc_mb > 0 else ''}"
+                             f"{f', group_cache={gcache_mb:.0f}MB' if gcache_mb > 0 else ''}"
+                             f"{f', sl_cache={sl_mb:.0f}MB' if sl_mb > 0 else ''}")
+            except ImportError:
+                pass
 
             results.append({
                 "rank": rank_idx + 1,
@@ -10570,9 +10586,38 @@ class LoRAAutoTuner(LoRAOptimizer):
             })
             del measured
 
-        # Final full merge when subsampling was used
+        # Free the sweep caches BEFORE the winner re-merge: the final merge
+        # deliberately runs cacheless (full-precision diffs), so holding
+        # group/diff/single-LoRA caches through it only inflates peak RAM
+        if _group_cache is not None:
+            _gc_skip_note = (f", {_group_cache['budget_skips']} skipped (RAM budget)"
+                             if _group_cache.get("budget_skips") else "")
+            logging.info(f"[LoRA AutoTuner] Group cache: {_group_cache['hits']} replayed, "
+                         f"{_group_cache['misses']} merged, "
+                         f"peak {_group_cache.get('peak_bytes', 0) / (1024**2):.0f} MB, "
+                         f"{len(_group_cache['store'])} entries left unclaimed"
+                         f"{_gc_skip_note}")
+            _group_cache["store"].clear()
+            _group_cache = None
+        if _diff_cache is not None:
+            n_ram = len(_diff_cache._ram_store)
+            n_disk = len(_diff_cache._disk_store)
+            logging.info(f"[LoRA AutoTuner] Diff cache: {n_ram + n_disk} entries, "
+                         f"{_diff_cache.size_mb():.1f} MB "
+                         f"({n_ram} ram, {n_disk} disk)")
+            _diff_cache.clear()
+            _diff_cache = None
+        if _sl_patch_cache is not None:
+            _sl_patch_cache.clear()
+            _sl_patch_cache = None
+        _cached_sl_baselines.clear()
+        gc.collect()
+        if use_gpu:
+            torch.cuda.empty_cache()
+
+        # Final full merge with the winning config (candidates were discarded)
         # Skip if selection != 1 — the replay merge below will handle it
-        if use_subsampling and best_config is not None and output_mode != "tuning_only" and selection == 1:
+        if _discard_candidates and best_config is not None and output_mode != "tuning_only" and selection == 1:
             logging.info(f"[LoRA AutoTuner] Final merge with winning config "
                          f"({best_config['merge_mode']}, {best_config['merge_refinement']})...")
             t_final = time.time()
@@ -10609,29 +10654,8 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.info(f"[LoRA AutoTuner] Final merge complete ({time.time() - t_final:.1f}s)")
             pbar.update(1)
 
-        if _group_cache is not None:
-            _gc_skip_note = (f", {_group_cache['budget_skips']} skipped (RAM budget)"
-                             if _group_cache.get("budget_skips") else "")
-            logging.info(f"[LoRA AutoTuner] Group cache: {_group_cache['hits']} replayed, "
-                         f"{_group_cache['misses']} merged, "
-                         f"peak {_group_cache.get('peak_bytes', 0) / (1024**2):.0f} MB, "
-                         f"{len(_group_cache['store'])} entries left unclaimed"
-                         f"{_gc_skip_note}")
-            _group_cache["store"].clear()
-            _group_cache = None
-        if _diff_cache is not None:
-            n_ram = len(_diff_cache._ram_store)
-            n_disk = len(_diff_cache._disk_store)
-            logging.info(f"[LoRA AutoTuner] Diff cache: {n_ram + n_disk} entries, "
-                         f"{_diff_cache.size_mb():.1f} MB "
-                         f"({n_ram} ram, {n_disk} disk)")
-            _diff_cache.clear()
-            del _diff_cache
         del all_magnitude_samples
         del _analysis_cache
-        if _sl_patch_cache is not None:
-            _sl_patch_cache.clear()
-            del _sl_patch_cache
         self.loaded_loras.clear()
         gc.collect()
         if use_gpu:
