@@ -88,6 +88,10 @@ TUNER_DATA_DIR = os.path.join(folder_paths.models_dir, "tuner_data")
 os.makedirs(TUNER_DATA_DIR, exist_ok=True)
 folder_paths.add_model_folder_path("tuner_data", TUNER_DATA_DIR)
 
+# Same pattern _refuse_zimage_patches matches on patch keys — used to detect
+# QKV component patches whose scoring stats must wait for the fused tensor
+_ZIMAGE_QKV_KEY_RE = re.compile(r'(layers\.\d+\.attention)\.to_(q|k|v)(?:\.|$)')
+
 AUTOTUNER_MEMORY_DIR = os.path.join(folder_paths.models_dir, "autotuner_memory")
 os.makedirs(AUTOTUNER_MEMORY_DIR, exist_ok=True)
 AUTOTUNER_MEMORY_VERSION = 1
@@ -97,7 +101,10 @@ AUTOTUNER_MEMORY_VERSION = 1
 # 1.9.1: Pass-1-warmed diff cache means candidate #1 is scored on the same
 # fp16-quantized cached diffs as candidates 2+ (uniform across candidates now;
 # scores shift at the ~1e-5 level when diff_cache_mode != "disabled")
-AUTOTUNER_ALGO_VERSION = "1.9.1"
+# 1.9.2: score-during-merge (stats measured on the compute device at merge
+# time) + exact count_nonzero sparsity + vector_norm — per-patch metrics can
+# shift at reduction-order/ulp level vs 1.9.1
+AUTOTUNER_ALGO_VERSION = "1.9.2"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -1586,6 +1593,12 @@ class _LoRAMergeBase:
                     k_diff = k_patch[1][0]
                     v_diff = v_patch[1][0]
                     store_dtype = q_diff.dtype
+                    # Components can sit on different devices (GPU-deferred
+                    # score-during-merge patches next to CPU ones) — unify
+                    if k_diff.device != q_diff.device:
+                        k_diff = k_diff.to(q_diff.device)
+                    if v_diff.device != q_diff.device:
+                        v_diff = v_diff.to(q_diff.device)
                     fused_diff = torch.cat([q_diff, k_diff, v_diff], dim=0)
                     if store_dtype not in (torch.float32, torch.float64):
                         fused_diff = fused_diff.to(store_dtype)
@@ -1628,6 +1641,9 @@ class _LoRAMergeBase:
                                 store_dtype = dtype
                                 break
                     parts = [_LoRAMergeBase._expand_patch_to_diff(comp_patch) for comp_patch in [q_patch, k_patch, v_patch]]
+                    # Unify devices (GPU-deferred diffs can mix with CPU adapters)
+                    parts = [p if p.device == parts[0].device else p.to(parts[0].device)
+                             for p in parts]
                     fused_diff = torch.cat(parts, dim=0)
                     if store_dtype not in (torch.float32, torch.float64):
                         fused_diff = fused_diff.to(store_dtype)
@@ -3937,9 +3953,54 @@ def _score_config_heuristic(config, avg_conflict_ratio, avg_cos_sim,
     return score
 
 
+def _diff_score_stats(tensor, compute_svd):
+    """Scoring stats for one full-rank diff tensor: (fro_norm, sparsity, eff_rank).
+
+    Single implementation shared by _score_merge_result and the inline
+    score-during-merge path in _merge_one_group, so both produce identical
+    values for the same tensor on the same device. sparsity/eff_rank are
+    None when not measurable (all-zero tensor / non-2D / SVD failure).
+    """
+    fro_norm = torch.linalg.vector_norm(tensor, dtype=torch.float32).item()
+    t_abs = tensor.abs()
+    threshold = t_abs.max().item() * 0.01
+    sparsity = None
+    if threshold > 0:
+        # count_nonzero is exact where a float32 mean of 0/1s starts
+        # rounding above 2^24 elements
+        sparsity = torch.count_nonzero(t_abs < threshold).item() / t_abs.numel()
+    del t_abs
+    eff_rank = None
+    if compute_svd and tensor.dim() == 2 and min(tensor.shape) > 1:
+        try:
+            thin_dim = min(tensor.shape)
+            if thin_dim <= 32:
+                # Small enough for direct SVD (Triton-accelerated)
+                s = _triton_svdvals(tensor.float(), n_sv=min(thin_dim, 64))
+            else:
+                # Large tensor: use Gram matrix + eigvalsh to avoid
+                # full SVD memory allocation (critical for video models)
+                t = tensor.float()
+                if t.shape[0] <= t.shape[1]:
+                    gram = torch.mm(t, t.T)
+                else:
+                    gram = torch.mm(t.T, t)
+                del t
+                eigs = torch.linalg.eigvalsh(gram).flip(-1).clamp(min=0)
+                s = eigs.sqrt()
+                del gram, eigs
+            s_norm = s / (s.sum() + 1e-10)
+            entropy = -(s_norm * (s_norm + 1e-10).log()).sum().item()
+            eff_rank = min(math.exp(entropy), thin_dim)
+            del s
+        except Exception:
+            pass
+    return fro_norm, sparsity, eff_rank
+
+
 def _score_merge_result(model_patches, clip_patches, compute_svd=True,
                         score_device=None, arch_preset=None, lora_svd=False,
-                        _baseline=None, _return_raw=False):
+                        _baseline=None, _return_raw=False, _inline_stats=None):
     """
     Score an actual merge result by measuring output quality metrics.
     Returns dict with individual metrics and composite score in [0, 1].
@@ -4058,46 +4119,31 @@ def _score_merge_result(model_patches, clip_patches, compute_svd=True,
         if tensor is None:
             continue
 
-        # Compute norm and sparsity without fp32 copy for large tensors
+        # Inline stats measured at merge time (score-during-merge): same
+        # tensor object, stats computed on the compute device by the same
+        # helper — skip the transfer and recompute entirely. The identity
+        # check makes stale id() collisions impossible to act on.
+        if _inline_stats is not None:
+            _entry = _inline_stats.get(id(tensor))
+            if _entry is not None and _entry[0] is tensor:
+                fro_norm, sparsity, eff_rank = _entry[1]
+                norms.append(fro_norm)
+                if sparsity is not None:
+                    sparsities.append(sparsity)
+                if eff_rank is not None:
+                    effective_ranks.append(eff_rank)
+                del tensor
+                continue
+
         if score_device is not None:
             tensor = tensor.to(score_device)
 
-        # Frobenius norm — avoid full fp32 copy for non-float32 tensors
-        fro_norm = tensor.to(dtype=torch.float32).norm().item() if tensor.dtype != torch.float32 else tensor.norm().item()
+        fro_norm, sparsity, eff_rank = _diff_score_stats(tensor, compute_svd)
         norms.append(fro_norm)
-
-        # Sparsity — compute before SVD to free tensor sooner
-        threshold = tensor.abs().max().item() * 0.01
-        if threshold > 0:
-            sparsity = (tensor.abs() < threshold).to(dtype=torch.float32).mean().item()
+        if sparsity is not None:
             sparsities.append(sparsity)
-
-        # Effective rank via spectral analysis (optional, expensive)
-        if compute_svd and tensor.dim() == 2 and min(tensor.shape) > 1:
-            try:
-                thin_dim = min(tensor.shape)
-                if thin_dim <= 32:
-                    # Small enough for direct SVD (Triton-accelerated)
-                    s = _triton_svdvals(tensor.float(), n_sv=min(thin_dim, 64))
-                else:
-                    # Large tensor: use Gram matrix + eigvalsh to avoid
-                    # full SVD memory allocation (critical for video models)
-                    t = tensor.float()
-                    if t.shape[0] <= t.shape[1]:
-                        gram = torch.mm(t, t.T)
-                    else:
-                        gram = torch.mm(t.T, t)
-                    del t
-                    eigs = torch.linalg.eigvalsh(gram).flip(-1).clamp(min=0)
-                    s = eigs.sqrt()
-                    del gram, eigs
-                s_norm = s / (s.sum() + 1e-10)
-                entropy = -(s_norm * (s_norm + 1e-10).log()).sum().item()
-                eff_rank = min(math.exp(entropy), thin_dim)
-                effective_ranks.append(eff_rank)
-                del s
-            except Exception:
-                pass
+        if eff_rank is not None:
+            effective_ranks.append(eff_rank)
         del tensor
 
     # Batched effective-rank from deferred gram matrices.
@@ -6542,7 +6588,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             smooth_slerp_gate=smooth_slerp_gate,
         )
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False, _skip_qkv_refusion=False, _sl_patch_cache=None):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False, _skip_qkv_refusion=False, _sl_patch_cache=None, _score_collector=None, _skip_model_apply=False):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Resolve aliases to target groups, compute diffs, sample metrics, discard diffs
@@ -7022,6 +7068,23 @@ class LoRAOptimizer(_LoRAMergeBase):
             logging.info(f"[LoRA Optimizer] VRAM patch budget: {vram_budget_bytes // (1024**2)}MB "
                          f"({vram_budget*100:.0f}% of {usable // (1024**2)}MB free)")
 
+        # Score-during-merge deferral budget for Z-Image QKV components:
+        # their scoring stats must be measured on the post-refusion FUSED
+        # tensor (the sparsity threshold uses the fused max), so they stay on
+        # the GPU until refusion instead of being scored inline. Disabled when
+        # a VRAM patch budget is active (those patches may stay on GPU anyway
+        # and the budget accounting must remain authoritative).
+        _defer_budget = 0
+        if (_score_collector is not None and use_gpu and vram_budget_bytes == 0
+                and getattr(self, '_detected_arch', None) == 'zimage'
+                and not _skip_qkv_refusion):
+            try:
+                _free_vram = comfy.model_management.get_free_memory(compute_device)
+                _defer_budget = max(0, int(_free_vram * 0.25))
+            except Exception:
+                _defer_budget = 0
+        _deferred_bytes = [0]
+
         def _merge_one_group(label_prefix, target_group):
             """Recompute diffs for one target group, merge, return patch or None."""
             nonlocal gpu_patch_bytes
@@ -7099,7 +7162,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                     return (
                         target_key, is_clip_key, patch, pf_mode, label_prefix,
                         pf_conflict, max(pf_n_loras, 1), False,
-                        linear_stats[0], linear_stats[1]
+                        linear_stats[0], linear_stats[1],
+                        None,  # LoRAAdapter patches are scored from factors
                     )
 
             prepared = self._prepare_group_diffs(
@@ -7182,9 +7246,27 @@ class LoRAOptimizer(_LoRAMergeBase):
             # to halve memory — ComfyUI handles dtype conversion when applying
             if storage_dtype is not None and merged_diff.dtype != storage_dtype:
                 merged_diff = merged_diff.to(storage_dtype)
-            # Move off-GPU now unless the VRAM budget keeps it there or a
-            # GPU-side SVD is about to consume it anyway
-            if (merged_diff.is_cuda and not should_keep
+            # Score-during-merge: measure scoring stats while the result is
+            # still on the compute device, so _score_merge_result never has
+            # to transfer the patch back. Z-Image QKV components are instead
+            # deferred (kept on GPU, scored post-refusion on the fused
+            # tensor) within the deferral budget.
+            score_stats = None
+            defer_gpu = False
+            if _score_collector is not None and not should_compress:
+                if _defer_budget > 0 and merged_diff.is_cuda and not should_keep:
+                    tkey_str = target_key[0] if isinstance(target_key, tuple) else target_key
+                    if isinstance(tkey_str, str) and _ZIMAGE_QKV_KEY_RE.search(tkey_str):
+                        t_bytes = merged_diff.nelement() * merged_diff.element_size()
+                        if _deferred_bytes[0] + t_bytes <= _defer_budget:
+                            _deferred_bytes[0] += t_bytes
+                            defer_gpu = True
+                if not defer_gpu:
+                    score_stats = _diff_score_stats(
+                        merged_diff, _score_collector.get("compute_svd", False))
+            # Move off-GPU now unless deferred for refusion scoring, kept by
+            # the VRAM budget, or a GPU-side SVD is about to consume it anyway
+            if (merged_diff.is_cuda and not should_keep and not defer_gpu
                     and not (should_compress and resolved_svd_device is not None)):
                 merged_diff = merged_diff.cpu()
             if should_compress:
@@ -7201,7 +7283,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     gpu_patch_bytes += p_bytes
                 else:
                     patch = self._move_patch_to_device(patch, torch.device("cpu"))
-            return (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm)
+            return (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm, score_stats)
 
         lowrank_count = 0
         total_input_energy = 0.0
@@ -7216,7 +7298,8 @@ class LoRAOptimizer(_LoRAMergeBase):
             nonlocal _overwrite_count
             if result is None:
                 return
-            target_key, is_clip_key, patch, used_mode, prefix, conflict, n_loras, is_compressed, inp_norm, mrg_norm = result
+            (target_key, is_clip_key, patch, used_mode, prefix, conflict,
+             n_loras, is_compressed, inp_norm, mrg_norm, score_stats) = result
             total_input_energy += inp_norm
             total_merged_energy += mrg_norm
 
@@ -7242,6 +7325,16 @@ class LoRAOptimizer(_LoRAMergeBase):
                 target_dict[target_key] = patch
                 if isinstance(patch, (LoRAAdapter, LoKrAdapter, LoHaAdapter)):
                     lowrank_count += 1
+                # Register inline scoring stats keyed by the FINAL stored
+                # tensor's identity (the held reference also prevents id()
+                # reuse). Collision-accumulated patches above get no entry —
+                # _score_merge_result falls back to direct measurement.
+                if (score_stats is not None and _score_collector is not None
+                        and isinstance(patch, tuple) and len(patch) >= 2
+                        and patch[0] == "diff"):
+                    _t_final = patch[1][0] if isinstance(patch[1], tuple) else patch[1]
+                    if isinstance(_t_final, torch.Tensor):
+                        _score_collector["stats"][id(_t_final)] = (_t_final, score_stats)
 
             processed_keys += 1
             if is_compressed:
@@ -7375,6 +7468,25 @@ class LoRAOptimizer(_LoRAMergeBase):
                 model_patches = self._refuse_zimage_patches(model_patches)
                 logging.info(f"[LoRA Optimizer] Re-fused Z-Image QKV patches ({len(model_patches)} model patches)")
 
+        # Score-during-merge: deferred QKV components were fused on the GPU —
+        # measure the fused tensors there, then move them off-GPU. Patches the
+        # VRAM budget legitimately keeps on GPU are already registered (their
+        # identity check passes) and stay put.
+        if _score_collector is not None and use_gpu:
+            _stats_map = _score_collector["stats"]
+            for _k, _p in model_patches.items():
+                if isinstance(_p, tuple) and len(_p) >= 2 and _p[0] == "diff":
+                    _t = _p[1][0] if isinstance(_p[1], tuple) else _p[1]
+                    if isinstance(_t, torch.Tensor) and _t.is_cuda:
+                        _entry = _stats_map.get(id(_t))
+                        if _entry is not None and _entry[0] is _t:
+                            continue
+                        _st = _diff_score_stats(
+                            _t, _score_collector.get("compute_svd", False))
+                        _t_cpu = _t.cpu()
+                        model_patches[_k] = ("diff", (_t_cpu,))
+                        _stats_map[id(_t_cpu)] = (_t_cpu, _st)
+
         # Build reverse key map: target_key → canonical prefix metadata
         # (used by SaveMergedLoRA to reconstruct standard LoRA key names)
         reverse_key_map = {}
@@ -7407,15 +7519,19 @@ class LoRAOptimizer(_LoRAMergeBase):
         else:
             clip_strength_out = output_strength * clip_strength_multiplier * clip_auto_scale
 
-        if model is not None and len(model_patches) > 0:
-            new_model = model.clone()
-            new_model.add_patches(model_patches, output_strength)
-            self._update_model_size(new_model, model_patches)
+        # _skip_model_apply: AutoTuner candidates that are scored and discarded
+        # (subsampling / tuning_only, no evaluator) never need the patched
+        # clone — skip clone/add_patches and return the inputs unchanged.
+        if not _skip_model_apply:
+            if model is not None and len(model_patches) > 0:
+                new_model = model.clone()
+                new_model.add_patches(model_patches, output_strength)
+                self._update_model_size(new_model, model_patches)
 
-        if clip is not None and len(clip_patches) > 0:
-            new_clip = clip.clone()
-            new_clip.add_patches(clip_patches, clip_strength_out)
-            self._update_model_size(new_clip, clip_patches)
+            if clip is not None and len(clip_patches) > 0:
+                new_clip = clip.clone()
+                new_clip.add_patches(clip_patches, clip_strength_out)
+                self._update_model_size(new_clip, clip_patches)
 
         merge_summary = {
             "keys_processed": processed_keys,
@@ -10232,6 +10348,13 @@ class LoRAAutoTuner(LoRAOptimizer):
             # merge_strategy_override would force one mode everywhere, defeating per-prefix logic.
             strategy_override = config["merge_mode"] if config["optimization_mode"] == "global" else ""
 
+            # Score-during-merge collector: enabled when merge and scoring run
+            # on the same device class, so inline stats are the exact values
+            # _score_merge_result would have measured after the round-trip.
+            _collector = None
+            if (score_dev is not None) == use_gpu:
+                _collector = {"stats": {}, "compute_svd": compute_svd}
+
             merged_model, merged_clip, _report, _, lora_data = super().optimize_merge(
                 model, lora_stack, output_strength,
                 clip=clip,
@@ -10262,7 +10385,13 @@ class LoRAAutoTuner(LoRAOptimizer):
                 _skip_report=use_subsampling or output_mode == "tuning_only",
                 _skip_qkv_refusion=_is_sub_merge,
                 _sl_patch_cache=_sl_patch_cache,
+                _score_collector=_collector,
+                # Candidates that are scored and discarded never need the
+                # patched model clone (evaluator is the only other consumer)
+                _skip_model_apply=((use_subsampling or output_mode == "tuning_only")
+                                   and evaluator is None),
             )
+            _inline = _collector["stats"] if _collector is not None else None
 
             # Measure output quality (single-LoRA prefixes may still produce
             # LoRAAdapter patches; _score_merge_result handles both formats)
@@ -10291,7 +10420,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                     sl_measured = _score_merge_result(
                         m_single, c_single, compute_svd=compute_svd,
                         score_device=score_dev, arch_preset=score_arch,
-                        lora_svd=compute_lora_svd, _return_raw=True)
+                        lora_svd=compute_lora_svd, _return_raw=True,
+                        _inline_stats=_inline)
                     _cached_sl_baselines[_sl_key] = sl_measured.get("_raw")
                     del m_single, c_single, sl_measured
 
@@ -10299,7 +10429,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                     m_multi, c_multi, compute_svd=compute_svd,
                     score_device=score_dev, arch_preset=score_arch,
                     lora_svd=compute_lora_svd,
-                    _baseline=_cached_sl_baselines[_sl_key])
+                    _baseline=_cached_sl_baselines[_sl_key],
+                    _inline_stats=_inline)
                 # Drop refs now — otherwise these dicts keep this candidate's
                 # patch tensors alive through the next candidate's merge
                 del m_multi, c_multi
@@ -10307,7 +10438,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                 measured = _score_merge_result(
                     m_patches, c_patches, compute_svd=compute_svd,
                     score_device=score_dev, arch_preset=score_arch,
-                    lora_svd=compute_lora_svd)
+                    lora_svd=compute_lora_svd,
+                    _inline_stats=_inline)
             t_score_elapsed = time.time() - t_score
             # --- Post-scoring adjustments ---
             if scoring_formula == "v1":
@@ -10413,6 +10545,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                 best_score = final_score
                 best_config = config
             del m_patches, c_patches  # Drop patch-dict references so tensors can free
+            _collector = None
+            _inline = None
             gc.collect(0)  # gen-0 only: ~10x faster, catches fresh cycles from ModelPatcher
             # Log memory usage on first/last iteration to diagnose leaks
             if rank_idx == 0 or rank_idx == len(top_candidates) - 1:

@@ -3483,6 +3483,188 @@ class TestAutotunerMemoryGC(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestScoreDuringMerge(unittest.TestCase):
+    """Score-during-merge: inline stats must be exactly what
+    _score_merge_result would have measured itself."""
+
+    def _make_patches(self):
+        g = torch.Generator().manual_seed(7)
+        t1 = torch.randn(40, 40, generator=g)
+        t2 = torch.randn(40, 40, generator=g) * 0.3
+        return {"k1": ("diff", (t1,)), "k2": ("diff", (t2,))}
+
+    def test_inline_stats_metrics_identical(self):
+        patches = self._make_patches()
+        plain = lora_optimizer._score_merge_result(patches, {}, compute_svd=True)
+        inline = {}
+        for p in patches.values():
+            t = p[1][0]
+            inline[id(t)] = (t, lora_optimizer._diff_score_stats(t, True))
+        with_inline = lora_optimizer._score_merge_result(
+            patches, {}, compute_svd=True, _inline_stats=inline)
+        self.assertEqual(plain, with_inline)
+
+    def test_stale_id_entry_falls_back_to_direct_measurement(self):
+        patches = self._make_patches()
+        plain = lora_optimizer._score_merge_result(patches, {}, compute_svd=True)
+        # Entries whose held reference is NOT the patch tensor (stale id reuse)
+        # must be ignored — fake stats would otherwise poison the metrics
+        decoy = torch.ones(2, 2)
+        inline = {id(p[1][0]): (decoy, (999.0, 0.5, 12.0)) for p in patches.values()}
+        with_inline = lora_optimizer._score_merge_result(
+            patches, {}, compute_svd=True, _inline_stats=inline)
+        self.assertEqual(plain, with_inline)
+
+    @unittest.skipIf(torch is None or not torch.cuda.is_available(),
+                     "CUDA required for the deferral path")
+    def test_zimage_qkv_deferral_mechanics(self):
+        """Dense QKV component diffs must be deferred on GPU, fused by
+        refusion on GPU, scored in the post-refusion walk, and land on CPU
+        with their stats registered under the fused tensor's identity."""
+        lora_dim = 32
+
+        class FakePatcher:
+            def __init__(self):
+                self.model = types.SimpleNamespace()
+
+            def clone(self):
+                return FakePatcher()
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        prefixes = ["layers.0.attention.to_q", "layers.0.attention.to_k",
+                    "layers.0.attention.to_v"]
+
+        def make_lora(seed, scale):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in prefixes:
+                d[f"{prefix}.lora_up.weight"] = torch.randn(lora_dim, 4, generator=g) * scale
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, lora_dim, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        stack = [
+            {"name": "A", "lora": make_lora(1, 0.1), "strength": 1.0},
+            {"name": "B", "lora": make_lora(2, 0.12), "strength": 0.7},
+        ]
+        tuner = lora_optimizer.LoRAAutoTuner()
+        tuner._detect_architecture = lambda sd: "zimage"
+        tuner._get_model_keys = lambda m: {p: f"{p}.weight" for p in prefixes}
+        tuner._resolve_target_shape = (
+            lambda target_key, is_clip, model, clip: torch.Size([lora_dim, lora_dim]))
+        collector = {"stats": {}, "compute_svd": True}
+        # The comfy stub reports 0 free VRAM, which (correctly) disables the
+        # deferral budget — report real headroom for this test. Patch the
+        # module object lora_optimizer actually references: _load_module()
+        # tests reinstall stubs, so sys.modules may hold a NEWER stub object.
+        mm = lora_optimizer.comfy.model_management
+        with mock.patch.object(mm, "get_free_memory", return_value=8 * 1024**3):
+            # sparsification forces the dense-diff path (exact-linear is gated off)
+            _, _, _, _, lora_data = tuner.optimize_merge(
+                FakePatcher(), stack, 1.0,
+                sparsification="dare", sparsification_density=0.9,
+                patch_compression="disabled", cache_patches="disabled",
+                _score_collector=collector)
+
+        fused = [(k, p) for k, p in lora_data["model_patches"].items()
+                 if ".qkv." in (k if isinstance(k, str) else k[0])]
+        self.assertEqual(len(fused), 1)
+        _k, p = fused[0]
+        self.assertEqual(p[0], "diff")
+        t = p[1][0]
+        self.assertEqual(tuple(t.shape), (3 * lora_dim, lora_dim))
+        self.assertFalse(t.is_cuda)
+        # The walk must have registered stats under the FUSED tensor identity
+        entry = collector["stats"].get(id(t))
+        self.assertIsNotNone(entry)
+        self.assertIs(entry[0], t)
+        # Stats were measured on the GPU-resident fused tensor — must match a
+        # recompute on the same values
+        ref = lora_optimizer._diff_score_stats(t.cuda(), True)
+        for got, want in zip(entry[1], ref):
+            if got is None:
+                self.assertIsNone(want)
+            else:
+                self.assertAlmostEqual(got, want, places=6)
+
+    @unittest.skipIf(torch is None or not torch.cuda.is_available(),
+                     "CUDA required for the deferral path")
+    def test_zimage_qkv_deferral_end_to_end(self):
+        """Full sweep on a fake zimage stack: QKV components deferred on GPU,
+        fused by refusion, scored in the post-refusion walk; results must
+        match the collector-less CPU-scored sweep and contain no CUDA
+        tensors in the returned patches."""
+        lora_dim = 32
+
+        class FakePatcher:
+            def __init__(self):
+                self.model = types.SimpleNamespace()
+
+            def clone(self):
+                return FakePatcher()
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        prefixes = [
+            "layers.0.attention.to_q", "layers.0.attention.to_k",
+            "layers.0.attention.to_v", "layers.0.feed_forward.w1",
+        ]
+
+        def make_lora(seed, scale):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in prefixes:
+                d[f"{prefix}.lora_up.weight"] = torch.randn(lora_dim, 4, generator=g) * scale
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, lora_dim, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        def run(scoring_device):
+            stack = [
+                {"name": "A", "lora": make_lora(1, 0.1), "strength": 1.0},
+                {"name": "B", "lora": make_lora(2, 0.12), "strength": 0.7},
+            ]
+            tuner = lora_optimizer.LoRAAutoTuner()
+            tuner._detect_architecture = lambda sd: "zimage"
+            tuner._get_model_keys = lambda m: {p: f"{p}.weight" for p in prefixes}
+            tuner._resolve_target_shape = (
+                lambda target_key, is_clip, model, clip: torch.Size([lora_dim, lora_dim]))
+            res = tuner.auto_tune(
+                FakePatcher(), stack, 1.0,
+                clip=None, top_n=3,
+                scoring_svd="full", scoring_device=scoring_device,
+                diff_cache_mode="disabled", scoring_speed="full",
+                scoring_formula="v2", memory_mode="disabled",
+                community_cache="disabled", cache_patches="disabled",
+                record_dataset="disabled")
+            _, _, _, _, tuner_data, lora_data = res
+            return tuner_data, lora_data
+
+        tuner_data_gpu, lora_data_gpu = run("gpu")
+        # QKV components were fused (3 to_* keys -> 1 qkv key) and nothing
+        # returned to the caller may still live on the GPU
+        keys = [k if isinstance(k, str) else k[0]
+                for k in lora_data_gpu["model_patches"]]
+        self.assertTrue(any(".qkv." in k for k in keys), keys)
+        self.assertFalse(any(".to_q." in k for k in keys), keys)
+        for p in lora_data_gpu["model_patches"].values():
+            if isinstance(p, tuple) and p[0] == "diff":
+                self.assertFalse(p[1][0].is_cuda)
+
+        tuner_data_cpu, _ = run("cpu")
+        ranks_gpu = [(r["config"]["merge_mode"], r["config"]["sparsification"])
+                     for r in tuner_data_gpu["top_n"]]
+        ranks_cpu = [(r["config"]["merge_mode"], r["config"]["sparsification"])
+                     for r in tuner_data_cpu["top_n"]]
+        self.assertEqual(ranks_gpu, ranks_cpu)
+        for rg, rc in zip(tuner_data_gpu["top_n"], tuner_data_cpu["top_n"]):
+            self.assertAlmostEqual(rg["score_final"], rc["score_final"], places=5)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestDiffCacheWarming(unittest.TestCase):
     """Pass 1 analysis warms the diff cache so Phase 2 candidate #1 skips
     recomputing the per-alias diffs analysis just produced."""
