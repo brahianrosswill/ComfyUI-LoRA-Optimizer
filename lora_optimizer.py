@@ -92,6 +92,36 @@ folder_paths.add_model_folder_path("tuner_data", TUNER_DATA_DIR)
 # QKV component patches whose scoring stats must wait for the fused tensor
 _ZIMAGE_QKV_KEY_RE = re.compile(r'(layers\.\d+\.attention)\.to_(q|k|v)(?:\.|$)')
 
+# Merge modes whose output is invariant to a uniform positive scaling of all
+# branch strengths (their math normalizes total weight away). weighted_sum
+# and ties scale linearly instead, and refinement pipelines add selfish
+# (scaled) components on top of normalized bases — so cross-auto_strength
+# sharing requires per-group refinement "none".
+_SCALE_INVARIANT_MODES = frozenset({"weighted_average", "normalize", "slerp", "consensus"})
+
+
+def _group_merge_cache_key(label_prefix, is_clip, pf_mode, pf_density, pf_sign,
+                           pf_quality, sparsification, sparsification_density,
+                           dare_dampening, merge_refinement, auto_strength_setting):
+    """Cache key for one group's merge within an AutoTuner sweep.
+
+    Captures every candidate-config input that can change the merged patch;
+    analysis-side inputs (diffs, conflict modes, base strengths, decision
+    smoothing, arch preset) are fixed for the whole sweep. CLIP groups never
+    see the auto-strength scale, and scale-invariant model groups produce
+    identical patches for both settings — both share entries across
+    auto_strength via the "any" token. Used by BOTH auto_tune's planning
+    pass and _merge_one_group, so planned and runtime keys agree by
+    construction.
+    """
+    if is_clip or (pf_mode in _SCALE_INVARIANT_MODES and pf_quality == "none"):
+        scale_token = "any"
+    else:
+        scale_token = auto_strength_setting
+    return (label_prefix, bool(is_clip), pf_mode, round(pf_density, 6), pf_sign,
+            pf_quality, sparsification, sparsification_density, dare_dampening,
+            merge_refinement, scale_token)
+
 AUTOTUNER_MEMORY_DIR = os.path.join(folder_paths.models_dir, "autotuner_memory")
 os.makedirs(AUTOTUNER_MEMORY_DIR, exist_ok=True)
 AUTOTUNER_MEMORY_VERSION = 1
@@ -110,7 +140,11 @@ AUTOTUNER_MEMORY_VERSION = 1
 # (pf_n_loras stayed 0 outside additive/per_prefix, tripping the single-
 # contributor fallback) — global slerp/ties/consensus/WA candidates are now
 # genuinely distinct in Phase 2 for the first time since 2026-03
-AUTOTUNER_ALGO_VERSION = "1.10.0"
+# 1.10.1: cross-candidate group patch cache — replayed group merges are
+# bit-identical to their first computation; candidates that would have
+# recomputed them under a different auto-strength scale (scale-invariant
+# modes) can shift at ulp level
+AUTOTUNER_ALGO_VERSION = "1.10.1"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -6314,7 +6348,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             smooth_slerp_gate=smooth_slerp_gate,
         )
 
-    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False, _skip_qkv_refusion=False, _sl_patch_cache=None, _score_collector=None, _skip_model_apply=False):
+    def optimize_merge(self, model, lora_stack, output_strength, clip=None, clip_strength_multiplier=1.0, auto_strength="disabled", auto_strength_floor=-1.0, free_vram_between_passes="disabled", vram_budget=0.0, optimization_mode="per_prefix", cache_patches="enabled", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", decision_smoothing=0.25, smooth_slerp_gate=False, _analysis_cache=None, _diff_cache=None, _skip_report=False, _skip_qkv_refusion=False, _sl_patch_cache=None, _score_collector=None, _skip_model_apply=False, _group_patch_cache=None):
         """
         Main entry point. Two-pass streaming architecture:
         Pass 1: Resolve aliases to target groups, compute diffs, sample metrics, discard diffs
@@ -6811,6 +6845,26 @@ class LoRAOptimizer(_LoRAMergeBase):
                 _defer_budget = 0
         _deferred_bytes = [0]
 
+        def _gc_store(key, result_tuple, is_clip_key):
+            """Store a group merge for cross-candidate replay (CPU patches only —
+            CUDA entries would pin VRAM across candidates)."""
+            if key is None or _group_patch_cache is None:
+                return
+            planned = _group_patch_cache["plan"].get(key, 0)
+            if planned < 2:
+                return
+            patch = result_tuple[2]
+            tensors = patch.weights if hasattr(patch, "weights") else (
+                patch[1] if isinstance(patch, tuple) and len(patch) >= 2 else ())
+            for _t in (tensors if isinstance(tensors, (tuple, list)) else ()):
+                if isinstance(_t, torch.Tensor) and _t.is_cuda:
+                    return
+            _group_patch_cache["store"][key] = {
+                "result": result_tuple,
+                "auto_scale": 1.0 if is_clip_key else model_auto_scale,
+                "remaining": planned - 1,
+            }
+
         def _merge_one_group(label_prefix, target_group):
             """Recompute diffs for one target group, merge, return patch or None."""
             nonlocal gpu_patch_bytes
@@ -6865,6 +6919,36 @@ class LoRAOptimizer(_LoRAMergeBase):
             if pf_n_loras <= 1 and pf_mode != "weighted_sum":
                 pf_mode = "weighted_sum"
 
+            # Cross-candidate group cache: multi-LoRA groups whose decision
+            # tuple recurs across the sweep's candidates are merged once and
+            # replayed (planned in auto_tune; entries evict after last use)
+            _gc_key = None
+            if _group_patch_cache is not None and pf_n_loras > 1:
+                _pf_quality_key = ("none" if (pf_mode == "weighted_average" and pf_opposing)
+                                   else merge_refinement)
+                _gc_key = _group_merge_cache_key(
+                    label_prefix, is_clip_key, pf_mode, pf_density, pf_sign,
+                    _pf_quality_key, sparsification, sparsification_density,
+                    dare_dampening, merge_refinement, auto_strength)
+                _entry = _group_patch_cache["store"].get(_gc_key)
+                if _entry is not None:
+                    _group_patch_cache["hits"] += 1
+                    _entry["remaining"] -= 1
+                    result = _entry["result"]
+                    if _entry["remaining"] <= 0:
+                        _group_patch_cache["store"].pop(_gc_key, None)
+                    _cur_scale = 1.0 if is_clip_key else model_auto_scale
+                    if _entry["auto_scale"] != _cur_scale:
+                        # Scale-invariant entry replayed under a different
+                        # auto-strength scale: patch and score stats are
+                        # identical by construction; only the input-norms
+                        # energy bookkeeping scales with the branch multiplier
+                        _ratio = (_cur_scale / _entry["auto_scale"]
+                                  if _entry["auto_scale"] else 1.0)
+                        result = result[:8] + (result[8] * _ratio,) + result[9:]
+                    return result
+                _group_patch_cache["misses"] += 1
+
             linear_stats = None
             if (pf_mode in ("weighted_sum", "weighted_average", "normalize")
                     and sparsification == "disabled"
@@ -6894,12 +6978,14 @@ class LoRAOptimizer(_LoRAMergeBase):
                         if gpu_patch_bytes + p_bytes <= vram_budget_bytes:
                             patch = self._move_patch_to_device(patch, compute_device)
                             gpu_patch_bytes += p_bytes
-                    return (
+                    result = (
                         target_key, is_clip_key, patch, pf_mode, label_prefix,
                         pf_conflict, max(pf_n_loras, 1), False,
                         linear_stats[0], linear_stats[1],
                         None,  # LoRAAdapter patches are scored from factors
                     )
+                    _gc_store(_gc_key, result, is_clip_key)
+                    return result
 
             prepared = self._prepare_group_diffs(
                 target_group, active_loras, model, clip, compute_device,
@@ -6918,6 +7004,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             if len(diffs_list) <= 1 and pf_mode != "weighted_sum":
                 pf_mode = "weighted_sum"
+                _gc_key = None  # decision diverged from the planned key — don't cache
 
             # Create deterministic per-group RNG for reproducible sparsification
             sp_gen = None
@@ -7018,7 +7105,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                     gpu_patch_bytes += p_bytes
                 else:
                     patch = self._move_patch_to_device(patch, torch.device("cpu"))
-            return (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm, score_stats)
+            result = (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm, score_stats)
+            _gc_store(_gc_key, result, is_clip_key)
+            return result
 
         lowrank_count = 0
         total_input_energy = 0.0
@@ -10072,6 +10161,63 @@ class LoRAAutoTuner(LoRAOptimizer):
                 prefix_fraction = len(scoring_cache.get("all_key_targets", all_key_targets)) / len(all_key_targets)
                 _expected_energy *= math.sqrt(prefix_fraction)
 
+        # --- Cross-candidate group patch cache planning ---
+        # Candidates frequently share per-group merge decisions: strategy-set
+        # siblings overlap on most prefixes, and auto_strength pairs produce
+        # IDENTICAL patches for scale-invariant modes (the merge math
+        # normalizes a uniform branch scale away). Predict each candidate's
+        # group keys with the same decision logic Pass 2 uses, then cache
+        # merges whose key recurs; entries evict after their last planned
+        # use, so peak memory is bounded by the genuinely shared patches.
+        _group_cache = None
+        if len(top_candidates) > 1:
+            try:
+                _scoring_targets = scoring_cache.get("all_key_targets", all_key_targets)
+                _g_sel = None  # global-mode (mode, density, sign), resolved lazily
+                _plan = {}
+                for _h, _cfg in top_candidates:
+                    _setting = _cfg["auto_strength"]
+                    _refn = _cfg["merge_refinement"]
+                    for _pfx, _tinfo in _scoring_targets.items():
+                        _pf = prefix_stats.get(_pfx)
+                        if not _pf or _pf.get("n_loras", 0) <= 1:
+                            continue
+                        if _cfg["optimization_mode"] == "global":
+                            if _g_sel is None:
+                                _g_sel = self._auto_select_params(
+                                    avg_conflict_ratio, magnitude_ratio,
+                                    magnitude_samples=[],
+                                    avg_cos_sim=avg_cos_sim, strategy_set="full",
+                                    avg_excess_conflict=avg_excess_conflict,
+                                    avg_subspace_overlap=avg_subspace_overlap,
+                                    arch_preset=tuner_arch_preset)
+                            _mode = _cfg["merge_mode"]
+                            _dens, _sign = _g_sel[1], _g_sel[2]
+                            _quality = _refn
+                        else:
+                            _mode, _dens, _sign, _ortho, _opp = self._decide_prefix_mode(
+                                _pf, _cfg.get("strategy_set", "full"), tuner_arch_preset,
+                                smooth_slerp_gate, _is_full_rank, _fr_preset)
+                            _quality = ("none" if (_mode == "weighted_average" and _opp)
+                                        else _refn)
+                        _k = _group_merge_cache_key(
+                            _pfx, _tinfo[1], _mode, _dens, _sign, _quality,
+                            _cfg["sparsification"], _cfg["sparsification_density"],
+                            _cfg["dare_dampening"], _refn, _setting)
+                        _plan[_k] = _plan.get(_k, 0) + 1
+                _plan = {k: c for k, c in _plan.items() if c >= 2}
+                if _plan:
+                    _group_cache = {"plan": _plan, "store": {}, "hits": 0, "misses": 0}
+                    logging.info(
+                        f"[LoRA AutoTuner] Group cache: {len(_plan)} shared group "
+                        f"merges planned, up to "
+                        f"{sum(_plan.values()) - len(_plan)} replays across "
+                        f"{len(top_candidates)} candidates")
+            except Exception as e:
+                logging.warning(f"[LoRA AutoTuner] Group-cache planning failed "
+                                f"(sweep continues uncached): {e}")
+                _group_cache = None
+
         for rank_idx, (h_score, config) in enumerate(top_candidates):
             logging.info(f"[LoRA AutoTuner]   Candidate {rank_idx + 1}/{len(top_candidates)}: "
                          f"{config['merge_mode']}, {config['merge_refinement']}"
@@ -10125,6 +10271,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 # patched model clone (evaluator is the only other consumer)
                 _skip_model_apply=((use_subsampling or output_mode == "tuning_only")
                                    and evaluator is None),
+                _group_patch_cache=_group_cache,
             )
             _inline = _collector["stats"] if _collector is not None else None
 
@@ -10356,6 +10503,12 @@ class LoRAAutoTuner(LoRAOptimizer):
             logging.info(f"[LoRA AutoTuner] Final merge complete ({time.time() - t_final:.1f}s)")
             pbar.update(1)
 
+        if _group_cache is not None:
+            logging.info(f"[LoRA AutoTuner] Group cache: {_group_cache['hits']} replayed, "
+                         f"{_group_cache['misses']} merged, "
+                         f"{len(_group_cache['store'])} entries left unclaimed")
+            _group_cache["store"].clear()
+            _group_cache = None
         if _diff_cache is not None:
             n_ram = len(_diff_cache._ram_store)
             n_disk = len(_diff_cache._disk_store)

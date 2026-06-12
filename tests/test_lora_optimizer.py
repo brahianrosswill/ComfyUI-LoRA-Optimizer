@@ -1,3 +1,4 @@
+import contextlib
 import importlib.util
 import json
 import math
@@ -3480,6 +3481,94 @@ class TestAutotunerMemoryGC(unittest.TestCase):
                 self.assertTrue(os.path.exists(new_path))
                 # Memory entries are never GC'd
                 self.assertTrue(os.path.exists(mem_path))
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestGroupPatchCache(unittest.TestCase):
+    """Cross-candidate group patch cache: identical sweep results with the
+    cache active vs disabled, and sound key semantics."""
+
+    def test_key_shares_invariant_modes_across_auto_strength(self):
+        key = lora_optimizer._group_merge_cache_key
+        base = dict(label_prefix="p", is_clip=False, pf_density=0.7, pf_sign="total",
+                    sparsification="disabled", sparsification_density=0.7,
+                    dare_dampening=0.0, merge_refinement="none")
+        # Scale-invariant modes with quality "none": shared across settings
+        for mode in ("weighted_average", "normalize", "slerp", "consensus"):
+            k_on = key(pf_mode=mode, pf_quality="none", auto_strength_setting="enabled", **base)
+            k_off = key(pf_mode=mode, pf_quality="none", auto_strength_setting="disabled", **base)
+            self.assertEqual(k_on, k_off, mode)
+        # Linear modes: keyed per setting
+        for mode in ("weighted_sum", "ties"):
+            k_on = key(pf_mode=mode, pf_quality="none", auto_strength_setting="enabled", **base)
+            k_off = key(pf_mode=mode, pf_quality="none", auto_strength_setting="disabled", **base)
+            self.assertNotEqual(k_on, k_off, mode)
+        # Refinement breaks invariance (selfish additions scale)
+        k_on = key(pf_mode="weighted_average", pf_quality="refine",
+                   auto_strength_setting="enabled", **base)
+        k_off = key(pf_mode="weighted_average", pf_quality="refine",
+                    auto_strength_setting="disabled", **base)
+        self.assertNotEqual(k_on, k_off)
+        # CLIP groups never see the auto-strength scale
+        clip_base = dict(base, is_clip=True)
+        k_on = key(pf_mode="ties", pf_quality="none", auto_strength_setting="enabled", **clip_base)
+        k_off = key(pf_mode="ties", pf_quality="none", auto_strength_setting="disabled", **clip_base)
+        self.assertEqual(k_on, k_off)
+
+    def test_sweep_results_identical_with_and_without_cache(self):
+        n_groups = 5
+
+        class FakePatcher:
+            def __init__(self, model):
+                self.model = model
+
+            def clone(self):
+                return FakePatcher(self.model)
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        inner = types.SimpleNamespace(**{
+            f"layer{i}": types.SimpleNamespace(weight=torch.zeros(32, 32))
+            for i in range(n_groups)})
+
+        def make_lora(seed, scale):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for i in range(n_groups):
+                d[f"alias_{i}.lora_up.weight"] = torch.randn(32, 4, generator=g) * scale
+                d[f"alias_{i}.lora_down.weight"] = torch.randn(4, 32, generator=g)
+                d[f"alias_{i}.alpha"] = torch.tensor(4.0)
+            return d
+
+        def run(disable_cache):
+            stack = [
+                {"name": "A", "lora": make_lora(1, 0.10), "strength": 1.0},
+                {"name": "B", "lora": make_lora(2, 0.12), "strength": 0.8},
+            ]
+            tuner = lora_optimizer.LoRAAutoTuner()
+            tuner._get_model_keys = lambda m: {
+                f"alias_{i}": f"layer{i}.weight" for i in range(n_groups)}
+            ctx = (mock.patch.object(
+                lora_optimizer, "_group_merge_cache_key",
+                side_effect=lambda *a, **k: object())  # unique keys -> empty plan
+                if disable_cache else contextlib.nullcontext())
+            with ctx:
+                res = tuner.auto_tune(
+                    FakePatcher(inner), stack, 1.0, clip=None, top_n=6,
+                    scoring_svd="full", scoring_device="cpu",
+                    diff_cache_mode="disabled", scoring_speed="full",
+                    scoring_formula="v2", memory_mode="disabled",
+                    community_cache="disabled", cache_patches="disabled",
+                    record_dataset="disabled")
+            return res[4]["top_n"]
+
+        cached = run(disable_cache=False)
+        uncached = run(disable_cache=True)
+        self.assertEqual([r["config"] for r in cached],
+                         [r["config"] for r in uncached])
+        for rc, ru in zip(cached, uncached):
+            self.assertAlmostEqual(rc["score_final"], ru["score_final"], places=9)
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
