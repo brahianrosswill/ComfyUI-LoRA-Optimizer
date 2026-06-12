@@ -6920,6 +6920,23 @@ class LoRAOptimizer(_LoRAMergeBase):
                 _defer_budget = 0
         _deferred_bytes = [0]
 
+        def _sl_store(key, result_tuple):
+            """Budgeted store for the single-LoRA patch cache (CPU patches only)."""
+            if _sl_patch_cache is None or result_tuple is None:
+                return
+            patch = result_tuple[2]
+            tensors = patch.weights if hasattr(patch, "weights") else (
+                patch[1] if isinstance(patch, tuple) and len(patch) >= 2 else ())
+            for _t in (tensors if isinstance(tensors, (tuple, list)) else ()):
+                if isinstance(_t, torch.Tensor) and _t.is_cuda:
+                    return
+            p_bytes = self._estimate_single_patch_bytes(patch)
+            if _sl_patch_cache["bytes"] + p_bytes > _sl_patch_cache["budget"]:
+                _sl_patch_cache["budget_skips"] += 1
+                return
+            _sl_patch_cache["bytes"] += p_bytes
+            _sl_patch_cache["store"][key] = result_tuple
+
         def _gc_store(key, result_tuple, is_clip_key):
             """Store a group merge for cross-candidate replay (CPU patches only —
             CUDA entries would pin VRAM across candidates; RAM-budget capped)."""
@@ -7259,7 +7276,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 _sl_key = None
                 if _sl_patch_cache is not None and prefix_stats.get(label_prefix, {}).get("n_loras", 0) <= 1:
                     _sl_key = (label_prefix, auto_strength)
-                    cached = _sl_patch_cache.get(_sl_key)
+                    cached = _sl_patch_cache["store"].get(_sl_key)
                     if cached is not None:
                         _collect_merge_result(cached)
                         _sl_cache_hits += 1
@@ -7275,7 +7292,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     _diff_cache.prefetch(prefetch_keys)
                 result = _merge_one_group(label_prefix, target_group)
                 if _sl_key is not None:
-                    _sl_patch_cache[_sl_key] = result
+                    _sl_store(_sl_key, result)
                 _collect_merge_result(result)
         else:
             max_workers = min(4, max(1, len(target_groups)))
@@ -7283,7 +7300,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             compute_items = []
             for label_prefix, target_group in target_groups.items():
                 if _sl_patch_cache is not None and prefix_stats.get(label_prefix, {}).get("n_loras", 0) <= 1:
-                    cached = _sl_patch_cache.get((label_prefix, auto_strength))
+                    cached = _sl_patch_cache["store"].get((label_prefix, auto_strength))
                     if cached is not None:
                         _collect_merge_result(cached)
                         _sl_cache_hits += 1
@@ -7299,7 +7316,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     result = future.result()
                     lp = futures[future]
                     if _sl_patch_cache is not None and prefix_stats.get(lp, {}).get("n_loras", 0) <= 1:
-                        _sl_patch_cache[(lp, auto_strength)] = result
+                        _sl_store((lp, auto_strength), result)
                     _collect_merge_result(result)
 
         fullrank_count = processed_keys - lowrank_count
@@ -10206,8 +10223,19 @@ class LoRAAutoTuner(LoRAOptimizer):
 
         # Single-LoRA merge result cache: reuse actual patches across candidates.
         # Keyed by (label_prefix, auto_strength) since auto_scale is the only
-        # candidate-dependent factor for single-LoRA prefixes.
-        _sl_patch_cache = {} if len(single_lora_keys) > 0 else None
+        # candidate-dependent factor for single-LoRA prefixes. RAM-budgeted
+        # (10% of available, 8GB max): dense single-LoRA patches under
+        # sparsified candidates made this the last unbounded sweep holder.
+        _sl_patch_cache = None
+        if len(single_lora_keys) > 0:
+            try:
+                import psutil
+                _sl_budget = min(int(psutil.virtual_memory().available * 0.10),
+                                 8 * 1024 ** 3)
+            except ImportError:
+                _sl_budget = 2 * 1024 ** 3
+            _sl_patch_cache = {"store": {}, "bytes": 0, "budget": _sl_budget,
+                               "budget_skips": 0}
 
         # --- Scoring invariants (identical for every candidate — hoisted) ---
         is_ortho_score = (
@@ -10551,12 +10579,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 rss_gb = proc.memory_info().rss / (1024**3)
                 dc_mb = _diff_cache.size_mb() if _diff_cache else 0
                 gcache_mb = (_group_cache["bytes"] / (1024**2)) if _group_cache else 0
-                sl_mb = 0
-                if _sl_patch_cache:
-                    sl_mb = sum(
-                        self._estimate_single_patch_bytes(r[2])
-                        for r in _sl_patch_cache.values() if r is not None
-                    ) / (1024**2)
+                sl_mb = (_sl_patch_cache["bytes"] / (1024**2)) if _sl_patch_cache else 0
                 logging.info(f"[LoRA AutoTuner]   Memory: process={rss_gb:.1f}GB"
                              f"{f', diff_cache={dc_mb:.0f}MB' if dc_mb > 0 else ''}"
                              f"{f', group_cache={gcache_mb:.0f}MB' if gcache_mb > 0 else ''}"
@@ -10608,7 +10631,10 @@ class LoRAAutoTuner(LoRAOptimizer):
             _diff_cache.clear()
             _diff_cache = None
         if _sl_patch_cache is not None:
-            _sl_patch_cache.clear()
+            if _sl_patch_cache.get("budget_skips"):
+                logging.info(f"[LoRA AutoTuner] Single-LoRA cache: "
+                             f"{_sl_patch_cache['budget_skips']} stores skipped (RAM budget)")
+            _sl_patch_cache["store"].clear()
             _sl_patch_cache = None
         _cached_sl_baselines.clear()
         gc.collect()
