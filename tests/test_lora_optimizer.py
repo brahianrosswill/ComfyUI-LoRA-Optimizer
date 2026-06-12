@@ -3595,6 +3595,37 @@ class TestAutotunerMemoryGC(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestAutoStrengthFloor(unittest.TestCase):
+    """Explicit auto_strength_floor bounds the reduction on ANY stack;
+    only the -1 defaults stay gated on orthogonality."""
+
+    def _scale(self, dot, floor):
+        opt = lora_optimizer.LoRAOptimizer()
+        preset = lora_optimizer._ARCH_PRESETS["dit"]
+        info = opt._compute_branch_auto_scale(
+            "Model", [1.0, 1.0], [1.0, 1.0], {(0, 1): dot},
+            arch_preset=preset, detected_arch="wan",
+            auto_strength_floor=floor, is_full_rank=False)
+        return info["scale"]
+
+    def test_explicit_floor_applies_to_aligned_stacks(self):
+        # aligned (cos=0.5): unfloored auto scale is 1/sqrt(2+2*0.5) ~ 0.577
+        self.assertAlmostEqual(self._scale(0.5, -1.0), 1.0 / math.sqrt(3.0), places=4)
+        self.assertAlmostEqual(self._scale(0.5, 0.85), 0.85, places=6)
+        self.assertAlmostEqual(self._scale(0.5, 1.0), 1.0, places=6)
+
+    def test_explicit_floor_applies_to_orthogonal_stacks(self):
+        self.assertAlmostEqual(self._scale(0.0, 0.85), 0.85, places=6)
+        self.assertAlmostEqual(self._scale(0.0, 1.0), 1.0, places=6)
+
+    def test_default_floor_still_gated_on_orthogonality(self):
+        # orthogonal + default on wan -> video floor 1.0
+        self.assertAlmostEqual(self._scale(0.0, -1.0), 1.0, places=6)
+        # aligned + default -> no floor, raw auto scale
+        self.assertLess(self._scale(0.5, -1.0), 0.85)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestCommunityHitPromotesToLocalMemory(unittest.TestCase):
     """A community-cache hit must also write the local memory entry —
     otherwise later runs with community_cache=disabled re-sweep from

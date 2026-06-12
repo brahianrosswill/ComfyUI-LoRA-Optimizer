@@ -144,7 +144,9 @@ AUTOTUNER_MEMORY_VERSION = 1
 # bit-identical to their first computation; candidates that would have
 # recomputed them under a different auto-strength scale (scale-invariant
 # modes) can shift at ulp level
-AUTOTUNER_ALGO_VERSION = "1.10.1"
+# 1.10.2: explicit auto_strength_floor now bounds the reduction on aligned/
+# opposing stacks too (the orthogonality gate only applies to -1 defaults)
+AUTOTUNER_ALGO_VERSION = "1.10.2"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -5580,22 +5582,31 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         floor_applied = False
         floor = None
-        if pairwise_cos:
+        explicit_floor = auto_strength_floor >= 0
+        if explicit_floor:
+            # An explicitly set floor bounds the reduction REGARDLESS of stack
+            # alignment — the widget promises "how much the weakest LoRA is
+            # allowed to be scaled down", full stop. Previously the
+            # orthogonality gate below silently ignored user floors on
+            # aligned/opposing stacks.
+            floor = auto_strength_floor
+        elif pairwise_cos:
+            # The -1 defaults are orthogonality-noise heuristics: aligned
+            # stacks compound energy and genuinely need the reduction, so
+            # the default floors only apply to mostly-orthogonal stacks.
             avg_cos = sum(pairwise_cos) / len(pairwise_cos)
             alignment_thresh = arch_preset["alignment_threshold"]
             if abs(avg_cos) <= alignment_thresh:
-                if auto_strength_floor >= 0:
-                    floor = auto_strength_floor
-                elif is_full_rank:
+                if is_full_rank:
                     floor = arch_preset.get("full_rank", {}).get("auto_strength_floor", 1.0)
                 else:
                     floor = _VIDEO_ARCH_ORTHOGONAL_FLOOR.get(
                         detected_arch,
                         arch_preset.get("auto_strength_orthogonal_floor", 0.85),
                     )
-                if scale < floor:
-                    scale = floor
-                    floor_applied = True
+        if floor is not None and scale < floor:
+            scale = floor
+            floor_applied = True
 
         new_strengths = [s * scale if effective[i] > 0 else s for i, s in enumerate(strengths)]
 
@@ -5611,7 +5622,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                 alignment_desc = "mostly orthogonal (independent)"
             if floor_applied:
                 arch_label = detected_arch or "unknown"
-                if is_full_rank:
+                if explicit_floor:
+                    reasoning.append(
+                        f"{branch_name}: user floor {floor:.2f} applied "
+                        f"(bounds auto-strength reduction regardless of alignment)"
+                    )
+                elif is_full_rank:
                     reasoning.append(
                         f"{branch_name}: full-rank orthogonal floor {floor:.2f} applied "
                         f"to preserve complete weight deltas"
