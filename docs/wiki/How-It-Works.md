@@ -281,18 +281,19 @@ When using `global` optimization (or as a fallback), the optimizer picks a singl
 
 ### Architecture Presets
 
-> _Controlled by: `architecture_preset` (auto / sd_unet / dit / llm)_
+> _Controlled by: `architecture_preset` (auto / sd_unet / dit / acestep_dit / llm)_
 
 Different model architectures have different numerical characteristics. The architecture preset tunes the optimizer's internal thresholds — density ranges, noise floors, and strength caps — to match:
 
 | Preset | Architectures | Density Range | Noise Floor | Max Strength Cap |
 |--------|--------------|---------------|-------------|-----------------|
 | `sd_unet` | SD 1.5, SDXL | 0.1 – 0.9 | 10% | 3.0 |
-| `dit` | Flux, Wan, Z-Image, LTX, HunyuanVideo | 0.4 – 0.95 | 5% | 5.0 |
+| `dit` | Flux, Wan, Z-Image, LTX, Ideogram 4, HunyuanVideo | 0.4 – 0.95 | 5% | 5.0 |
+| `acestep_dit` | ACE-Step (music DiT) | 0.4 – 0.95 | 5% | 5.0 |
 | `llm` | Qwen, LLaMA | 0.1 – 0.8 | 15% | 3.0 |
 | `auto` (default) | Auto-detected from LoRA keys | Selected automatically | — | — |
 
-DiT models are denser and tolerate higher strengths. UNet models are sparser. LLM models need tighter density bounds and lower strength caps.
+DiT models are denser and tolerate higher strengths. UNet models are sparser. LLM models need tighter density bounds and lower strength caps. ACE-Step uses DiT-class thresholds but with a wider orthogonal band and higher TIES threshold, since music LoRAs are conflict-prone and need a gentler merge to keep the singing voice intact. **HunyuanVideo** uses the `dit` preset but is not in the auto-detector — select `dit` manually.
 
 The architecture preset is **orthogonal** to the behavior profile — the preset controls _numeric thresholds_, while the profile controls _strategy selection logic_.
 
@@ -535,19 +536,19 @@ The key to understanding the optimizer is knowing that these algorithms **compos
                      │        ↓ (sets density/strength thresholds)  │
                      │  3. Auto-Strength (if enabled)               │
                      │        ↓ (adjusts strength scalars)          │
-                     │  4. Quality: KnOTS alignment (if maximum)    │
+                     │  4. Quality: KnOTS alignment (if full)       │
                      │        ↓ (transforms diff vectors)           │
-                     │  5. Quality: DO-Merging (if enhanced+)       │
+                     │  5. Quality: DO-Merging (if refine+)         │
                      │        ↓ (orthogonalizes directions)         │
                      │  6. Sparsification (if enabled)              │
                      │        ↓ (zeros out weights)                 │
                      │        ├─ TIES mode? → replaces trim step    │
                      │        └─ Other modes? → preprocessing       │
-                     │  7. Quality: TALL-masks (if enhanced+)       │
+                     │  7. Quality: TALL-masks (if refine+)         │
                      │        ↓ (separates selfish weights)         │
                      │  8. Merge Algorithm                          │
                      │        ↓ (combines diffs)                    │
-                     │  9. TALL-masks re-add (if enhanced+)         │
+                     │  9. TALL-masks re-add (if refine+)           │
                      │        ↓ (restores selfish weights)          │
                      │  10. SVD Compression (if enabled)            │
                      │        ↓ (reduces to low-rank)               │
@@ -667,7 +668,7 @@ This diagram shows every algorithm in the system and how they relate:
 │                                                                             │
 │  Recompute Diffs ──► KnOTS ──► DO-Merge ──► DARE/DELLA ──► ┌──────────┐   │
 │  (with adjusted       (if       (if          (if            │  Select  │   │
-│   strengths)        maximum)  enhanced+)    enabled)        │  Merge:  │   │
+│   strengths)        full)     refine+)     enabled)         │  Merge:  │   │
 │                                                  │          │          │   │
 │                                    ┌─────────────┤          │ wt_sum   │   │
 │                                    │             │          │ wt_avg   │   │
@@ -785,9 +786,12 @@ Phase 2 is designed to avoid RAM exhaustion:
 | Parameter | Default | Effect |
 |-----------|---------|--------|
 | `top_n` | 3 | How many candidates to actually merge and score |
-| `scoring_svd` | disabled | Enable SVD-based effective rank scoring (slower, more thorough) |
-| `scoring_device` | gpu | Where to run SVD scoring (`gpu` is 10-50x faster) |
+| `scoring_svd` | disabled | SVD-based scoring: `disabled` (norm-only), `merge_quality` (SVD on merged diffs), `lora_rank` (effective rank, experimental), `full` (both) |
+| `scoring_device` | gpu | Where to run scoring math (`gpu` is much faster with SVD modes) |
 | `scoring_speed` | turbo | Subsample prefix scoring for faster sweeps (`full`, `fast`, `turbo`, `turbo+`) |
+| `scoring_formula` | v2 | `v2` (arch-aware sparsity + energy) or `v1` (legacy, fixed 40% sparsity target) |
+| `memory_mode` | auto | Persistent cross-session result cache (`disabled`, `auto`, `auto_ignore_strength`, `read_only`, `clear_and_run`) |
+| `community_cache` | disabled | HF community cache (`disabled`, `upload_only`, `upload_and_download`) |
 | `auto_strength_floor` | -1.0 | Minimum auto-strength floor for orthogonal LoRAs (`-1` = architecture default) |
 | `decision_smoothing` | 0.25 | Smooth per-prefix decision metrics toward block averages |
 | `evaluator` | — | External evaluator hook for prompt/reference scoring |
@@ -915,9 +919,12 @@ Bridges `LORA_DATA` to a `WANVIDEOMODEL`. Handles the `_orig_mod.` key mismatch 
 | Architecture | Key Detection Patterns | Special Handling |
 |-------------|----------------------|-----------------|
 | **FLUX** | `double_blocks`, `single_blocks` | Sliced QKV offsets, multi-trainer unification |
+| **SD 1.5** | `lora_te_`, `input_blocks`/`down_blocks` | Text encoder + UNet unified |
 | **SDXL** | `lora_te1_`, `input_blocks` | Text encoder + UNet unified |
 | **Z-Image** (Lumina2) | `diffusion_model.layers.N.attention` | Fused QKV split/re-fuse, Musubi Tuner format |
+| **Ideogram 4** (NextDiT) | `layers.N.attention.qkv`/`attention.o`, fal `conditional_transformer.` prefix | ai-toolkit / fal / PEFT prefixes unified; qkv stays fused (detected **before** Z-Image) |
 | **Wan** 2.1/2.2 | `blocks.N` with `self_attn`/`ffn` | LyCORIS / diffusers / Musubi / Fun LoRA / finetrainer unified, RS-LoRA alpha fix |
+| **ACE-Step** v1.0/v1.5 | `layers.N` with `self_attn`/`cross_attn` + `q_proj`/`k_proj`/`v_proj` | Attention key unification, music-DiT preset |
 | **LTX Video** | `adaln_single`, `attn1`/`attn2` | Trainer format unification |
 | **Qwen-Image** | `img_mlp`/`txt_mlp`/`img_mod`/`txt_mod` | Dual-stream key unification |
 

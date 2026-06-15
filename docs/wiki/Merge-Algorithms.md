@@ -64,7 +64,7 @@ Same as weighted sum, but divided by the sum of strengths. This ensures the outp
 
 - Per-prefix: 2+ LoRAs present AND sign conflict ratio ≤ 25%
 - Global: aggregate conflict ≤ 25% AND cosine similarity between 0.3–0.7
-- Can be upgraded to SLERP in `v1.2` behavior profile when LoRAs are orthogonal
+- Can be upgraded to SLERP in the `full` strategy set when LoRAs are orthogonal
 
 ### Properties
 
@@ -176,8 +176,8 @@ The strongest LoRA anchors the direction; subsequent LoRAs blend in.
 
 ### When Selected
 
-- v1.2 behavior profile: auto-selected when conflict ≤ 25% AND LoRAs are detected as orthogonal (low cosine similarity)
-- Not auto-selected in `no_slerp` or `classic` profiles
+- `full` strategy set: auto-selected when conflict ≤ 25% AND LoRAs are detected as orthogonal (low cosine similarity)
+- Not auto-selected in the `no_slerp` or `basic` strategy sets
 - Can be forced via `merge_strategy_override`
 
 ### Properties
@@ -236,8 +236,8 @@ This removes noise — singular values with negligible contribution are filtered
 
 ### When Selected
 
-- v1.2 behavior profile: auto-selected when conflict ≤ 25% AND cosine similarity > 0.7 (highly similar LoRAs)
-- Not available in `classic` profile
+- `full` strategy set: auto-selected when conflict ≤ 25% AND cosine similarity > 0.7 (highly similar LoRAs)
+- Not available in the `basic` strategy set
 - Can be forced via `merge_strategy_override`
 
 ### Properties
@@ -314,7 +314,7 @@ This preserves unique contributions and same-sign reinforcements while still red
 
 Quality enhancements compose with all merge strategies. They modify the diffs or the merge process to improve results. See [[How It Works#quality-enhancements]] for the pipeline position.
 
-### DO-Merging (enhanced+)
+### DO-Merging (refine+)
 
 *Reference: [arXiv 2505.15875](https://arxiv.org/abs/2505.15875)*
 
@@ -329,7 +329,7 @@ Orthogonalizes LoRA direction vectors via Modified Gram-Schmidt:
 
 After orthogonalization, LoRAs that were partially aligned become truly independent. This reduces directional interference while preserving each LoRA's strength.
 
-### Column-Wise Conflict Resolution (enhanced+)
+### Column-Wise Conflict Resolution (refine+)
 
 *Inspired by [ZipLoRA, Shah et al., 2025](https://arxiv.org/abs/2311.13600)*
 
@@ -344,7 +344,7 @@ for each row j of the weight matrix:
 
 Preserves structural coherence — a neuron's input weights work together as a functional unit. Falls back to element-wise for 1D tensors (biases, layer norms).
 
-### TALL-Masks (enhanced+)
+### TALL-Masks (refine+)
 
 *Reference: [Wang et al., 2024](https://arxiv.org/abs/2406.12832)*
 
@@ -364,7 +364,7 @@ for each position i:
 
 Threshold `lambda=1.0` — a LoRA's contribution must exceed all others combined to be considered selfish. This protects unique features from being averaged away during consensus merging.
 
-### KnOTS SVD Alignment (maximum)
+### KnOTS SVD Alignment (full)
 
 *Reference: [Ramé et al., 2024](https://arxiv.org/abs/2407.09095)*
 

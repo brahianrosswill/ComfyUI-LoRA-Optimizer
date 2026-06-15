@@ -120,7 +120,7 @@ The optimizer's two-pass architecture usually keeps peak memory near one active 
 
 ### "Key normalization picks the wrong architecture"
 
-This can happen if LoRA keys are ambiguous. Set `architecture_preset` manually to the correct value (`sd_unet`, `dit`, or `llm`) to override auto-detection.
+This can happen if LoRA keys are ambiguous. Set `architecture_preset` manually to the correct value (`sd_unet`, `dit`, `acestep_dit`, or `llm`) to override auto-detection.
 
 ### "LoRAs from different trainers don't merge"
 

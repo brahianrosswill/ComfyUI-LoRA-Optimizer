@@ -91,7 +91,12 @@ Restart ComfyUI. Nodes appear under the `loaders` category.
 | **LoRA AutoTuner** | Sweep 2000+ parameter combos, rank the best configs |
 | **LoRA Merge Estimator** | Predict the best config via k-NN over the community cache — skip the sweep |
 | **Merge Selector** | Try alternative ranked configs from AutoTuner results |
+| **Conflict Editor** | Inspect pairwise conflicts, set per-LoRA conflict modes + merge strategy by hand |
 | **Compatibility Analyzer** | Check which LoRAs work well together before merging |
+| **Merge Formula** | Control hierarchical merge order, e.g. `(1+2) + 3` |
+| **Metadata Reader** | Read embedded prompt / description / merge info from any LoRA |
+| **Extract from Model** | Recover a LoRA baked into a finetuned model by diffing against the base |
+| **Combination Generator** | Auto-generate 2-/3-way combos for AutoTuner dataset collection |
 | **Save Merged LoRA** | Export the merge as a standalone `.safetensors` file |
 | **Merged LoRA to Hook** | Apply merged LoRA per-conditioning instead of globally |
 | **LoRA Optimizer (Legacy)** | All parameters on one node (superseded by Optimizer + Settings) |
@@ -200,6 +205,7 @@ DARE and DELLA **sparsify each LoRA's diff before merging**, reducing parameter 
 |---------|---------|---------|
 | `sparsification` | disabled | `disabled`, `dare`, `della`, `dare_conflict`, `della_conflict` |
 | `sparsification_density` | 0.7 | Fraction of parameters to keep (lower = more aggressive) |
+| `dare_dampening` | 0.0 | DAREx rescale dampening (0–1, [ICLR 2025](https://arxiv.org/abs/2410.01215)). Only affects `dare` / `dare_conflict` modes. `0` = standard DARE `1/density` rescale. Higher values dampen the rescale to reduce noise amplification at low density |
 
 </details>
 
@@ -301,6 +307,20 @@ Your original strength ratios are always preserved — the algorithm only scales
 </details>
 
 <details>
+<summary><b>Output &amp; CLIP Strength</b></summary>
+
+The **LoRA Optimizer** has two strength inputs that control the merged result globally:
+
+| Input | Default | Effect |
+|-------|---------|--------|
+| `output_strength` | 1.0 | Master volume for the merged result. `1.0` = full effect, `0.5` = half, `0` = disabled. Set to **`-1` for auto** — the optimizer picks the suggested max strength, compensating for energy lost during the merge |
+| `clip_strength_multiplier` | 1.0 | How strongly the LoRAs affect text understanding (CLIP). At `1.0` it matches the model strength; lower values reduce LoRA influence on prompts while keeping the visual effect. Leave at `1.0` (or ignore) for video models with no CLIP |
+
+`output_strength = -1` is the easiest way to let the optimizer fully drive strength: combined with `auto_strength`, it both balances per-LoRA contributions *and* sets a sensible master level for the stack.
+
+</details>
+
+<details>
 <summary><b>Decision Smoothing</b></summary>
 
 **`decision_smoothing`** — blends each group's decision metrics toward the average of its surrounding block. This reduces jagged layer-to-layer mode flips when the stack is noisy.
@@ -345,14 +365,17 @@ All numeric thresholds in the optimizer (density estimation, conflict detection,
 | Preset | Architectures | Key Differences | Orthogonal floor |
 |--------|--------------|-----------------|------------------|
 | `sd_unet` | SD 1.5, SDXL | Density range [0.1, 0.9], noise floor 10%, max strength cap 3.0 | 0.85 |
-| `dit` | Flux, WAN, Z-Image, LTX, HunyuanVideo | Density range [0.4, 0.95], noise floor 5%, max strength cap 5.0 | 0.85 by default, 1.0 for Wan/LTX |
+| `dit` | Flux, WAN, Z-Image, LTX, Ideogram 4, HunyuanVideo | Density range [0.4, 0.95], noise floor 5%, max strength cap 5.0 | 0.85 by default, 1.0 for Wan/LTX |
+| `acestep_dit` | ACE-Step (music DiT) | DiT thresholds tuned for music LoRAs: wider orthogonal band + higher TIES threshold to preserve voice/timbre | 1.0 |
 | `llm` | Qwen-Image, LLaMA-based | Density range [0.1, 0.8], noise floor 15%, max strength cap 3.0 | 0.9 |
 
-**Why it matters:** DiT architectures have denser weight distributions than UNet — with UNet thresholds, the optimizer underestimates density and clips suggested strength too aggressively. LLM-based models are sparser and benefit from lower density ceilings.
+**Why it matters:** DiT architectures have denser weight distributions than UNet — with UNet thresholds, the optimizer underestimates density and clips suggested strength too aggressively. LLM-based models are sparser and benefit from lower density ceilings. ACE-Step gets its own preset because music LoRAs are unusually conflict-prone and need a gentler merge to keep the singing voice intact.
 
 | Setting | Default | Options |
 |---------|---------|---------|
-| `architecture_preset` | auto | `auto`, `sd_unet`, `dit`, `llm`. Auto-detection uses the same key pattern matching as key normalization |
+| `architecture_preset` | auto | `auto`, `sd_unet`, `dit`, `acestep_dit`, `llm`. Auto-detection uses the same key pattern matching as key normalization |
+
+> **HunyuanVideo:** covered by the `dit` preset's thresholds, but it is not in the auto-detector — select `dit` manually for HunyuanVideo LoRAs.
 
 **Note:** This is orthogonal to `strategy_set` (which controls *which strategies* are available — consensus, SLERP, etc.). Architecture preset controls the *numeric thresholds* those strategies use.
 
@@ -541,6 +564,39 @@ When `auto` mode runs out of disk space, it falls back to RAM automatically.
 </details>
 
 <details>
+<summary><b>Scoring Modes &amp; Speed</b></summary>
+
+The AutoTuner ranks candidate configs with a heuristic score before merging the top-N for real quality measurement. These knobs trade scoring accuracy for speed:
+
+| Setting | Default | Options / Effect |
+|---------|---------|------------------|
+| `scoring_speed` | turbo | How many prefixes each candidate is scored on. `full` = all prefixes (slowest, most accurate); `fast` ≈ every 2nd; `turbo` ≈ every 3rd (recommended); `turbo+` = fastest, biased toward high-conflict prefixes |
+| `scoring_svd` | disabled | SVD-based scoring. `disabled` = fast norm-only (usually enough); `merge_quality` = SVD on merged diffs (more thorough); `lora_rank` = effective-rank of factors (experimental, changes ranking); `full` = both. Hardware-accelerated when Triton is installed |
+| `scoring_device` | gpu | Where scoring math runs. `gpu` is much faster, especially with SVD modes |
+| `scoring_formula` | v2 | `v2` (recommended) = arch-aware sparsity + energy metrics. `v1` = legacy formula with a fixed 40% sparsity target, kept for comparison |
+
+Ranking stays fair because every candidate is scored on the same subset of prefixes.
+
+</details>
+
+<details>
+<summary><b>Persistent Memory</b></summary>
+
+`memory_mode` caches a stack's tuning result across ComfyUI sessions, keyed by LoRA content hash + config. Re-running the same stack then skips the whole sweep and replays the winning config instantly.
+
+| Mode | Behavior |
+|------|----------|
+| `disabled` | Never read or write the memory store |
+| `auto` (default) | Load cached result if present, save after tuning |
+| `auto_ignore_strength` | Same as `auto`, but the cache key **ignores LoRA strengths** — useful when sweeping strengths on orthogonal LoRAs where the ranking doesn't change |
+| `read_only` | Use cached results but never save new ones |
+| `clear_and_run` | Delete the cached entry and re-tune from scratch |
+
+**`record_dataset`** (`disabled` / `enabled`) — when enabled, appends analysis metrics and all scored configs to `user/lora_optimizer_reports/autotuner_dataset.jsonl` for threshold-tuning research. Entries are written only when a full sweep actually runs (cache/memory replays add nothing).
+
+</details>
+
+<details>
 <summary><b>VRAM Budget</b></summary>
 
 The `vram_budget` slider (0.0–1.0) controls what fraction of free VRAM to use for storing merged patches on GPU. Default is 0 (all patches on CPU). Setting it higher keeps patches on GPU, reducing RAM usage on systems with enough VRAM. Available on both LoRA Optimizer and LoRA AutoTuner.
@@ -557,6 +613,7 @@ Results are keyed by **content hash** (SHA256 of file contents, not filename), s
 | `community_cache` value | Behavior |
 |---|---|
 | `disabled` | No community interaction (default) |
+| `upload_only` | Runs the sweep locally and uploads results, but does **not** replay HF cache hits. Useful for backfilling/enriching configs |
 | `upload_and_download` | Downloads before analysis; uploads after if local score is higher |
 
 **Downloads** are anonymous (no setup required). **Uploads** require a `HF_TOKEN` environment variable with write access to the dataset repo.
@@ -611,6 +668,73 @@ LoRA AutoTuner → TUNER_DATA → Merge Selector (selection=2) → try the 2nd-r
                       ↓
               Save Tuner Data → (reload later) → Load Tuner Data → Merge Selector
 ```
+
+---
+
+### Conflict Editor
+
+Inserts between a **LoRA Stack** and the **LoRA Optimizer** to give you manual control over conflict handling. It loads every LoRA, computes full-rank diffs, measures pairwise sign disagreement, and auto-suggests a per-LoRA `conflict_mode` plus an overall merge strategy. You can accept the suggestions or override each LoRA's mode by hand.
+
+- **Inputs:** `lora_stack`, `merge_strategy` (`auto`, `ties`, `consensus`, `slerp`, `weighted_average`, `weighted_sum`), and a per-slot `conflict_mode_1..10` (`auto`, `all`, `low_conflict`, `high_conflict`)
+- **Outputs:** the enriched `LORA_STACK`, a human-readable `analysis_report`, and the resolved `merge_strategy` string
+
+Use it when you already know two LoRAs fight and want to force `high_conflict` (TIES) handling on one of them, or to read the conflict report before committing to a merge.
+
+---
+
+### Merge Formula
+
+Passthrough node that attaches a **hierarchical merge order** to the stack. The formula uses numbered LoRA positions, `+` for blends, and parentheses for grouping — e.g. `(1+2) + 3` merges LoRAs 1 and 2 first, then blends the result with LoRA 3. Optional per-component weights are supported: `(1+2):0.6 + 3:0.4`. An empty formula falls back to a flat merge of the whole stack.
+
+- **Inputs:** `lora_stack`, `formula` (string)
+- **Outputs:** `lora_stack` (unchanged tensors, formula metadata attached)
+
+Useful when a clean two-LoRA base should be established before a third, more disruptive LoRA is layered on top.
+
+---
+
+### Metadata Reader
+
+Passthrough node that extracts embedded metadata from every LoRA in the stack — works with any `.safetensors` LoRA, not just ones saved by this pack. It consolidates fields like `source_loras`, `merge_mode`, merge settings, training prompt, and description.
+
+- **Inputs:** `lora_stack`
+- **Outputs:** `lora_stack` (unchanged), `prompt`, `description`, `metadata_info`
+
+Connect the string outputs to **Show Text** nodes to inspect what a downloaded or previously merged LoRA actually contains.
+
+---
+
+### Extract from Model
+
+Recovers a LoRA that was **baked into a finetuned model** by subtracting the original base-model weights and SVD-decomposing the per-layer delta. Can extract both UNet and CLIP layers when the matching base/finetuned CLIP pair is provided.
+
+| Input | Default | Effect |
+|-------|---------|--------|
+| `base_model` / `finetuned_model` | — | The clean base and the finetuned checkpoint to diff |
+| `base_clip` / `finetuned_clip` (optional) | — | Provide both to also extract CLIP-side layers |
+| `rank` | 32 | Target rank when `rank_mode = fixed` |
+| `rank_mode` | auto | `auto` picks rank per layer from `energy_threshold`; `fixed` forces `rank` |
+| `energy_threshold` | 0.99 | Fraction of singular-value energy to retain in `auto` mode |
+| `strength` | 1.0 | Strength baked into the emitted stack entry |
+
+- **Outputs:** `LORA_STACK` (feed straight into the Optimizer/AutoTuner) and `LORA_DATA` (feed into **Save Merged LoRA** to write a `.safetensors`)
+
+---
+
+### Combination Generator
+
+Generates LoRA combinations for **AutoTuner dataset collection**. It cycles through all 2-way and/or 3-way combos with deterministic shuffling and tracks progress in a persistent `combo_progress.json`, so a long collection run can be resumed without repeating combos.
+
+| Input | Default | Effect |
+|-------|---------|--------|
+| `shuffle_order` | 0 | Seed for deterministic shuffle ordering |
+| `strength` | 1.0 | Strength applied to each LoRA in the emitted combo |
+| `combo_size` | 2_and_3 | `2`, `3`, or `2_and_3` |
+| `folder_filter` | "" | Comma-separated path prefixes to restrict the pool (e.g. `zit/,zib/`) |
+| `rerun_mode` | false | Re-emit already-processed combos for backfilling enriched configs |
+| `rerun_source` | shuffle | `shuffle` or `original_progress` ordering when re-running |
+
+- **Outputs:** one `LORA_STACK` at a time plus a `combo_info` string. Drive it with AutoTuner `record_dataset` / `community_cache` to build the shared cache.
 
 ---
 
@@ -743,7 +867,7 @@ WanVideoLoraSelect → WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA O
 <details>
 <summary><b>Compatibility</b></summary>
 
-- **Models:** SD 1.5, SDXL, Flux, Z-Image (Lumina2), Wan 2.1/2.2, LTX Video, ACE-Step, Qwen-Image, and other architectures supported by ComfyUI
+- **Models:** SD 1.5, SDXL, Flux, Z-Image (Lumina2), Ideogram 4, Wan 2.1/2.2, LTX Video, ACE-Step, Qwen-Image, and other architectures supported by ComfyUI
 - **LoRA formats:** Standard LoRA, LoCon, and LoRA/LoCon-style trainer variants whose tensors reduce to up/down(/mid) adapters (including many diffusers/PEFT and LyCORIS naming schemes)
 - **Trainers:** Kohya, AI-Toolkit, LyCORIS, Musubi Tuner, diffusers — auto-normalized when `normalize_keys` is enabled
 - **Flux sliced weights:** Handled correctly (linear1_qkv offsets)

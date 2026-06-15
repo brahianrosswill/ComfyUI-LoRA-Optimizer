@@ -46,9 +46,9 @@ The optimizer handles everything automatically — conflict analysis, strategy s
 | **Per-prefix adaptive merge** | Each weight group gets its own strategy based on local conflict data |
 | **5 merge algorithms** | Weighted sum, weighted average, TIES, SLERP, consensus |
 | **Sparsification** | DARE and DELLA with standard and conflict-aware variants |
-| **3 quality levels** | Standard, enhanced (DO + column-wise + TALL-masks), maximum (+ KnOTS SVD) |
+| **Merge refinement** | `none`, `refine` (orthogonalization + TALL-masks), `full` (+ KnOTS SVD alignment) |
 | **Auto-strength** | Interference-aware energy normalization prevents oversaturation |
-| **Architecture presets** | Tuned thresholds for UNet, DiT, and LLM architectures |
+| **Architecture presets** | Tuned thresholds for UNet, DiT, music-DiT (ACE-Step), and LLM architectures |
 | **Key normalization** | Mix LoRAs from any trainer (Kohya, AI-Toolkit, LyCORIS, diffusers, etc.) |
 | **SVD compression** | Re-compress merged patches to low-rank for ~32x RAM savings |
 | **AutoTuner** | Sweep 2,000+ parameter combinations and rank them by internal metrics or an external evaluator |
@@ -56,7 +56,7 @@ The optimizer handles everything automatically — conflict analysis, strategy s
 | **Compatibility analyzer** | Planning node that groups merge-safe LoRAs, surfaces conflicts, and optionally auto-creates optimized node setups |
 | **Low memory** | Two-pass streaming architecture — peak memory scales with the largest active target group, not the full stack |
 | **Community cache** | Share AutoTuner results via Hugging Face — skip sweeps when the best config is already known |
-| **8 architectures** | SD 1.5, SDXL, FLUX, Z-Image, Wan, LTX Video, ACE-Step, Qwen-Image |
+| **9 architectures** | SD 1.5, SDXL, FLUX, Z-Image, Ideogram 4, Wan, LTX Video, ACE-Step, Qwen-Image |
 
 ---
 

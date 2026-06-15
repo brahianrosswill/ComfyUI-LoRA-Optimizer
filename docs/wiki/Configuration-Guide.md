@@ -6,11 +6,12 @@ Every parameter on the LoRA Optimizer, organized by what it controls. Each secti
 
 ## Strength Controls
 
-### `output_strength` (0.0 – 10.0, default 1.0)
+### `output_strength` (-1.0 – 10.0, default 1.0)
 
 Master volume for the entire merge. Scales all merged patches uniformly before applying to the model.
 
 - Start at 1.0 and adjust if the merge is too strong/weak
+- Set to **`-1` for auto** — the optimizer picks the suggested max strength, compensating for energy lost during the merge
 - The analysis report includes a **suggested max output strength** — going above this risks oversaturation
 - Does not affect the merge itself — only the final application strength
 
@@ -54,10 +55,11 @@ Tunes numeric thresholds (density ranges, noise floors, strength caps) to match 
 |-------|--------|--------|
 | `auto` (default) | Auto-detected | Picks the right preset from LoRA key patterns |
 | `sd_unet` | SD 1.5, SDXL | Lower density floor (0.1), 10% noise floor, max strength 3.0 |
-| `dit` | Flux, Wan, Z-Image, LTX, HunyuanVideo | Higher density floor (0.4), 5% noise floor, max strength 5.0 |
+| `dit` | Flux, Wan, Z-Image, LTX, Ideogram 4, HunyuanVideo | Higher density floor (0.4), 5% noise floor, max strength 5.0 |
+| `acestep_dit` | ACE-Step (music DiT) | DiT thresholds tuned for music LoRAs — wider orthogonal band + higher TIES threshold to preserve voice |
 | `llm` | Qwen, LLaMA | Tight density range (0.1–0.8), 15% noise floor, max strength 3.0 |
 
-Generally leave this on `auto`. Override only if auto-detection picks the wrong family.
+Generally leave this on `auto`. Override only if auto-detection picks the wrong family. **HunyuanVideo** is covered by the `dit` preset but is not auto-detected — select `dit` manually for it.
 
 ### `merge_strategy_override` (optional input)
 
@@ -219,9 +221,16 @@ Number of candidate configurations to actually merge and score in Phase 2. Highe
 - 5–10 → more alternatives to choose from via Merge Selector
 - 1 → fastest, but no alternatives
 
-### `scoring_svd` (enabled / disabled)
+### `scoring_svd` (disabled / merge_quality / lora_rank / full, default disabled)
 
-When enabled, computes SVD-based effective rank as part of the quality score. More thorough but slower.
+SVD-based scoring for ranking candidates. Hardware-accelerated when Triton is installed, adding minimal overhead.
+
+| Value | Behavior |
+|-------|----------|
+| `disabled` (default) | Fast norm-only scoring — usually sufficient |
+| `merge_quality` | SVD on the merged diff tensors — more thorough quality measurement |
+| `lora_rank` | Effective rank of the LoRA factors — experimental, changes ranking |
+| `full` | Both `merge_quality` + `lora_rank` |
 
 ### `scoring_device` (cpu / gpu)
 
@@ -255,7 +264,7 @@ Controls what the AutoTuner outputs after the sweep.
 
 `tuning_only` is useful when you want the AutoTuner to decide the settings but apply the merge through a dedicated Optimizer node with additional controls (e.g., a custom `merge_strategy_override`).
 
-### `memory_mode` (disabled / auto / read_only / clear_and_run, default auto)
+### `memory_mode` (disabled / auto / auto_ignore_strength / read_only / clear_and_run, default auto)
 
 Persistent cache for tuning results. When a matching entry exists on disk, the full Phase 1 + Phase 2 sweep is skipped and the cached rankings are replayed in a single merge (~2–5 seconds instead of 30–120+).
 
@@ -263,10 +272,11 @@ Persistent cache for tuning results. When a matching entry exists on disk, the f
 |-------|----------|
 | `disabled` | No caching — always run the full sweep |
 | `auto` (default) | Load from cache if available; save new results after a sweep |
+| `auto_ignore_strength` | Same as `auto`, but the cache key **ignores LoRA strengths** — useful when sweeping strengths on orthogonal LoRAs where rankings don't change |
 | `read_only` | Use cached results but never write new ones |
 | `clear_and_run` | Delete the cached entry and re-run from scratch, then save |
 
-The cache key is the LoRA set (names + strengths) + tuning settings. Changing any LoRA strength or tuning parameter causes a cache miss. Cache files live in `models/autotuner_memory/` as `{lora_hash}_{settings_hash}.memory.json`.
+The cache key is the LoRA set (names + strengths) + tuning settings. Changing any LoRA strength or tuning parameter causes a cache miss (unless `auto_ignore_strength` is used). Cache files live in `models/autotuner_memory/` as `{lora_hash}_{settings_hash}.memory.json`.
 
 Use `clear_and_run` after updating a LoRA file in place (same filename, different content), or when you want fresh results after tweaking settings.
 
@@ -276,13 +286,14 @@ When a memory hit occurs, `selection` controls which ranked config is replayed. 
 
 This lets you explore alternatives from a cached run without re-running the full sweep: set `memory_mode=auto` and increase `selection` to try the 2nd or 3rd ranked config from the last run.
 
-### `community_cache` (disabled / upload_and_download)
+### `community_cache` (disabled / upload_only / upload_and_download)
 
 Community-backed cache hosted on Hugging Face. Precomputed analysis results (per-LoRA conflict stats, pairwise metrics, winning merge configs) are hardware-agnostic — the same LoRA files always produce the same output regardless of GPU tier.
 
 | Value | Behavior |
 |-------|----------|
 | `disabled` (default) | No community interaction — all computation is local |
+| `upload_only` | Run the sweep locally and upload results, but do **not** replay HF cache hits. Useful for backfilling/enriching configs. Requires `huggingface-cli login` or `HF_TOKEN` env var |
 | `upload_and_download` | Download precomputed results and contribute yours back. Requires `huggingface-cli login` or `HF_TOKEN` env var |
 
 **Privacy:** LoRA filenames are never shared. Only content hashes (SHA256[:16]) are used as keys. Results include conflict metrics and winning configs — no paths, no names.
