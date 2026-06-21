@@ -558,7 +558,7 @@ During the parameter sweep, each candidate recomputes raw LoRA diffs (A@B matmul
 | `ram` | All diffs in RAM. Fastest, but uses ~1.5 GB (SDXL) to ~6 GB (Flux) |
 | `disk` | All diffs to temp files with memory-mapping. Slowest cache mode, but minimal RAM |
 
-When `auto` mode runs out of disk space, it falls back to RAM automatically.
+**Disk bound:** the disk spill (`auto`/`disk`) is capped by free space — it keeps ~5 GB free on the temp volume, then stops caching and **recomputes the overflow diffs on demand** instead of filling the disk. Large models with several LoRAs (e.g. LTX-2 audio-video × 3) can otherwise spill tens of GB of full-rank diffs to `ComfyUI/temp/`. If you hit the cap a lot, point ComfyUI's temp dir at a larger drive or use `diff_cache_mode=disabled`.
 
 | Setting | Default | Effect |
 |---------|---------|--------|

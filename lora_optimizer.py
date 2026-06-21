@@ -715,6 +715,13 @@ class _DiffCache:
         self._ram_limit = None
         self._cache_dir = None
         self._disk_failed = False
+        self._disk_bytes = 0
+        self._disk_full = False
+        # Never let the diff cache fill the temp volume — keep this much free.
+        # When writing would drop below it, stop disk-caching and recompute the
+        # overflow on demand (a large model x several LoRAs can otherwise spill
+        # tens of GB of full-rank diffs).
+        self._disk_min_free = 5 * 1024 * 1024 * 1024  # 5 GB
         if mode in ("disk", "auto"):
             import tempfile, atexit, weakref
             self._cache_dir = tempfile.mkdtemp(prefix="lora_diff_cache_",
@@ -744,6 +751,25 @@ class _DiffCache:
             return False
         # auto: spill to disk if RAM limit would be exceeded
         return (self._ram_bytes + tensor_bytes) > self._ram_limit
+
+    def _disk_has_space(self, tensor_bytes):
+        """True if writing tensor_bytes keeps the temp volume above the reserve."""
+        if self._disk_full:
+            return False
+        try:
+            import shutil
+            free = shutil.disk_usage(self._cache_dir).free
+        except Exception:
+            return True  # can't tell — don't block
+        if free - tensor_bytes < self._disk_min_free:
+            self._disk_full = True
+            logging.warning(
+                f"[DiffCache] Temp volume low on space ({free / 1024**3:.1f}GB free) — "
+                f"stopping disk caching ({self._disk_bytes / 1024**3:.1f}GB cached so far); "
+                f"remaining diffs will be recomputed on demand. Free up space, point "
+                f"ComfyUI's temp dir at a larger drive, or set diff_cache_mode=disabled.")
+            return False
+        return True
 
     def prefetch(self, keys):
         """Load disk entries into a prefetch buffer in a background thread."""
@@ -799,6 +825,10 @@ class _DiffCache:
         cached = cached.cpu()
         tensor_bytes = cached.nelement() * cached.element_size()
         if self._use_disk(tensor_bytes) and not self._disk_failed:
+            if not self._disk_has_space(tensor_bytes):
+                # Volume nearly full: skip caching this diff entirely (it will be
+                # recomputed on the get() miss) rather than fill the disk or blow RAM.
+                return
             try:
                 import hashlib, numpy as np
                 name_hash = hashlib.sha256(f"{key[0]}_{key[1]}".encode()).hexdigest()[:16]
@@ -807,6 +837,7 @@ class _DiffCache:
                 disk_t = cached.half() if cached.dtype == torch.bfloat16 else cached
                 np.save(path, disk_t.numpy())
                 self._disk_store[key] = path
+                self._disk_bytes += tensor_bytes
                 return
             except Exception as e:
                 self._disk_failed = True

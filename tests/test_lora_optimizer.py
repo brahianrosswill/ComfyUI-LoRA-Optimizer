@@ -4129,6 +4129,25 @@ class TestDiffCacheRamLimit(unittest.TestCase):
             cache = lora_optimizer._DiffCache(mode="auto", ram_pct=0.5)
         self.assertEqual(cache._ram_limit, 50 * 1024 ** 3)
 
+    @unittest.skipIf(torch is None, "torch is not installed")
+    def test_disk_guard_skips_caching_when_volume_low(self):
+        cache = lora_optimizer._DiffCache(mode="disk")
+        low = types.SimpleNamespace(free=1 * 1024 ** 3, total=100 * 1024 ** 3,
+                                    used=99 * 1024 ** 3)
+        with mock.patch("shutil.disk_usage", return_value=low):
+            cache.put(("alias_a", 0), torch.zeros(4, 4))
+        self.assertNotIn(("alias_a", 0), cache)  # skipped -> caller recomputes
+        self.assertTrue(cache._disk_full)
+
+    @unittest.skipIf(torch is None, "torch is not installed")
+    def test_disk_caches_when_space_available(self):
+        cache = lora_optimizer._DiffCache(mode="disk")
+        ok = types.SimpleNamespace(free=50 * 1024 ** 3, total=100 * 1024 ** 3,
+                                   used=50 * 1024 ** 3)
+        with mock.patch("shutil.disk_usage", return_value=ok):
+            cache.put(("alias_a", 0), torch.zeros(4, 4))
+        self.assertIn(("alias_a", 0), cache)
+
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestDiffCacheWarming(unittest.TestCase):
