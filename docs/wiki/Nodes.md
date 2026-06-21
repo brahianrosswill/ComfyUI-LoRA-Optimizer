@@ -15,7 +15,7 @@ Builds a list of LoRAs for the optimizer. Chain multiple Stack nodes to add any 
 | `lora_name` | COMBO | Yes | LoRA file selector (`.safetensors` from your loras folder) |
 | `strength` | FLOAT | Yes | How much this LoRA contributes (default 1.0) |
 | `conflict_mode` | COMBO | Yes | Where this LoRA's contributions apply: `all`, `low_conflict`, `high_conflict` |
-| `key_filter` | COMBO | Yes | Which prefixes this LoRA contributes to: `all`, `shared_only`, `unique_only` |
+| `key_filter` | COMBO | Yes | Which prefixes this LoRA contributes to: `all`, `shared_only`, `unique_only`, `audio_only`, `no_audio` |
 | `lora_stack` | LORA_STACK | No | Previous stack to append to (for chaining) |
 
 ### Outputs
@@ -54,7 +54,7 @@ Single node with 1–10 adjustable LoRA slots. Replaces chaining multiple Stack 
 | `model_strength_i` | FLOAT | Model patch strength |
 | `clip_strength_i` | FLOAT | CLIP patch strength |
 | `conflict_mode_i` | COMBO | `all`, `low_conflict`, `high_conflict` |
-| `key_filter_i` | COMBO | `all`, `shared_only`, `unique_only` |
+| `key_filter_i` | COMBO | `all`, `shared_only`, `unique_only`, `audio_only`, `no_audio` |
 
 ### Outputs
 

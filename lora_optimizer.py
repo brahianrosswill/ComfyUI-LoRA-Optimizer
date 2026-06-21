@@ -478,12 +478,15 @@ class LoRAStack:
                                "'low_conflict': only apply where this LoRA agrees with the majority — safe, avoids contested weights. "
                                "'high_conflict': only apply where this LoRA disagrees — forces this LoRA to dominate contested regions."
                 }),
-                "key_filter": (["all", "shared_only", "unique_only"], {
+                "key_filter": (["all", "shared_only", "unique_only", "audio_only", "no_audio"], {
                     "default": "all",
-                    "tooltip": "Filter which keys this LoRA contributes based on how many LoRAs share each key. "
+                    "tooltip": "Filter which keys this LoRA contributes. "
                                "'all': contribute all keys (default). "
-                               "'shared_only': only contribute to keys present in 2+ LoRAs. "
-                               "'unique_only': only contribute to keys present in exactly 1 LoRA."
+                               "'shared_only': only keys present in 2+ LoRAs. "
+                               "'unique_only': only keys present in exactly 1 LoRA. "
+                               "'audio_only': only audio layers (LTX-2 / ACE-Step audio modules). "
+                               "'no_audio': only non-audio (video) layers. "
+                               "e.g. merge two LTX LoRAs but keep one's sound: set the other to 'no_audio'."
                 }),
             },
             "optional": {
@@ -575,12 +578,15 @@ class LoRAStackDynamic:
                            f"'low_conflict': only where this LoRA agrees with the majority. "
                            f"'high_conflict': only where this LoRA disagrees."
             })
-            inputs["required"][f"key_filter_{i}"] = (["all", "shared_only", "unique_only"], {
+            inputs["required"][f"key_filter_{i}"] = (
+                ["all", "shared_only", "unique_only", "audio_only", "no_audio"], {
                 "default": "all",
                 "tooltip": f"LoRA #{i} key filter. "
                            f"'all': contribute all keys (default). "
-                           f"'shared_only': only contribute to keys present in 2+ LoRAs. "
-                           f"'unique_only': only contribute to keys present in exactly 1 LoRA."
+                           f"'shared_only': only keys present in 2+ LoRAs. "
+                           f"'unique_only': only keys present in exactly 1 LoRA. "
+                           f"'audio_only': only audio layers (LTX-2 / ACE-Step). "
+                           f"'no_audio': only non-audio (video) layers."
             })
         inputs["optional"] = {
             "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to add even more LoRAs to the list."}),
@@ -1954,6 +1960,22 @@ class _LoRAMergeBase:
     def _group_target_key(target_group):
         return target_group["target_key"]
 
+    @staticmethod
+    def _target_is_audio(target_group):
+        """True if this target group is an audio layer (LTX-2 / ACE-Step style).
+
+        Heuristic: the substring 'audio' appears in the LoRA prefix or the resolved
+        model key. Covers LTX-2's audio_embeddings_connector, audio_adaln_single,
+        audio_patchify_proj, audio_proj_out, av_ca_audio_* and the per-block audio
+        sublayers. Used by the `audio_only` / `no_audio` key_filter modes.
+        """
+        tk = target_group.get("target_key")
+        if isinstance(tk, tuple):
+            tk = tk[0]
+        parts = [target_group.get("label_prefix", ""), str(tk)]
+        parts.extend(a for a in target_group.get("aliases", []) if isinstance(a, str))
+        return any("audio" in p.lower() for p in parts)
+
     def _resolve_target_shape(self, target_key, is_clip, model, clip):
         """Resolve the actual target tensor shape for a target key."""
         offset = None
@@ -2158,11 +2180,16 @@ class _LoRAMergeBase:
         filtered = {}
         eff_strengths = {}
         rank_sums = {}
+        is_audio_group = self._target_is_audio(target_group)
         for i, diff in aggregated.items():
             kf = active_loras[i].get("key_filter", "all")
             if kf == "shared_only" and raw_n < 2:
                 continue
             if kf == "unique_only" and raw_n != 1:
+                continue
+            if kf == "audio_only" and not is_audio_group:
+                continue
+            if kf == "no_audio" and is_audio_group:
                 continue
             filtered[i] = diff
             eff_strengths[i] = self._resolve_branch_strength(
@@ -5809,12 +5836,17 @@ class LoRAOptimizer(_LoRAMergeBase):
         pieces = []
         lora_weights = {}
         has_conflict_modes = False
+        is_audio_group = self._target_is_audio(target_group)
 
         for i, item in enumerate(active_loras):
             kf = item.get("key_filter", "all")
             if kf == "shared_only" and raw_n_loras < 2:
                 continue
             if kf == "unique_only" and raw_n_loras != 1:
+                continue
+            if kf == "audio_only" and not is_audio_group:
+                continue
+            if kf == "no_audio" and is_audio_group:
                 continue
             if item.get("conflict_mode", "all") != "all":
                 has_conflict_modes = True

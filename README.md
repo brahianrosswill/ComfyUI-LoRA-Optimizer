@@ -252,6 +252,10 @@ Each LoRA has a per-LoRA `key_filter` setting (available on both **LoRA Stack** 
 | `all` (default) | Contribute to all keys | Normal merging |
 | `shared_only` | Only contribute to keys present in 2+ LoRAs | Strip variant-specific keys (I2V/VACE) from this LoRA |
 | `unique_only` | Only contribute to keys present in exactly 1 LoRA | Extract only the variant-specific adapter keys from this LoRA |
+| `audio_only` | Only contribute audio layers | Take the sound from one LoRA on audio-video models (LTX-2, ACE-Step) |
+| `no_audio` | Only contribute non-audio (video) layers | Merge two LTX-2 LoRAs but keep just one's audio — set the others to `no_audio` |
+
+**Audio split (LTX-2 / ACE-Step):** `audio_only` / `no_audio` classify a layer as "audio" when `audio` appears in its key (covers `audio_embeddings_connector`, `audio_adaln_single`, `audio_patchify_proj`, `audio_proj_out`, `av_ca_audio_*`, and the per-block audio sublayers). So to **merge two action LoRAs but keep only the first one's sound**, set the second LoRA's `key_filter` to `no_audio`. To **combine an audio LoRA with a video LoRA**, set the audio one to `audio_only` and the video one to `no_audio` (or `all`).
 
 This is especially useful for Wan T2V/I2V/VACE LoRAs, which share ~90% of weights but each variant has unique keys (I2V: `cross_attn.k_img/v_img`, `img_emb`; VACE: `vace_blocks.*`, `vace_patch_embedding`).
 

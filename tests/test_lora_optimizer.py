@@ -4177,5 +4177,40 @@ class TestDiffCacheWarming(unittest.TestCase):
             warmed["prefix_stats"]["alias_a"]["conflict_ratio"])
 
 
+class TargetIsAudioTests(unittest.TestCase):
+    """The audio_only / no_audio key_filter classifier (LTX-2 / ACE-Step)."""
+
+    def _g(self, label_prefix, target_key=None, aliases=None):
+        return {"label_prefix": label_prefix,
+                "target_key": target_key if target_key is not None else label_prefix,
+                "aliases": aliases or [label_prefix]}
+
+    def test_ltx2_audio_layers_classified_audio(self):
+        is_audio = lora_optimizer.LoRAAutoTuner._target_is_audio
+        for k in [
+            "diffusion_model.audio_embeddings_connector.transformer_1d_blocks.0.attn1.to_q",
+            "diffusion_model.audio_adaln_single.linear",
+            "diffusion_model.audio_patchify_proj",
+            "diffusion_model.audio_proj_out",
+            "diffusion_model.av_ca_audio_scale_shift_adaln_single.linear",
+        ]:
+            self.assertTrue(is_audio(self._g(k)), k)
+
+    def test_video_layers_classified_non_audio(self):
+        is_audio = lora_optimizer.LoRAAutoTuner._target_is_audio
+        for k in [
+            "diffusion_model.transformer_blocks.0.attn1.to_q",
+            "diffusion_model.video_embeddings_connector.transformer_1d_blocks.0.attn1.to_k",
+            "diffusion_model.av_ca_video_scale_shift_adaln_single.linear",
+            "diffusion_model.patchify_proj",
+        ]:
+            self.assertFalse(is_audio(self._g(k)), k)
+
+    def test_matches_via_target_key_tuple(self):
+        is_audio = lora_optimizer.LoRAAutoTuner._target_is_audio
+        g = self._g("alias", target_key=("diffusion_model.audio_proj_out.weight", 0), aliases=["alias"])
+        self.assertTrue(is_audio(g))
+
+
 if __name__ == "__main__":
     unittest.main()
