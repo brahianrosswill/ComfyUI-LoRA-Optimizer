@@ -11645,6 +11645,13 @@ class SaveMergedLoRA:
             save_dtype = torch.float16
         logging.info(f"[Save Merged LoRA] Output dtype: {save_dtype}")
 
+        # SVD decomposition is the bottleneck here — especially with a high auto
+        # rank over many diffs. The diffs live on CPU, so run the SVD on the GPU
+        # when one is available (_compress_to_lowrank moves each diff to the device).
+        svd_device = LoRAOptimizer._get_compute_device()
+        if svd_device.type != "cpu":
+            logging.info(f"[Save Merged LoRA] SVD device: {svd_device}")
+
         state_dict = {}
 
         for is_clip, patches in [(False, model_patches), (True, clip_patches)]:
@@ -11661,7 +11668,7 @@ class SaveMergedLoRA:
                 if isinstance(patch, (LoKrAdapter, LoHaAdapter)):
                     diff_tensor = _LoRAMergeBase._expand_patch_to_diff(patch)
                     rank = fallback_rank if auto_rank else save_rank
-                    compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank, output_dtype=save_dtype)
+                    compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank, svd_device=svd_device, output_dtype=save_dtype)
                     if compressed is None:
                         logging.warning(f"[Save Merged LoRA] SVD failed for {lora_prefix}; skipping this layer.")
                         continue
@@ -11678,7 +11685,7 @@ class SaveMergedLoRA:
                     # Skip LoCon (mid != None): mid tensor requires special reshape handling.
                     if target_rank > 0 and current_rank > target_rank and mid is None:
                         diff = _LoRAMergeBase._expand_patch_to_diff(patch)
-                        compressed = LoRAOptimizer._compress_to_lowrank(diff, target_rank, output_dtype=save_dtype)
+                        compressed = LoRAOptimizer._compress_to_lowrank(diff, target_rank, svd_device=svd_device, output_dtype=save_dtype)
                         del diff
                         if compressed is None:
                             logging.warning(f"[Save Merged LoRA] SVD failed for {lora_prefix}; saving at full patch rank.")
@@ -11688,7 +11695,7 @@ class SaveMergedLoRA:
                 elif isinstance(patch, tuple) and len(patch) == 2 and patch[0] == "diff":
                     diff_tensor = patch[1][0]
                     rank = fallback_rank if auto_rank else save_rank
-                    compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank, output_dtype=save_dtype)
+                    compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank, svd_device=svd_device, output_dtype=save_dtype)
                     if compressed is None:
                         logging.warning(f"[Save Merged LoRA] SVD failed for {lora_prefix}; skipping this layer.")
                         continue
