@@ -6803,11 +6803,26 @@ class LoRAOptimizer(_LoRAMergeBase):
             logging.info(f"[LoRA Optimizer]   Compute device: {compute_device}"
                          f" ({'sequential' if use_gpu else 'threaded'})")
             t_pass1 = time.time()
+            # Periodic console progress so a long Pass 1 (many groups / LoRAs) isn't silent.
+            _p1_total = len(target_groups)
+            _p1 = {"n": 0, "logged": 0.0}
+            _p1_every = max(1, _p1_total // 10)
+
+            def _p1_progress():
+                _p1["n"] += 1
+                c = _p1["n"]
+                now = time.monotonic()
+                if c == _p1_total or (c % _p1_every == 0 and now - _p1["logged"] >= 1.0):
+                    _p1["logged"] = now
+                    logging.info(f"[LoRA Optimizer]   Analyzed {c}/{_p1_total} target "
+                                 f"groups ({time.time() - t_pass1:.0f}s)")
+
             analysis_data = self._run_group_analysis(
                 target_groups, active_loras, model, clip, compute_device,
                 clip_strength_multiplier=clip_strength_multiplier,
                 merge_refinement=merge_refinement,
                 decision_smoothing=decision_smoothing,
+                progress_cb=_p1_progress,
             )
             all_key_targets = analysis_data["all_key_targets"]
             target_groups = analysis_data["target_groups"]
@@ -10144,12 +10159,28 @@ class LoRAAutoTuner(LoRAOptimizer):
                 self._analysis_partial_save(
                     names_only_hash, partial_accumulated, source_loras_for_cache)
 
+        # Periodic console progress — Pass 1 over many groups (esp. with several
+        # LoRAs) is otherwise silent until done.
+        _p1_total = len(target_groups)
+        _p1 = {"n": 0, "logged": 0.0}
+        _p1_every = max(1, _p1_total // 10)
+
+        def _p1_progress():
+            pbar.update(1)
+            _p1["n"] += 1
+            c = _p1["n"]
+            now = time.monotonic()
+            if c == _p1_total or (c % _p1_every == 0 and now - _p1["logged"] >= 1.0):
+                _p1["logged"] = now
+                logging.info(f"[LoRA AutoTuner]     Analyzed {c}/{_p1_total} target "
+                             f"groups ({time.time() - t_start:.0f}s)")
+
         analysis_data = self._run_group_analysis(
             target_groups, active_loras, model, clip, compute_device,
             clip_strength_multiplier=clip_strength_multiplier,
             merge_refinement="none",
             decision_smoothing=decision_smoothing,
-            progress_cb=lambda: pbar.update(1),
+            progress_cb=_p1_progress,
             cached_analysis=cached_analysis,
             track_new_entries=True,
             on_prefix_done=_on_prefix_done,
