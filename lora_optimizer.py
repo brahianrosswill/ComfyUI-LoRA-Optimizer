@@ -138,6 +138,25 @@ def _group_merge_cache_key(label_prefix, is_clip, pf_mode, pf_density, pf_sign,
 
 AUTOTUNER_MEMORY_DIR = os.path.join(folder_paths.models_dir, "autotuner_memory")
 os.makedirs(AUTOTUNER_MEMORY_DIR, exist_ok=True)
+
+# Don't write caches when the volume is nearly full. Atomic writes (tmp + replace)
+# already prevent truncated files, but consuming the last free bytes can starve the
+# rest of the run and the model/diff caches; skip the write and keep going.
+_AUTOTUNER_MIN_FREE_MB = 100
+
+def _autotuner_have_disk_space(context):
+    try:
+        import shutil
+        free_mb = shutil.disk_usage(AUTOTUNER_MEMORY_DIR).free / (1024 * 1024)
+    except Exception:
+        return True  # can't tell — don't block
+    if free_mb < _AUTOTUNER_MIN_FREE_MB:
+        logging.warning(f"[{context}] Only {free_mb:.0f}MB free on the autotuner_memory "
+                        f"volume (<{_AUTOTUNER_MIN_FREE_MB}MB) — skipping cache write to "
+                        f"avoid filling the disk.")
+        return False
+    return True
+
 AUTOTUNER_MEMORY_VERSION = 1
 # Bump whenever ranking-relevant behavior changes (scoring formula, candidate
 # selection, sampling) — not just on memory/config format changes. Stale
@@ -5427,6 +5446,16 @@ class LoRAOptimizer(_LoRAMergeBase):
                             new_pair_entries[(i, j)][prefix] = pair_entry
 
         group_items = list(target_groups.values())
+        # Coverage check: the loop below recomputes any target group the cache
+        # doesn't cover (it never drops a group), but surface partial coverage so
+        # a stale/incomplete cache is visible rather than silently masked.
+        if cached_analysis is not None:
+            _covered = sum(1 for g in group_items
+                           if g["label_prefix"] in cached_analysis)
+            if _covered < len(group_items):
+                logging.info(
+                    f"[AutoTuner Analysis Cache] Covers {_covered}/{len(group_items)} "
+                    f"target groups — recomputing the remaining {len(group_items) - _covered}.")
         if use_gpu:
             for target_group in group_items:
                 prefix = target_group["label_prefix"]
@@ -8591,6 +8620,8 @@ class LoRAAutoTuner(LoRAOptimizer):
         stack order and overlaid (caller wins), so concurrent processes
         tuning overlapping stacks don't drop each other's prefixes."""
         from datetime import datetime
+        if not _autotuner_have_disk_space("AutoTuner Analysis Cache"):
+            return
         path = LoRAAutoTuner._analysis_cache_path(names_only_hash)
         try:
             with open(path) as f:
@@ -8658,6 +8689,8 @@ class LoRAAutoTuner(LoRAOptimizer):
     def _analysis_partial_save(names_only_hash, per_prefix, source_loras):
         """Atomic write of partial analysis checkpoint to disk."""
         from datetime import datetime
+        if not _autotuner_have_disk_space("AutoTuner Analysis Partial"):
+            return
         path = LoRAAutoTuner._analysis_partial_path(names_only_hash)
         entry = {
             "analysis_version": 1,
@@ -9387,6 +9420,8 @@ class LoRAAutoTuner(LoRAOptimizer):
     def _memory_save(lora_hash, settings_hash, settings, source_loras, tuner_data):
         """Atomic write of memory entry to disk."""
         from datetime import datetime
+        if not _autotuner_have_disk_space("AutoTuner Memory"):
+            return
         path = LoRAAutoTuner._memory_file_path(lora_hash, settings_hash)
         entry = {
             "memory_version": AUTOTUNER_MEMORY_VERSION,
