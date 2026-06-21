@@ -11803,6 +11803,10 @@ class SaveMergedLoRA:
                             alpha = float(alpha)
                 elif isinstance(patch, tuple) and len(patch) == 2 and patch[0] == "diff":
                     diff_tensor = patch[1][0]
+                    # All-zero diff (untrained layer) merges to nothing — skip it
+                    # rather than waste an SVD and write a dead layer to the file.
+                    if diff_tensor.abs().amax().item() == 0:
+                        continue
                     rank = fallback_rank if auto_rank else save_rank
                     compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank, svd_device=svd_device, output_dtype=save_dtype)
                     if compressed is None:
@@ -11860,44 +11864,44 @@ class SaveMergedLoRA:
         if prefixes:
             logging.info(f"[Save Merged LoRA] Sample prefixes: {prefixes[:3]} ... ({len(prefixes)} total)")
 
+        # Reconstruction-error check is a diagnostic — sample a few diffs rather
+        # than reconstructing all of them on CPU (that's minutes on a large model
+        # like LTX-2, and drags vram_budget GPU patches back to CPU). 32 is plenty.
         svd_errors = []
+        _MAX_SVD_CHECKS = 32
         for is_clip, patches in [(False, model_patches), (True, clip_patches)]:
+            if len(svd_errors) >= _MAX_SVD_CHECKS:
+                break
             for target_key, patch in patches.items():
-                key_info = key_map.get(target_key)
-                if key_info is None:
+                if len(svd_errors) >= _MAX_SVD_CHECKS:
+                    break
+                if not (isinstance(patch, tuple) and patch[0] == "diff"):
                     continue
-                if isinstance(key_info, dict):
-                    lora_prefix = key_info.get("canonical_prefix")
-                else:
-                    lora_prefix = key_info
+                key_info = key_map.get(target_key)
+                lora_prefix = (key_info.get("canonical_prefix")
+                               if isinstance(key_info, dict) else key_info)
                 if not lora_prefix:
                     continue
                 up_key = f"{lora_prefix}.lora_up.weight"
-                down_key = f"{lora_prefix}.lora_down.weight"
-                alpha_key = f"{lora_prefix}.alpha"
-                if up_key not in state_dict:
+                if up_key not in state_dict:  # e.g. an all-zero layer we skipped
                     continue
-                saved_up = state_dict[up_key].float()
-                saved_down = state_dict[down_key].float()
-                saved_alpha = state_dict[alpha_key].item()
-                rank = saved_down.shape[0]
-                scale = saved_alpha / rank
-                reconstructed = torch.mm(saved_up, saved_down) * scale
-                if isinstance(patch, tuple) and patch[0] == "diff":
-                    original_diff = patch[1][0].float()
-                    strength = clip_strength if is_clip else output_strength
-                    reference = original_diff * strength if bake_strength else original_diff
-                    original_norm = reference.norm().item()
-                    if original_norm > 0:
-                        # vram_budget can leave the reference patch on GPU while the
-                        # saved factors are on CPU — compare on a common device. This
-                        # is diagnostic only, so never let it abort the save.
-                        try:
-                            ref = reference.to(reconstructed.device)
-                            error = (reconstructed - ref).norm().item() / original_norm
-                            svd_errors.append(error)
-                        except Exception:
-                            pass
+                original_diff = patch[1][0].float()
+                strength = clip_strength if is_clip else output_strength
+                reference = original_diff * strength if bake_strength else original_diff
+                original_norm = reference.norm().item()
+                if original_norm <= 0:
+                    continue
+                # Diagnostic only — never let it abort the save (device/shape, etc.).
+                try:
+                    saved_up = state_dict[up_key].float()
+                    saved_down = state_dict[f"{lora_prefix}.lora_down.weight"].float()
+                    rank = saved_down.shape[0]
+                    scale = state_dict[f"{lora_prefix}.alpha"].item() / rank
+                    reconstructed = torch.mm(saved_up, saved_down) * scale
+                    ref = reference.to(reconstructed.device)
+                    svd_errors.append((reconstructed - ref).norm().item() / original_norm)
+                except Exception:
+                    pass
         if svd_errors:
             avg_error = sum(svd_errors) / len(svd_errors)
             max_error = max(svd_errors)
