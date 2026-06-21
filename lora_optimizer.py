@@ -11889,8 +11889,15 @@ class SaveMergedLoRA:
                     reference = original_diff * strength if bake_strength else original_diff
                     original_norm = reference.norm().item()
                     if original_norm > 0:
-                        error = (reconstructed - reference).norm().item() / original_norm
-                        svd_errors.append(error)
+                        # vram_budget can leave the reference patch on GPU while the
+                        # saved factors are on CPU — compare on a common device. This
+                        # is diagnostic only, so never let it abort the save.
+                        try:
+                            ref = reference.to(reconstructed.device)
+                            error = (reconstructed - ref).norm().item() / original_norm
+                            svd_errors.append(error)
+                        except Exception:
+                            pass
         if svd_errors:
             avg_error = sum(svd_errors) / len(svd_errors)
             max_error = max(svd_errors)
