@@ -81,7 +81,21 @@ def _triton_svdvals(mat2d: torch.Tensor, n_sv: int) -> torch.Tensor:
             return s.squeeze(0)[:n_sv]
         except Exception:
             pass
-    return torch.linalg.svdvals(mat2d)[:n_sv]
+    try:
+        return torch.linalg.svdvals(mat2d)[:n_sv]
+    except Exception:
+        # ROCm/MAGMA can fail to converge; CPU LAPACK is stable. Jitter as a last
+        # resort to separate repeated singular values.
+        m_cpu = mat2d.detach().to("cpu", torch.float32)
+        try:
+            return torch.linalg.svdvals(m_cpu)[:n_sv]
+        except Exception:
+            scale = m_cpu.abs().mean()
+            if scale > 0:
+                g = torch.Generator().manual_seed(0)
+                m_cpu = m_cpu + (scale * 1e-6) * torch.randn(
+                    m_cpu.shape, generator=g, dtype=m_cpu.dtype)
+            return torch.linalg.svdvals(m_cpu)[:n_sv]
 
 
 TUNER_DATA_DIR = os.path.join(folder_paths.models_dir, "tuner_data")
@@ -3176,6 +3190,50 @@ class _LoRAMergeBase:
 
     @staticmethod
     @torch.no_grad()
+    def _truncated_svd_robust(mat, rank):
+        """Truncated SVD -> (U[:, :rank], S[:rank], V[:, :rank]).
+
+        Robust to SVD non-convergence, which is common on ROCm/MAGMA for
+        ill-conditioned or repeated-singular-value matrices ("failed to converge
+        ... too many repeated singular values"). Tries the input device, then
+        retries on CPU (LAPACK is far more stable), then on CPU with a tiny jitter
+        that separates repeated singular values. Returns None if all attempts fail.
+        """
+        min_dim = min(mat.shape)
+        rank = max(1, min(rank, min_dim))
+
+        def _compute(m):
+            if rank > min_dim // 2:
+                U, S, Vh = torch.linalg.svd(m, full_matrices=False)
+                return U[:, :rank], S[:rank], Vh[:rank, :].T
+            q = min(rank + max(20, rank // 5), min_dim)
+            U, S, V = torch.svd_lowrank(m, q=q, niter=4)
+            return U[:, :rank], S[:rank], V[:, :rank]
+
+        try:
+            return _compute(mat)
+        except Exception:
+            pass
+        mat_cpu = mat.detach().to("cpu", torch.float32)
+        try:
+            return _compute(mat_cpu)
+        except Exception:
+            pass
+        try:
+            scale = mat_cpu.abs().mean()
+            if scale > 0:
+                g = torch.Generator().manual_seed(0)
+                mat_cpu = mat_cpu + (scale * 1e-6) * torch.randn(
+                    mat_cpu.shape, generator=g, dtype=mat_cpu.dtype)
+            U, S, Vh = torch.linalg.svd(mat_cpu, full_matrices=False)
+            return U[:, :rank], S[:rank], Vh[:rank, :].T
+        except Exception:
+            logging.warning("[LoRA Optimizer] SVD failed to converge on all paths "
+                            "(GPU/CPU/jitter); keeping the dense diff for this layer.")
+            return None
+
+    @staticmethod
+    @torch.no_grad()
     def _compress_to_lowrank(diff, rank, svd_device=None, output_dtype=None):
         """
         Re-compress a full-rank diff tensor to low-rank via truncated SVD.
@@ -3196,20 +3254,13 @@ class _LoRAMergeBase:
         # Move to requested device for SVD (GPU is much faster for matmul-heavy randomized SVD)
         if svd_device is not None and mat.device != svd_device:
             mat = mat.to(svd_device)
-        if rank > min(mat.shape) // 2:
-            U, S, Vh = torch.linalg.svd(mat, full_matrices=False)
-            del mat
-            U = U[:, :rank]
-            S = S[:rank]
-            V = Vh[:rank, :].T
-            del Vh
-        else:
-            q_oversample = min(rank + max(20, rank // 5), min(mat.shape))
-            U, S, V = torch.svd_lowrank(mat, q=q_oversample, niter=4)
-            del mat
-            U = U[:, :rank]
-            S = S[:rank]
-            V = V[:, :rank]
+        svd = LoRAOptimizer._truncated_svd_robust(mat, rank)
+        del mat
+        if svd is None:
+            # SVD failed on every device/path — signal the caller to keep the
+            # dense diff rather than crash (seen on ROCm for repeated singular values).
+            return None
+        U, S, V = svd
         # U: [out, rank], S: [rank], V: [in, rank]
         # Reconstruct as: mat_up = U * sqrt(S), mat_down = sqrt(S) * V^T
         # Return on CPU for storage (ComfyUI moves to device when applying)
@@ -7215,8 +7266,13 @@ class LoRAOptimizer(_LoRAMergeBase):
                 merged_diff = merged_diff.cpu()
             if should_compress:
                 patch = self._compress_to_lowrank(merged_diff, compress_rank, svd_device=resolved_svd_device)
-                del merged_diff
-                is_compressed = True
+                if patch is None:
+                    # SVD failed to converge (e.g. ROCm) — keep the dense diff.
+                    patch = ("diff", (merged_diff.cpu() if merged_diff.is_cuda else merged_diff,))
+                    is_compressed = False
+                else:
+                    del merged_diff
+                    is_compressed = True
             else:
                 patch = ("diff", (merged_diff,))
                 is_compressed = False
@@ -11606,6 +11662,9 @@ class SaveMergedLoRA:
                     diff_tensor = _LoRAMergeBase._expand_patch_to_diff(patch)
                     rank = fallback_rank if auto_rank else save_rank
                     compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank, output_dtype=save_dtype)
+                    if compressed is None:
+                        logging.warning(f"[Save Merged LoRA] SVD failed for {lora_prefix}; skipping this layer.")
+                        continue
                     mat_up, mat_down, alpha, mid, _, _ = compressed.weights
                     alpha = float(alpha)
                 elif isinstance(patch, LoRAAdapter):
@@ -11621,12 +11680,18 @@ class SaveMergedLoRA:
                         diff = _LoRAMergeBase._expand_patch_to_diff(patch)
                         compressed = LoRAOptimizer._compress_to_lowrank(diff, target_rank, output_dtype=save_dtype)
                         del diff
-                        mat_up, mat_down, alpha, mid, _, _ = compressed.weights
-                        alpha = float(alpha)
+                        if compressed is None:
+                            logging.warning(f"[Save Merged LoRA] SVD failed for {lora_prefix}; saving at full patch rank.")
+                        else:
+                            mat_up, mat_down, alpha, mid, _, _ = compressed.weights
+                            alpha = float(alpha)
                 elif isinstance(patch, tuple) and len(patch) == 2 and patch[0] == "diff":
                     diff_tensor = patch[1][0]
                     rank = fallback_rank if auto_rank else save_rank
                     compressed = LoRAOptimizer._compress_to_lowrank(diff_tensor, rank, output_dtype=save_dtype)
+                    if compressed is None:
+                        logging.warning(f"[Save Merged LoRA] SVD failed for {lora_prefix}; skipping this layer.")
+                        continue
                     mat_up, mat_down, alpha, mid, _, _ = compressed.weights
                     alpha = float(alpha)
                 else:
