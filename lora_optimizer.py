@@ -1883,6 +1883,7 @@ class _LoRAMergeBase:
             clip_target_keys.add(v)
             if isinstance(v, tuple):
                 clip_target_keys.add(v[0])
+        dropped = []
         for prefix in all_lora_prefixes:
             target_key, is_clip = self._resolve_target_key(prefix, model_keys, clip_keys)
             if target_key is None:
@@ -1892,6 +1893,7 @@ class _LoRAMergeBase:
                 elif prefix in clip_target_keys:
                     target_key, is_clip = prefix, True
                 else:
+                    dropped.append(prefix)
                     continue
             group_id = self._make_target_group_id(target_key, is_clip)
             entry = grouped.setdefault(group_id, {
@@ -1900,6 +1902,15 @@ class _LoRAMergeBase:
                 "aliases": [],
             })
             entry["aliases"].append(prefix)
+
+        if dropped:
+            sample = ", ".join(sorted(dropped)[:8])
+            logging.warning(
+                f"[LoRA Optimizer] {len(dropped)} LoRA key(s) did not map to any model/CLIP "
+                f"weight and were SKIPPED (not in the merge). Sample: {sample}. "
+                f"If these are expected layers (e.g. LTX-2 audio), either the model doesn't "
+                f"expose them to LoRA (a plain Load LoRA would skip them too) or the key "
+                f"format isn't recognized by key normalization.")
 
         ordered = {}
         prepared = []
