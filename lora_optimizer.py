@@ -11908,6 +11908,17 @@ class SaveMergedLoRA:
             logging.info(f"[Save Merged LoRA] SVD reconstruction error: "
                          f"avg={avg_error:.4f}, max={max_error:.4f} "
                          f"({len(svd_errors)} diffs checked)")
+            # High error = the merged diffs are higher-rank than the save rank can
+            # capture (common for TIES / refine merges). A larger save_rank retains
+            # more detail. Only nudge in auto mode; a fixed save_rank is the user's call.
+            eff_rank = fallback_rank if auto_rank else save_rank
+            if avg_error > 0.05 or max_error > 0.20:
+                suggested = min(eff_rank * 2, 1024) if eff_rank > 0 else 256
+                logging.warning(
+                    f"[Save Merged LoRA] Lossy compression at rank {eff_rank} "
+                    f"(avg {avg_error*100:.1f}%, max {max_error*100:.1f}% reconstruction "
+                    f"error) — the merge is higher-rank than this. For more fidelity set "
+                    f"save_rank to ~{suggested} (larger file); rank 0 = auto.")
 
         # Build safetensors metadata header
         metadata = {"tool": "ComfyUI-ZImage-LoRA-Merger"}
