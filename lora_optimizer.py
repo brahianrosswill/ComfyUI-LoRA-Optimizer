@@ -8389,7 +8389,7 @@ class LoRAMergeSettings:
                 }),
                 "auto_strength_floor_mode": (["auto", "manual"], {
                     "default": "auto",
-                    "tooltip": "How the auto-strength floor is chosen. 'auto' (recommended): architecture-aware default — higher (less shrink) for motion-heavy video models, lower for image models. 'manual': use the auto_strength_floor slider above."
+                    "tooltip": "How the auto-strength floor is chosen. 'auto' (recommended): architecture-aware default — higher (less shrink) for motion-heavy video models, lower for image models. 'manual': use the auto_strength_floor slider above. This only bounds the shrink — to turn auto-strength OFF entirely set auto_strength = disabled on the Optimizer/AutoTuner Settings node; for on-but-never-shrink use manual with floor 1.0."
                 }),
             },
         }
