@@ -979,6 +979,23 @@ class PreserveFlagTests(unittest.TestCase):
         out2 = opt._normalize_stack([extracted, ("loraA", 1.0, 1.0)])
         self.assertEqual([e["name"] for e in out2], ["<extracted>", "loraA"])
 
+    def test_compute_cache_key_mixed_tuple_and_dict(self):
+        """_compute_cache_key must not crash on a mixed stack (tuple entry
+        first, extracted dict entry second) — it used to do entry[3] on the
+        dict and raise KeyError: 3."""
+        key = lora_optimizer.LoRAOptimizer._compute_cache_key(
+            [("loraA", 1.0, 1.0), {"name": "<extracted>", "lora": {}, "strength": 1.5}],
+            output_strength=1.0, clip_strength_multiplier=1.0, auto_strength="disabled",
+        )
+        self.assertIsInstance(key, str)
+        self.assertEqual(len(key), 16)
+        # order-independent: same entries reversed hash identically
+        key2 = lora_optimizer.LoRAOptimizer._compute_cache_key(
+            [{"name": "<extracted>", "lora": {}, "strength": 1.5}, ("loraA", 1.0, 1.0)],
+            output_strength=1.0, clip_strength_multiplier=1.0, auto_strength="disabled",
+        )
+        self.assertEqual(key, key2)
+
     def test_build_stack_passes_through_inmemory_dict(self):
         """The dynamic stacker must pass dict entries carrying weights through
         as-is, not flatten them to a (name, ...) tuple that loses the weights."""

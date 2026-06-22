@@ -5152,21 +5152,25 @@ class LoRAOptimizer(_LoRAMergeBase):
         """
         h = hashlib.sha256()
         if lora_stack:
-            first = lora_stack[0] if len(lora_stack) > 0 else None
             entries = []
-            if isinstance(first, (tuple, list)):
-                for entry in lora_stack:
+            # Dispatch per item, not on the first element: a stack can mix tuple
+            # entries (LoRAStack / LoRAStackDynamic) with dict entries carrying
+            # in-memory weights (LoRAExtractFromModel). Both produce the same
+            # 6-field shape so a mixed stack still hashes consistently.
+            for entry in lora_stack:
+                if isinstance(entry, (tuple, list)):
                     cm = entry[3] if len(entry) > 3 else "all"
                     kf = entry[4] if len(entry) > 4 else "all"
                     pres = bool(entry[5]) if len(entry) > 5 else False
                     cs = float(entry[2]) if entry[2] is not None else -1.0
                     entries.append((str(entry[0]), float(entry[1]), cs, cm, kf, pres))
-            elif isinstance(first, dict):
-                for item in lora_stack:
-                    cm = item.get("conflict_mode", "all")
-                    kf = item.get("key_filter", "all")
-                    pres = bool(item.get("preserve", False))
-                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf, pres))
+                elif isinstance(entry, dict):
+                    cm = entry.get("conflict_mode", "all")
+                    kf = entry.get("key_filter", "all")
+                    pres = bool(entry.get("preserve", False))
+                    cs_raw = entry.get("clip_strength", None)
+                    cs = float(cs_raw) if cs_raw is not None else -1.0
+                    entries.append((str(entry.get("name", "")), float(entry.get("strength", 0)), cs, cm, kf, pres))
             entries.sort()
             h.update(json.dumps(entries).encode())
         h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={patch_compression}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}|dd={dare_dampening}|mso={merge_strategy_override}|mq={merge_refinement}|bp={strategy_set}|ap={architecture_preset}|asf={auto_strength_floor}|ds={decision_smoothing}|ssg={smooth_slerp_gate}".encode())
@@ -13220,21 +13224,25 @@ class LoRAConflictEditor(_LoRAMergeBase):
         """Cache key so ComfyUI skips re-execution when nothing changed."""
         h = hashlib.sha256()
         if lora_stack:
-            first = lora_stack[0] if len(lora_stack) > 0 else None
             entries = []
-            if isinstance(first, (tuple, list)):
-                for entry in lora_stack:
+            # Dispatch per item, not on the first element: a stack can mix tuple
+            # entries (LoRAStack / LoRAStackDynamic) with dict entries carrying
+            # in-memory weights (LoRAExtractFromModel). Both produce the same
+            # 6-field shape so a mixed stack still hashes consistently.
+            for entry in lora_stack:
+                if isinstance(entry, (tuple, list)):
                     cm = entry[3] if len(entry) > 3 else "all"
                     kf = entry[4] if len(entry) > 4 else "all"
                     pres = bool(entry[5]) if len(entry) > 5 else False
                     cs = float(entry[2]) if entry[2] is not None else -1.0
                     entries.append((str(entry[0]), float(entry[1]), cs, cm, kf, pres))
-            elif isinstance(first, dict):
-                for item in lora_stack:
-                    cm = item.get("conflict_mode", "all")
-                    kf = item.get("key_filter", "all")
-                    pres = bool(item.get("preserve", False))
-                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf, pres))
+                elif isinstance(entry, dict):
+                    cm = entry.get("conflict_mode", "all")
+                    kf = entry.get("key_filter", "all")
+                    pres = bool(entry.get("preserve", False))
+                    cs_raw = entry.get("clip_strength", None)
+                    cs = float(cs_raw) if cs_raw is not None else -1.0
+                    entries.append((str(entry.get("name", "")), float(entry.get("strength", 0)), cs, cm, kf, pres))
             entries.sort()
             h.update(json.dumps(entries).encode())
         h.update(f"|ms={merge_strategy}".encode())
@@ -13263,9 +13271,11 @@ class LoRAConflictEditor(_LoRAMergeBase):
             orig_pos = next(i for i, item in enumerate(normalized) if item["strength"] != 0)
             cm = kwargs.get(f"conflict_mode_{orig_pos + 1}", "auto")
             resolved = "all" if cm == "auto" else cm
-            first = lora_stack[0]
             item = active_loras[0]
-            if isinstance(first, dict):
+            # Emit dict when any incoming entry is a dict, so an in-memory entry
+            # (e.g. the extractor's) keeps its weights instead of collapsing to
+            # a name-only tuple.
+            if any(isinstance(e, dict) for e in lora_stack):
                 enriched = [dict(item, conflict_mode=resolved)]
             else:
                 # clip_strength may be None (dict-format LoRAs use global multiplier);
@@ -13495,8 +13505,11 @@ class LoRAConflictEditor(_LoRAMergeBase):
             strategy_reason = "manual"
 
         # --- 7. Build enriched output stack ---
-        first = lora_stack[0] if lora_stack else None
-        is_dict_format = isinstance(first, dict)
+        # Emit dict format if ANY incoming entry is a dict: dict entries can
+        # carry in-memory weights (e.g. LoRAExtractFromModel) that a (name, ...)
+        # tuple would drop. The normalized items already hold their loaded
+        # weights, so emitting file-based LoRAs as dicts is safe too.
+        is_dict_format = any(isinstance(e, dict) for e in lora_stack) if lora_stack else False
 
         enriched = []
         active_idx = 0
