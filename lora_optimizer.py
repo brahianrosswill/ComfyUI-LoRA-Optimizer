@@ -22,6 +22,7 @@ import glob
 import importlib
 import importlib.util
 import concurrent.futures
+import threading
 import folder_paths
 import comfy.utils
 import comfy.sd
@@ -77,6 +78,12 @@ else:
         _HAS_TRITON = False
         if _kernel_path and os.path.exists(_kernel_path):
             logging.warning(f"[LoRA Optimizer] kernel.py found but failed to load: {e}")
+
+
+# Set LORA_OPTIMIZER_PROFILE_MERGE=1 to log a per-phase Pass-2 merge time
+# breakdown (diff prep / merge-by-strategy / compression / fast linear path).
+# Diagnostic only — off by default; adds CUDA syncs that slow the run slightly.
+_PROFILE_MERGE = os.environ.get("LORA_OPTIMIZER_PROFILE_MERGE", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _triton_svdvals(mat2d: torch.Tensor, n_sv: int) -> torch.Tensor:
@@ -7368,6 +7375,30 @@ class LoRAOptimizer(_LoRAMergeBase):
         clip_patches = {}
         processed_keys = 0
         compressed_count = 0
+
+        # Opt-in per-phase merge profiling (LORA_OPTIMIZER_PROFILE_MERGE=1).
+        # _merge_prof maps phase -> [count, seconds]; updates are locked because
+        # the non-GPU path merges groups across threads.
+        _merge_prof = {} if _PROFILE_MERGE else None
+        _merge_prof_lock = threading.Lock() if _PROFILE_MERGE else None
+        _prof_cuda = (use_gpu and compute_device is not None
+                      and getattr(compute_device, "type", None) == "cuda")
+
+        def _prof_t():
+            """Synced timestamp — without the sync, async CUDA kernels would
+            attribute their cost to whatever line later forces a sync."""
+            if _prof_cuda:
+                torch.cuda.synchronize(compute_device)
+            return time.perf_counter()
+
+        def _prof_add(phase, dt):
+            with _merge_prof_lock:
+                e = _merge_prof.get(phase)
+                if e is None:
+                    _merge_prof[phase] = [1, dt]
+                else:
+                    e[0] += 1
+                    e[1] += dt
         strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "slerp": 0, "ties": 0, "consensus": 0}
         prefix_decisions = []  # list of (prefix, mode, conflict_ratio, n_loras) for block map
         has_virtual_loras = any(item.get("_precomputed_diffs") for item in active_loras)
@@ -7545,11 +7576,14 @@ class LoRAOptimizer(_LoRAMergeBase):
                     and merge_refinement == "none"
                     and not has_virtual_loras
                     and not stack_has_preserve):
+                _t_lin = _prof_t() if _merge_prof is not None else 0.0
                 linear_patch_info = self._build_exact_linear_patch(
                     target_group, active_loras, raw_n, pf_mode,
                     is_clip_key=is_clip_key, model_scale=model_auto_scale,
                 )
                 if linear_patch_info is not None:
+                    if _merge_prof is not None:
+                        _prof_add("linear_fast", _prof_t() - _t_lin)
                     patch = linear_patch_info["patch"]
                     weights = linear_patch_info["weights"]
                     input_norms_mean = (
@@ -7578,6 +7612,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     _gc_store(_gc_key, result, is_clip_key)
                     return result
 
+            _t_prep = _prof_t() if _merge_prof is not None else 0.0
             prepared = self._prepare_group_diffs(
                 target_group, active_loras, model, clip, compute_device,
                 clip_strength_multiplier=clip_strength_multiplier,
@@ -7585,6 +7620,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 diff_cache=_diff_cache,
                 auto_scale=model_auto_scale if not is_clip_key else 1.0,
             )
+            if _merge_prof is not None:
+                _prof_add("diff_prep", _prof_t() - _t_prep)
             if prepared is None or len(prepared["diffs"]) == 0:
                 return None
 
@@ -7635,6 +7672,7 @@ class LoRAOptimizer(_LoRAMergeBase):
             if (pf_mode == "weighted_average" and pf_opposing):
                 pf_quality = "none"
 
+            _t_merge = _prof_t() if _merge_prof is not None else 0.0
             merged_diff = self._merge_diffs(
                 diffs_list, pf_mode,
                 density=pf_density, majority_sign_method=pf_sign,
@@ -7650,6 +7688,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                 keep_on_gpu=True,
                 preserve_flags=preserve_list,
             )
+            if _merge_prof is not None:
+                _prof_add(f"merge:{pf_mode}", _prof_t() - _t_merge)
             merged_norm = merged_diff.float().norm().item() if merged_diff is not None else 0.0
             diffs_list.clear()  # Free input diffs from GPU
             if merged_diff is None:
@@ -7686,7 +7726,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                     and not (should_compress and resolved_svd_device is not None)):
                 merged_diff = merged_diff.cpu()
             if should_compress:
+                _t_comp = _prof_t() if _merge_prof is not None else 0.0
                 patch = self._compress_to_lowrank(merged_diff, compress_rank, svd_device=resolved_svd_device)
+                if _merge_prof is not None:
+                    _prof_add("compress", _prof_t() - _t_comp)
                 if patch is None:
                     # SVD failed to converge (e.g. ROCm) — keep the dense diff.
                     patch = ("diff", (merged_diff.cpu() if merged_diff.is_cuda else merged_diff,))
@@ -7825,6 +7868,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                          f"(different LoRA key formats targeting the same model weight — diffs accumulated)")
         logging.info(f"[LoRA Optimizer]   Model patches: {len(model_patches)}, "
                      f"CLIP patches: {len(clip_patches)} ({time.time() - t_pass2:.1f}s)")
+        if _merge_prof:
+            total_prof = sum(v[1] for v in _merge_prof.values()) or 1e-9
+            logging.info("[LoRA Optimizer]   Merge profile (phase: total_s, count, avg_ms, %):")
+            for phase, (cnt, secs) in sorted(_merge_prof.items(), key=lambda kv: -kv[1][1]):
+                logging.info(f"[LoRA Optimizer]     {phase:<22} {secs:6.2f}s  "
+                             f"n={cnt:<5} {secs / cnt * 1000:6.1f}ms  {secs / total_prof * 100:4.1f}%")
         if lowrank_count > 0:
             logging.info(f"[LoRA Optimizer]   Low-rank patches: {lowrank_count} "
                          f"(full-rank: {fullrank_count}) — "
