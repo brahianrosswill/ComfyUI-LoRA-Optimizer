@@ -349,6 +349,16 @@ _ARCH_PRESETS = {
 
 _VIDEO_ARCH_ORTHOGONAL_FLOOR = {"wan": 1.0, "ltx": 1.0, "acestep": 1.0}
 
+# Bounded-additive ("sum_preserve") headroom: for orthogonal, non-opposing
+# groups each LoRA keeps its full strength (Σ wᵢdᵢ) instead of weighted_average's
+# ÷Σw collapse that erases a style LoRA's emphasis. A per-group energy cap of
+# headroom × strongest-single-contribution keeps N≥3 stacks from oversaturating
+# (2 orthogonal LoRAs combine to √2 ≈ 1.41× < 1.5, so they pass through at full;
+# 3 equal ones hit √3 ≈ 1.73× and get scaled back to 1.5×). The cap is per-group
+# and independent of the global auto-strength floor, so it can't be defeated by
+# the orthogonal-floor clamp the way a raw weighted_sum flip would be.
+_ORTHO_SUM_HEADROOM = 1.5
+
 _ARCH_TO_PRESET = {
     "sdxl": "sd_unet", "sd15": "sd_unet", "unknown": "sd_unet",
     "flux": "dit", "wan": "dit", "zimage": "dit", "ltx": "dit",
@@ -3600,6 +3610,35 @@ class _LoRAMergeBase:
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
+        elif mode == "sum_preserve":
+            # Bounded additive: keep each LoRA at full strength (like weighted_sum,
+            # so a style LoRA's emphasis survives instead of being averaged to a
+            # convex fraction), then cap the group energy to headroom × the
+            # strongest single contribution so N>=3 orthogonal stacks don't
+            # oversaturate. Per-group cap — independent of the global auto-strength
+            # floor that would otherwise defeat a raw weighted_sum flip.
+            result = torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev)
+            max_single = 0.0
+            for idx in range(len(diffs_with_weights)):
+                diff, weight = diffs_with_weights[idx]
+                diffs_with_weights[idx] = None  # Free input diff early
+                contrib = diff.to(device=dev, dtype=torch.float32) * weight
+                del diff
+                single_norm = contrib.norm().item()
+                if single_norm > max_single:
+                    max_single = single_norm
+                result.add_(contrib)
+                del contrib
+            if selfish_additions is not None:
+                result = result + selfish_additions.to(device=result.device, dtype=torch.float32)
+            cap = _ORTHO_SUM_HEADROOM * max_single
+            if cap > 0:
+                result_norm = result.norm().item()
+                if result_norm > cap:
+                    result.mul_(cap / result_norm)
+            result = result.to(dtype)
+            return result.cpu() if to_cpu else result
+
         elif mode == "normalize":
             # Normalization by "energy" (sum of squared weights)
             weights = [w for _, w in diffs_with_weights]
@@ -5936,13 +5975,20 @@ class LoRAOptimizer(_LoRAMergeBase):
         }
 
     def _build_exact_linear_patch(self, target_group, active_loras, raw_n_loras,
-                                  mode, is_clip_key=False, model_scale=1.0):
+                                  mode, is_clip_key=False, model_scale=1.0,
+                                  norm_stats=None):
         """
         Build an exact low-rank patch for linear merges by concatenating factors
         instead of materializing a dense diff. Falls back to None when the group
         contains unsupported parameterizations (for example LoCon mid matrices).
+
+        ``sum_preserve`` builds the weighted_sum factors and folds a scalar
+        bounded-additive cap (headroom x strongest single contribution) into the
+        per-LoRA scales, computed from ``norm_stats`` (Pass-1 ``per_lora_norm_sq``
+        and ``pairwise_dots``). Returns None when those stats are unavailable so
+        the caller's dense path computes the exact cap instead.
         """
-        if mode not in ("weighted_sum", "weighted_average", "normalize"):
+        if mode not in ("weighted_sum", "weighted_average", "normalize", "sum_preserve"):
             return None
 
         pieces = []
@@ -6000,6 +6046,29 @@ class LoRAOptimizer(_LoRAMergeBase):
             if denom == 0:
                 return None
             per_lora_scales = {idx: w / denom for idx, w in lora_weights.items()}
+        elif mode == "sum_preserve":
+            # weighted_sum factors + a scalar bounded-additive cap from Pass-1 norms
+            if norm_stats is None:
+                return None  # dense path computes the exact cap instead
+            per_lora_norm_sq = norm_stats.get("per_lora_norm_sq", {})
+            pairwise_dots = norm_stats.get("pairwise_dots", {})
+            if not all(i in per_lora_norm_sq for i in lora_weights):
+                return None
+            max_single = 0.0
+            energy_sq = 0.0
+            for i, w in lora_weights.items():
+                nsq = max(per_lora_norm_sq.get(i, 0.0), 0.0)
+                energy_sq += (w * w) * nsq
+                s = abs(w) * math.sqrt(nsq)
+                if s > max_single:
+                    max_single = s
+            for (i, j), dot in pairwise_dots.items():
+                if i in lora_weights and j in lora_weights:
+                    energy_sq += 2.0 * lora_weights[i] * lora_weights[j] * dot
+            merged_norm = math.sqrt(max(energy_sq, 0.0))
+            cap = _ORTHO_SUM_HEADROOM * max_single
+            cap_scale = (cap / merged_norm) if (cap > 0 and merged_norm > cap) else 1.0
+            per_lora_scales = {idx: w * cap_scale for idx, w in lora_weights.items()}
         else:
             per_lora_scales = dict(lora_weights)
 
@@ -6263,6 +6332,16 @@ class LoRAOptimizer(_LoRAMergeBase):
         if (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)
                 and pf_mode == "weighted_average" and pf_orthogonal):
             pf_mode = "weighted_sum"
+        # Bounded-additive for orthogonal, non-opposing groups that didn't take
+        # the SLERP path (no_slerp / basic strategy sets). weighted_average's /Σw
+        # collapses each LoRA to a convex fraction — a style LoRA set to strength 2
+        # still lands below 1x its delta because s/(s+s') asymptotes to 1.0. For
+        # genuinely orthogonal deltas the honest combine is the (capped) sum, which
+        # keeps each LoRA's emphasis. Opposing groups keep weighted_average so their
+        # directional cancellation is preserved.
+        if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
+                and pf_orthogonal and not pf_opposing):
+            pf_mode = "sum_preserve"
         return pf_mode, pf_density, pf_sign, pf_orthogonal, pf_opposing
 
     def _build_report(self, lora_stats, pairwise_conflicts, collection_stats,
@@ -6463,9 +6542,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                 if strategy_counts.get("slerp", 0) > 0:
                     n = strategy_counts["slerp"]
                     lines.append(f"  slerp (low conflict):            {n:>4} groups ({n/total_pf:.0%})")
+                if strategy_counts.get("sum_preserve", 0) > 0:
+                    n = strategy_counts["sum_preserve"]
+                    lines.append(f"  sum_preserve (orthogonal):       {n:>4} groups ({n/total_pf:.0%})")
                 if strategy_counts.get("weighted_average", 0) > 0:
                     n = strategy_counts["weighted_average"]
-                    lines.append(f"  weighted_average (orthogonal):    {n:>4} groups ({n/total_pf:.0%})")
+                    lines.append(f"  weighted_average (opposing):     {n:>4} groups ({n/total_pf:.0%})")
                 if strategy_counts.get("consensus", 0) > 0:
                     n = strategy_counts["consensus"]
                     lines.append(f"  consensus (high similarity):     {n:>4} groups ({n/total_pf:.0%})")
@@ -6486,7 +6568,7 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             # Aggregate per block: dominant strategy, avg conflict, max n_loras
             # Priority-based dominant: ties > slerp > avg > sum (show most interesting)
-            mode_priority = {"ties": 4, "consensus": 3, "slerp": 2, "weighted_average": 1, "weighted_sum": 0}
+            mode_priority = {"ties": 5, "consensus": 4, "slerp": 3, "sum_preserve": 2, "weighted_average": 1, "weighted_sum": 0}
             block_summary = []
             for block_name, entries in block_data.items():
                 modes = [e[0] for e in entries]
@@ -6508,8 +6590,8 @@ class LoRAOptimizer(_LoRAMergeBase):
 
             lines.append("")
             lines.append("--- Block Strategy Map ---")
-            symbols = {"weighted_sum": "====", "slerp": "~~~~", "weighted_average": "----", "ties": "####", "consensus": "++++"}
-            labels = {"weighted_sum": "sum", "slerp": "slrp", "weighted_average": "avg", "ties": "TIES", "consensus": "cons"}
+            symbols = {"weighted_sum": "====", "sum_preserve": "+==+", "slerp": "~~~~", "weighted_average": "----", "ties": "####", "consensus": "++++"}
+            labels = {"weighted_sum": "sum", "sum_preserve": "sum+", "slerp": "slrp", "weighted_average": "avg", "ties": "TIES", "consensus": "cons"}
             # Find max block name length for alignment
             max_name = max(len(b[0]) for b in block_summary) if block_summary else 10
             for block_name, dominant, avg_conflict, n_loras_max, n_prefixes, mode_counts in block_summary:
@@ -6520,13 +6602,13 @@ class LoRAOptimizer(_LoRAMergeBase):
                 else:
                     # Show breakdown when block has mixed strategies
                     parts = []
-                    for m in ("weighted_sum", "weighted_average", "slerp", "consensus", "ties"):
+                    for m in ("weighted_sum", "sum_preserve", "weighted_average", "slerp", "consensus", "ties"):
                         if mode_counts.get(m, 0) > 0:
                             parts.append(f"{mode_counts[m]} {labels.get(m, m)}")
                     detail = f"{avg_conflict:.0%} conflict ({', '.join(parts)})"
                 count_str = f"({n_prefixes}x)" if n_prefixes > 1 else ""
                 lines.append(f"  {block_name:<{max_name}}  {sym}  {lbl:<5} {detail} {count_str}")
-            lines.append(f"  Legend: ==== sum  ~~~~ slerp  ---- avg  ++++ cons  #### TIES")
+            lines.append(f"  Legend: ==== sum  +==+ sum+  ~~~~ slerp  ---- avg  ++++ cons  #### TIES")
 
         # Reasoning
         lines.append("")
@@ -7157,7 +7239,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         clip_patches = {}
         processed_keys = 0
         compressed_count = 0
-        strategy_counts = {"weighted_sum": 0, "weighted_average": 0, "slerp": 0, "ties": 0, "consensus": 0}
+        strategy_counts = {"weighted_sum": 0, "sum_preserve": 0, "weighted_average": 0, "slerp": 0, "ties": 0, "consensus": 0}
         prefix_decisions = []  # list of (prefix, mode, conflict_ratio, n_loras) for block map
         has_virtual_loras = any(item.get("_precomputed_diffs") for item in active_loras)
         # conflict_mode masking depends on merge_refinement, so Pass-1 norms
@@ -7324,13 +7406,23 @@ class LoRAOptimizer(_LoRAMergeBase):
                 _group_patch_cache["misses"] += 1
 
             linear_stats = None
-            if (pf_mode in ("weighted_sum", "weighted_average", "normalize")
+            if (pf_mode in ("weighted_sum", "weighted_average", "normalize", "sum_preserve")
                     and sparsification == "disabled"
                     and merge_refinement == "none"
                     and not has_virtual_loras):
+                # sum_preserve needs Pass-1 norms to fold in its bounded-additive
+                # cap as a scalar (model branch only — clip norms aren't tracked
+                # per-branch here, so clip falls through to the exact dense path).
+                _ortho_norm_stats = None
+                if pf_mode == "sum_preserve" and not is_clip_key:
+                    _ortho_norm_stats = {
+                        "per_lora_norm_sq": pf.get("per_lora_norm_sq", {}),
+                        "pairwise_dots": pf.get("pairwise_dots", {}),
+                    }
                 linear_patch_info = self._build_exact_linear_patch(
                     target_group, active_loras, raw_n, pf_mode,
                     is_clip_key=is_clip_key, model_scale=model_auto_scale,
+                    norm_stats=_ortho_norm_stats,
                 )
                 if linear_patch_info is not None:
                     patch = linear_patch_info["patch"]
@@ -7612,6 +7704,7 @@ class LoRAOptimizer(_LoRAMergeBase):
         if optimization_mode == "per_prefix":
             logging.info(f"[LoRA Optimizer]   Per-prefix strategies: "
                          f"{strategy_counts.get('weighted_sum', 0)} sum, "
+                         f"{strategy_counts.get('sum_preserve', 0)} sum+, "
                          f"{strategy_counts.get('slerp', 0)} slerp, "
                          f"{strategy_counts.get('weighted_average', 0)} avg, "
                          f"{strategy_counts.get('consensus', 0)} cons, "
