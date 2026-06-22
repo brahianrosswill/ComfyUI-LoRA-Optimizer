@@ -5058,7 +5058,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP, never flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit, -1 = architecture-aware default (higher for motion-heavy video, lower for image models). Applies to negative LoRAs by magnitude (−1.75 → −1.49 at 0.85, sign kept) and to >1.0 strengths. An explicit value ≥0 applies to EVERY stack, not just orthogonal ones."
+                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP, never flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no floor at all (remove the limit — auto-strength may shrink strengths all the way down), -1 = architecture-aware default (higher for motion-heavy video, lower for image models). Applies to negative LoRAs by magnitude (−1.75 → −1.49 at 0.85, sign kept) and to >1.0 strengths. An explicit value ≥0 applies to EVERY stack, not just orthogonal ones."
                 }),
                 "free_vram_between_passes": (["disabled", "enabled"], {
                     "default": "disabled",
@@ -8369,7 +8369,7 @@ class LoRAMergeSettings:
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": 0.85, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Manual auto-strength floor — used only when auto_strength_floor_mode = 'manual'. Limits how much auto-strength may shrink your LoRA strengths: 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit. It's a floor on a uniform down-scale multiplier — auto-strength never scales UP and never flips signs, so this applies to negative LoRAs by magnitude (−1.75 → −1.49 at 0.85, sign kept) and to >1.0 strengths (1.7 → 1.45 at 0.85)."
+                    "tooltip": "Manual auto-strength floor — used only when auto_strength_floor_mode = 'manual'. Limits how much auto-strength may shrink your LoRA strengths: 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no floor at all (remove the limit — auto-strength may shrink strengths all the way down). It's a floor on a uniform down-scale multiplier — auto-strength never scales UP and never flips signs, so this applies to negative LoRAs by magnitude (−1.75 → −1.49 at 0.85, sign kept) and to >1.0 strengths (1.7 → 1.45 at 0.85)."
                 }),
                 "decision_smoothing": ("FLOAT", {
                     "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
@@ -8907,7 +8907,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP, never flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit, -1 = architecture-aware default. Applies to negative LoRAs by magnitude (sign kept) and to >1.0 strengths. An explicit value ≥0 applies to EVERY stack, not just orthogonal ones."
+                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP, never flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no floor at all (remove the limit — auto-strength may shrink strengths all the way down), -1 = architecture-aware default. Applies to negative LoRAs by magnitude (sign kept) and to >1.0 strengths. An explicit value ≥0 applies to EVERY stack, not just orthogonal ones."
                 }),
                 "evaluator": ("AUTOTUNER_EVALUATOR", {
                     "tooltip": "Optional external evaluator spec. Use this to blend prompt/reference scoring from your own generation code with the built-in merge metrics."
@@ -11959,7 +11959,7 @@ class LoRAMergeSelector(LoRAOptimizer):
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP or flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit. Applies to negative LoRAs by magnitude (sign kept) and to >1.0 strengths. Leave at -1 to use the architecture-aware default (or the AutoTuner's stored setting when available)."
+                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP or flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no floor at all (remove the limit — auto-strength may shrink strengths all the way down). Applies to negative LoRAs by magnitude (sign kept) and to >1.0 strengths. Leave at -1 to use the architecture-aware default (or the AutoTuner's stored setting when available)."
                 }),
                 "decision_smoothing": ("FLOAT", {
                     "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
