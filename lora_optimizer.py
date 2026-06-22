@@ -710,7 +710,15 @@ class LoRAStackDynamic:
         if lora_stack is not None:
             for l in lora_stack:
                 if isinstance(l, dict):
-                    if l.get("name", "None") != "None":
+                    if l.get("name", "None") == "None":
+                        continue
+                    # Entries that carry in-memory weights (e.g. the extractor's
+                    # output) must be passed through as-is — flattening them to a
+                    # (name, ...) tuple loses the weights and makes the optimizer
+                    # try to load a file that doesn't exist on disk.
+                    if l.get("lora") is not None:
+                        loras.append(l)
+                    else:
                         s = l.get("strength", 1.0)
                         cm = l.get("conflict_mode", "all")
                         kf = l.get("key_filter", "all")
@@ -4041,13 +4049,16 @@ class _LoRAMergeBase:
         if not lora_stack:
             return []
 
-        first = lora_stack[0]
         normalized = []
 
-        if isinstance(first, (tuple, list)):
-            # Standard format: (lora_name, model_strength, clip_strength[, conflict_mode[, key_filter]])
-            for entry in lora_stack:
-                if not isinstance(entry, (tuple, list)) or len(entry) < 3:
+        # Dispatch per item, not on the first element: a stack can mix tuple
+        # entries (file references from LoRAStack / LoRAStackDynamic) with dict
+        # entries carrying in-memory weights (e.g. LoRAExtractFromModel). The
+        # old first-element branch silently dropped the minority type.
+        for entry in lora_stack:
+            if isinstance(entry, (tuple, list)):
+                # Standard format: (lora_name, model_strength, clip_strength[, conflict_mode[, key_filter[, preserve]]])
+                if len(entry) < 3:
                     logging.warning("[LoRA Optimizer] Skipping malformed tuple entry (expected 3 elements)")
                     continue
                 lora_name, model_str, clip_str = entry[0], entry[1], entry[2]
@@ -4083,27 +4094,26 @@ class _LoRAMergeBase:
                     "metadata": metadata,
                 })
 
-        elif isinstance(first, dict):
-            # LoRAStack format: already loaded dicts
-            for item in lora_stack:
-                if not isinstance(item, dict) or "lora" not in item or "strength" not in item or "name" not in item:
+            elif isinstance(entry, dict):
+                # LoRAStack / extractor format: already loaded dicts
+                if "lora" not in entry or "strength" not in entry or "name" not in entry:
                     logging.warning("[LoRA Optimizer] Skipping malformed dict entry (expected keys: name, lora, strength)")
                     continue
                 normalized.append({
-                    "name": item["name"],
-                    "lora": item["lora"],
-                    "strength": item["strength"],
-                    "clip_strength": item.get("clip_strength", None),
-                    "conflict_mode": item.get("conflict_mode", "all"),
-                    "key_filter": item.get("key_filter", "all"),
-                    "preserve": bool(item.get("preserve", False)),
-                    "metadata": item.get("metadata", {}),
-                    "_precomputed_diffs": item.get("_precomputed_diffs", False),
+                    "name": entry["name"],
+                    "lora": entry["lora"],
+                    "strength": entry["strength"],
+                    "clip_strength": entry.get("clip_strength", None),
+                    "conflict_mode": entry.get("conflict_mode", "all"),
+                    "key_filter": entry.get("key_filter", "all"),
+                    "preserve": bool(entry.get("preserve", False)),
+                    "metadata": entry.get("metadata", {}),
+                    "_precomputed_diffs": entry.get("_precomputed_diffs", False),
                 })
 
-        else:
-            logging.warning("[LoRA Optimizer] Unrecognized stack format")
-            return []
+            else:
+                logging.warning("[LoRA Optimizer] Skipping unrecognized stack entry")
+                continue
 
         # Always detect architecture (used for preset selection even without key normalization)
         if len(normalized) > 0:

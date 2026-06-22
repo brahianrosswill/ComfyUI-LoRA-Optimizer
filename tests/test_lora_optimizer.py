@@ -962,6 +962,42 @@ class PreserveFlagTests(unittest.TestCase):
         ])
         self.assertTrue(dct[0]["preserve"])
 
+    def test_normalize_stack_mixed_tuple_and_dict(self):
+        """A stack mixing file-ref tuples with in-memory dict entries (e.g. a
+        LoRAStackDynamic feeding LoRAExtractFromModel) keeps both — the old
+        first-element dispatch dropped whichever type wasn't first."""
+        opt = lora_optimizer.LoRAOptimizer()
+        opt.loaded_loras = {"loraA": {"k": 1}}
+        extracted = {"name": "<extracted>", "lora": {"w": 2}, "strength": 1.5}
+
+        # tuple first, dict last
+        out = opt._normalize_stack([("loraA", 1.0, 1.0), extracted])
+        self.assertEqual([e["name"] for e in out], ["loraA", "<extracted>"])
+        self.assertEqual(out[1]["lora"], {"w": 2})
+
+        # dict first, tuple last
+        out2 = opt._normalize_stack([extracted, ("loraA", 1.0, 1.0)])
+        self.assertEqual([e["name"] for e in out2], ["<extracted>", "loraA"])
+
+    def test_build_stack_passes_through_inmemory_dict(self):
+        """The dynamic stacker must pass dict entries carrying weights through
+        as-is, not flatten them to a (name, ...) tuple that loses the weights."""
+        node = lora_optimizer.LoRAStackDynamic()
+        extracted = {"name": "<extracted>", "lora": {"w": 1}, "strength": 1.0}
+        with mock.patch.object(
+            lora_optimizer.LoRAStackDynamic, "_resolve_lora_name",
+            side_effect=lambda n: n,
+        ):
+            result, = node.build_stack(
+                settings_visibility="simple", input_mode="text", lora_count=1,
+                lora_name_text_1="lora_a", strength_1=1.0,
+                lora_stack=[extracted],
+            )
+        # the in-memory dict survives as a dict (not converted to a tuple)
+        dicts = [e for e in result if isinstance(e, dict)]
+        self.assertEqual(len(dicts), 1)
+        self.assertEqual(dicts[0]["lora"], {"w": 1})
+
     def test_build_stack_advanced_emits_preserve(self):
         node = lora_optimizer.LoRAStackDynamic()
         with mock.patch.object(
