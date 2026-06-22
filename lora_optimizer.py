@@ -80,10 +80,25 @@ else:
             logging.warning(f"[LoRA Optimizer] kernel.py found but failed to load: {e}")
 
 
-# Set LORA_OPTIMIZER_PROFILE_MERGE=1 to log a per-phase Pass-2 merge time
-# breakdown (diff prep / merge-by-strategy / compression / fast linear path).
-# Diagnostic only — off by default; adds CUDA syncs that slow the run slightly.
+# Log a per-phase Pass-2 merge time breakdown (diff prep / merge-by-strategy /
+# compression / fast linear path). Diagnostic only — adds CUDA syncs that slow
+# the run slightly. Enable EITHER by env (LORA_OPTIMIZER_PROFILE_MERGE=1) before
+# launch, OR — when env vars are awkward to set in your ComfyUI launcher — by
+# creating an empty file named PROFILE_MERGE in the autotuner_memory dir
+# (checked per-merge, no restart needed):
+#   touch <models>/autotuner_memory/PROFILE_MERGE
 _PROFILE_MERGE = os.environ.get("LORA_OPTIMIZER_PROFILE_MERGE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _merge_profiling_enabled():
+    """True if merge profiling is on via env var (import-time) or a sentinel
+    file (runtime — flip without restarting ComfyUI)."""
+    if _PROFILE_MERGE:
+        return True
+    try:
+        return os.path.exists(os.path.join(AUTOTUNER_MEMORY_DIR, "PROFILE_MERGE"))
+    except Exception:
+        return False
 
 
 def _triton_svdvals(mat2d: torch.Tensor, n_sv: int) -> torch.Tensor:
@@ -7379,8 +7394,9 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Opt-in per-phase merge profiling (LORA_OPTIMIZER_PROFILE_MERGE=1).
         # _merge_prof maps phase -> [count, seconds]; updates are locked because
         # the non-GPU path merges groups across threads.
-        _merge_prof = {} if _PROFILE_MERGE else None
-        _merge_prof_lock = threading.Lock() if _PROFILE_MERGE else None
+        _profiling_on = _merge_profiling_enabled()
+        _merge_prof = {} if _profiling_on else None
+        _merge_prof_lock = threading.Lock() if _profiling_on else None
         _prof_cuda = (use_gpu and compute_device is not None
                       and getattr(compute_device, "type", None) == "cuda")
 
