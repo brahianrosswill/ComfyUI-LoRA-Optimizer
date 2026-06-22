@@ -47,24 +47,36 @@ from safetensors import safe_open
 from safetensors.torch import save_file
 
 # --- Triton SVD kernel (optional) ---
+# Set LORA_OPTIMIZER_DISABLE_TRITON=1 to skip the bundled Triton SVD kernel and
+# fall back to torch.linalg. The kernel can hard-crash the process (e.g.
+# "__triton_launcher.c" abort, no Python traceback) on some GPU/driver/torch
+# combinations — this is the escape hatch when that happens.
 _kernel_path = None
-try:
-    _kernel_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kernel.py")
-    _kernel_spec = importlib.util.spec_from_file_location("lora_optimizer_kernel", _kernel_path)
-    _kernel_mod = importlib.util.module_from_spec(_kernel_spec)
-    _kernel_spec.loader.exec_module(_kernel_mod)
-    _batched_svd = _kernel_mod.batched_svd
-    _batched_procrustes = _kernel_mod.batched_procrustes
-    _HAS_SVD_KERNEL = True
-    _HAS_TRITON = _kernel_mod.HAS_TRITON
-    logging.info(f"[LoRA Optimizer] SVD kernel loaded (Triton={_HAS_TRITON})")
-except Exception as e:
+_DISABLE_TRITON = os.environ.get("LORA_OPTIMIZER_DISABLE_TRITON", "").strip().lower() in ("1", "true", "yes", "on")
+if _DISABLE_TRITON:
     _batched_svd = None
     _batched_procrustes = None
     _HAS_SVD_KERNEL = False
     _HAS_TRITON = False
-    if _kernel_path and os.path.exists(_kernel_path):
-        logging.warning(f"[LoRA Optimizer] kernel.py found but failed to load: {e}")
+    logging.info("[LoRA Optimizer] Triton SVD kernel disabled via LORA_OPTIMIZER_DISABLE_TRITON; using torch.linalg fallback")
+else:
+    try:
+        _kernel_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kernel.py")
+        _kernel_spec = importlib.util.spec_from_file_location("lora_optimizer_kernel", _kernel_path)
+        _kernel_mod = importlib.util.module_from_spec(_kernel_spec)
+        _kernel_spec.loader.exec_module(_kernel_mod)
+        _batched_svd = _kernel_mod.batched_svd
+        _batched_procrustes = _kernel_mod.batched_procrustes
+        _HAS_SVD_KERNEL = True
+        _HAS_TRITON = _kernel_mod.HAS_TRITON
+        logging.info(f"[LoRA Optimizer] SVD kernel loaded (Triton={_HAS_TRITON})")
+    except Exception as e:
+        _batched_svd = None
+        _batched_procrustes = None
+        _HAS_SVD_KERNEL = False
+        _HAS_TRITON = False
+        if _kernel_path and os.path.exists(_kernel_path):
+            logging.warning(f"[LoRA Optimizer] kernel.py found but failed to load: {e}")
 
 
 def _triton_svdvals(mat2d: torch.Tensor, n_sv: int) -> torch.Tensor:
