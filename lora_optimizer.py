@@ -226,7 +226,13 @@ AUTOTUNER_MEMORY_VERSION = 1
 # preservation is opt-in only). Ranking shifts only for stacks that set the flag.
 # 1.11.1: per-LoRA merge flags (preserve/conflict_mode/key_filter) now fold into the
 # AutoTuner cache keys; bump invalidates any rankings cached during 1.11.0 development.
-AUTOTUNER_ALGO_VERSION = "1.11.1"
+# 1.11.2: diff handling is now fp32 end-to-end. Low-rank diffs bypass the cache and
+# recompute on GPU (factors smaller than the dense diff); the diff cache stores fp32
+# instead of fp16; and "auto" mode recomputes past the RAM budget instead of spilling
+# dense diffs to disk. A cache hit is now numerically identical to a recompute, so
+# results are independent of diff_cache_mode and match the old "disabled" path. Scores
+# shift ~1e-5 vs prior fp16-cached runs; bump invalidates those rankings.
+AUTOTUNER_ALGO_VERSION = "1.11.2"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -820,12 +826,11 @@ class _DiffCache:
                 self._ram_limit = 4 * 1024 * 1024 * 1024
 
     def _use_disk(self, tensor_bytes):
-        if self.mode == "disk":
-            return True
-        if self.mode == "ram":
-            return False
-        # auto: spill to disk if RAM limit would be exceeded
-        return (self._ram_bytes + tensor_bytes) > self._ram_limit
+        # Only the explicit "disk" mode spills to disk now. "auto" caps RAM and
+        # recomputes the overflow on the next miss (recompute beats dense-diff
+        # disk I/O — that spill once made Pass-2 98% disk wait), "ram" is
+        # unbounded RAM. Disk caching stays available as an explicit opt-in.
+        return self.mode == "disk"
 
     def _disk_has_space(self, tensor_bytes):
         """True if writing tensor_bytes keeps the temp volume above the reserve."""
@@ -889,16 +894,19 @@ class _DiffCache:
     def put(self, key, tensor):
         if key in self._ram_store or key in self._disk_store:
             return
-        cached = tensor.detach()
-        if cached.dtype == torch.float32:
-            # Halve fp32 to bound memory — cast on the source device so a GPU
-            # tensor transfers half the bytes (fp32→fp16 RN cast is
-            # bit-identical on GPU and CPU); 16-bit dtypes are kept as-is so
-            # cached diffs stay bit-identical to fresh ones (bf16 -> fp16
-            # would silently quantize)
-            cached = cached.half()
-        cached = cached.cpu()
+        # Store exactly what a recompute produces — no fp16 downcast — so a
+        # cache hit is numerically identical to recomputing the diff. Results
+        # are then independent of diff_cache_mode and of which diffs happened to
+        # fit in the cache (they match the "disabled" path). Pairs with auto
+        # mode's recompute-past-budget below; the bypass in _prepare_group_diffs
+        # already keeps cheap low-rank diffs out of here entirely.
+        cached = tensor.detach().cpu()
         tensor_bytes = cached.nelement() * cached.element_size()
+        # auto mode caps RAM: decline past the budget so the diff recomputes on
+        # the next miss (cheaper and more deterministic than a disk spill).
+        if self.mode == "auto" and (self._ram_bytes + tensor_bytes) > self._ram_limit:
+            self._ram_overflow_skips = getattr(self, "_ram_overflow_skips", 0) + 1
+            return
         if self._use_disk(tensor_bytes) and not self._disk_failed:
             if not self._disk_has_space(tensor_bytes):
                 # Volume nearly full: skip caching this diff entirely (it will be
@@ -8511,7 +8519,7 @@ class LoRAAutoTunerSettings:
                 }),
                 "diff_cache_mode": (["disabled", "auto", "ram", "disk"], {
                     "default": "auto",
-                    "tooltip": "Caches intermediate data to speed up the sweep. 'auto' (recommended): uses RAM first, spills to disk if needed. 'disabled': slower but uses no extra memory."
+                    "tooltip": "Caches intermediate data to speed up the sweep. 'auto' (recommended): uses RAM up to diff_cache_ram_pct, then recomputes the rest (no disk). 'disabled': slower but uses no extra memory."
                 }),
                 "diff_cache_ram_pct": ("FLOAT", {
                     "default": 0.5, "min": 0.1, "max": 0.9, "step": 0.05,
@@ -8872,11 +8880,11 @@ class LoRAAutoTuner(LoRAOptimizer):
                 }),
                 "diff_cache_mode": (["disabled", "auto", "ram", "disk"], {
                     "default": "auto",
-                    "tooltip": "Cache LoRA diffs across candidates to skip redundant computation. 'disabled' recomputes each time (slowest, no extra memory). 'auto' uses RAM up to diff_cache_ram_pct of free memory then spills to disk (recommended). 'ram' caches entirely in memory (~1.5GB SDXL, ~6GB Flux — fastest). 'disk' caches entirely to temp files (~1-10ms per diff vs 5-50ms to recompute). WARNING: ram/disk can use significant memory/storage on large models."
+                    "tooltip": "Cache LoRA diffs across candidates to skip redundant computation. 'disabled' recomputes each time (no extra memory). 'auto' (recommended) uses RAM up to diff_cache_ram_pct of free memory then recomputes the overflow — low-rank diffs are recomputed anyway (cheaper than a cache read). 'ram' caches entirely in memory (fastest, unbounded). 'disk' caches to temp files (opt-in; only worth it for diffs expensive to recompute on a fast temp volume). Diffs are cached in fp32 so a cache hit is identical to a recompute. WARNING: ram/disk can use significant memory/storage on large models."
                 }),
                 "diff_cache_ram_pct": ("FLOAT", {
                     "default": 0.5, "min": 0.1, "max": 0.9, "step": 0.05,
-                    "tooltip": "Fraction of free system RAM to use for diff cache in 'auto' mode. 0.5 = use up to 50% of available RAM before spilling to disk."
+                    "tooltip": "Fraction of free system RAM to use for diff cache in 'auto' mode. 0.5 = use up to 50% of available RAM; diffs past that budget are recomputed on demand (not spilled to disk)."
                 }),
                 "vram_budget": ("FLOAT", {
                     "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,

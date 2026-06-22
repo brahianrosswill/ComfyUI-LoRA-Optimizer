@@ -4464,6 +4464,29 @@ class TestDiffCacheRamLimit(unittest.TestCase):
             cache.put(("alias_a", 0), torch.zeros(4, 4))
         self.assertIn(("alias_a", 0), cache)
 
+    @unittest.skipIf(torch is None, "torch is not installed")
+    def test_cache_stores_fp32_bit_identical(self):
+        """A cache hit must equal the stored diff bit-for-bit (fp32, no fp16
+        downcast) so it matches a fresh recompute — results then don't depend
+        on whether a diff was cached or recomputed."""
+        cache = lora_optimizer._DiffCache(mode="ram")
+        diff = torch.randn(8, 8, dtype=torch.float32)
+        cache.put(("alias_a", 0), diff)
+        got = cache.get(("alias_a", 0))
+        self.assertEqual(got.dtype, torch.float32)
+        torch.testing.assert_close(got, diff, rtol=0, atol=0)
+
+    @unittest.skipIf(torch is None, "torch is not installed")
+    def test_auto_mode_declines_past_ram_budget_no_disk(self):
+        """auto mode recomputes (declines to cache) past the RAM budget instead
+        of spilling dense diffs to disk."""
+        fake_vm = types.SimpleNamespace(available=1024)  # ram_limit = 512 bytes
+        with mock.patch("psutil.virtual_memory", return_value=fake_vm):
+            cache = lora_optimizer._DiffCache(mode="auto", ram_pct=0.5)
+        cache.put(("alias_a", 0), torch.zeros(64, 64, dtype=torch.float32))  # 16KB > 512
+        self.assertNotIn(("alias_a", 0), cache)   # declined -> caller recomputes
+        self.assertEqual(len(cache._disk_store), 0)  # NOT spilled to disk
+
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestDiffCacheWarming(unittest.TestCase):
