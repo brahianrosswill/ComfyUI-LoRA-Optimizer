@@ -1146,6 +1146,22 @@ class LoRASettingsNodeTests(unittest.TestCase):
         self.assertAlmostEqual(settings["vram_budget"], 0.0)
         self.assertEqual(settings["cache_patches"], "enabled")
 
+    def test_merge_settings_floor_mode_resolution(self):
+        """The mode switch resolves to the same downstream value the old float
+        sentinel produced: 'auto' -> -1.0 (ignores slider); 'manual' -> slider
+        clamped to [0,1]."""
+        node = lora_optimizer.LoRAMergeSettings()
+        base = self._build_defaults(lora_optimizer.LoRAMergeSettings.INPUT_TYPES())
+        auto = node.build_settings(
+            **{**base, "auto_strength_floor_mode": "auto", "auto_strength_floor": 0.5})[0]
+        self.assertAlmostEqual(auto["auto_strength_floor"], -1.0)
+        manual = node.build_settings(
+            **{**base, "auto_strength_floor_mode": "manual", "auto_strength_floor": 0.5})[0]
+        self.assertAlmostEqual(manual["auto_strength_floor"], 0.5)
+        clamped = node.build_settings(
+            **{**base, "auto_strength_floor_mode": "manual", "auto_strength_floor": -1.0})[0]
+        self.assertAlmostEqual(clamped["auto_strength_floor"], 0.0)
+
     def test_optimizer_settings_build_returns_advanced_mode(self):
         node = lora_optimizer.LoRAOptimizerSettings()
         inputs = lora_optimizer.LoRAOptimizerSettings.INPUT_TYPES()
@@ -1314,18 +1330,31 @@ class LoRASettingsNodeTests(unittest.TestCase):
                              f"Default mismatch for {key}: merge_settings={default}, simple={simple[key]}")
 
     def test_merge_settings_defaults_match_input_types(self):
-        """Verify _DEFAULTS dict stays in sync with INPUT_TYPES defaults."""
+        """_DEFAULTS holds the RESOLVED downstream settings (the fallback used
+        when merge_settings isn't connected), so it mirrors INPUT_TYPES defaults
+        EXCEPT where build_settings resolves a widget: 'auto_strength_floor_mode'
+        is resolved away, and 'auto_strength_floor' defaults to the -1 'auto'
+        sentinel rather than the manual slider's value."""
         inputs = lora_optimizer.LoRAMergeSettings.INPUT_TYPES()
         defaults_dict = lora_optimizer.LoRAMergeSettings._DEFAULTS
+        resolved = {"auto_strength_floor", "auto_strength_floor_mode"}
         for key, spec in inputs["required"].items():
+            if key in resolved:
+                continue
             if isinstance(spec[0], list):
                 input_default = spec[1].get("default", spec[0][0])
             else:
                 input_default = spec[1]["default"]
             self.assertEqual(defaults_dict[key], input_default,
                              f"_DEFAULTS[{key}]={defaults_dict[key]} != INPUT_TYPES default={input_default}")
-        self.assertEqual(set(defaults_dict.keys()), set(inputs["required"].keys()),
-                         "_DEFAULTS keys don't match INPUT_TYPES keys")
+        # The mode switch is resolved into auto_strength_floor, not a downstream key
+        self.assertNotIn("auto_strength_floor_mode", defaults_dict)
+        # Default (auto) resolves to the -1 sentinel downstream
+        self.assertAlmostEqual(defaults_dict["auto_strength_floor"], -1.0)
+        self.assertEqual(
+            set(defaults_dict.keys()),
+            set(inputs["required"].keys()) - {"auto_strength_floor_mode"},
+            "_DEFAULTS keys don't match INPUT_TYPES keys (minus the resolved mode switch)")
 
 
     # --- Merge formula parser tests ---

@@ -5058,7 +5058,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Minimum auto-strength scale factor for orthogonal LoRAs. -1 = architecture-aware default (1.0 for motion-heavy video architectures, lower for image models). Set manually to preserve more or less independent LoRA energy."
+                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP, never flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit, -1 = architecture-aware default (higher for motion-heavy video, lower for image models). Applies to negative LoRAs by magnitude (−1.75 → −1.49 at 0.85, sign kept) and to >1.0 strengths. An explicit value ≥0 applies to EVERY stack, not just orthogonal ones."
                 }),
                 "free_vram_between_passes": (["disabled", "enabled"], {
                     "default": "disabled",
@@ -8368,8 +8368,8 @@ class LoRAMergeSettings:
                     "tooltip": "Tells the optimizer what type of model you're using so it can pick the best merge settings. 'auto' detects it for you. 'acestep_dit' is tuned for ACE-Step music LoRA merging with voice preservation. Only change if auto-detection gets it wrong."
                 }),
                 "auto_strength_floor": ("FLOAT", {
-                    "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "How much the weakest LoRA is allowed to be scaled down during auto-strength. Higher values keep all LoRAs more visible. -1 picks a good default based on model type."
+                    "default": 0.85, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Manual auto-strength floor — used only when auto_strength_floor_mode = 'manual'. Limits how much auto-strength may shrink your LoRA strengths: 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit. It's a floor on a uniform down-scale multiplier — auto-strength never scales UP and never flips signs, so this applies to negative LoRAs by magnitude (−1.75 → −1.49 at 0.85, sign kept) and to >1.0 strengths (1.7 → 1.45 at 0.85)."
                 }),
                 "decision_smoothing": ("FLOAT", {
                     "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
@@ -8387,6 +8387,10 @@ class LoRAMergeSettings:
                     "default": "enabled",
                     "tooltip": "Keeps the merge result in memory so re-running the workflow is instant. Disable to free RAM — recommended for large video models."
                 }),
+                "auto_strength_floor_mode": (["auto", "manual"], {
+                    "default": "auto",
+                    "tooltip": "How the auto-strength floor is chosen. 'auto' (recommended): architecture-aware default — higher (less shrink) for motion-heavy video models, lower for image models. 'manual': use the auto_strength_floor slider above."
+                }),
             },
         }
 
@@ -8401,11 +8405,18 @@ class LoRAMergeSettings:
 
     def build_settings(self, normalize_keys, architecture_preset,
                        auto_strength_floor, decision_smoothing,
-                       smooth_slerp_gate, vram_budget, cache_patches):
+                       smooth_slerp_gate, vram_budget, cache_patches,
+                       auto_strength_floor_mode="auto"):
+        # The slider is the MANUAL floor [0,1]; "auto" emits the -1 sentinel the
+        # merge math reads as "architecture-aware default". Downstream behavior
+        # and cache keys are unchanged — this only splits the old -1 sentinel out
+        # of the numeric range into its own switch.
+        resolved_floor = (max(0.0, min(1.0, auto_strength_floor))
+                          if auto_strength_floor_mode == "manual" else -1.0)
         return ({
             "normalize_keys": normalize_keys,
             "architecture_preset": architecture_preset,
-            "auto_strength_floor": auto_strength_floor,
+            "auto_strength_floor": resolved_floor,
             "decision_smoothing": decision_smoothing,
             "smooth_slerp_gate": smooth_slerp_gate,
             "vram_budget": vram_budget,
@@ -8896,7 +8907,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Minimum auto-strength scale factor for orthogonal LoRAs. -1 = architecture-aware default. Increase toward 1.0 to preserve more independent LoRA energy."
+                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP, never flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit, -1 = architecture-aware default. Applies to negative LoRAs by magnitude (sign kept) and to >1.0 strengths. An explicit value ≥0 applies to EVERY stack, not just orthogonal ones."
                 }),
                 "evaluator": ("AUTOTUNER_EVALUATOR", {
                     "tooltip": "Optional external evaluator spec. Use this to blend prompt/reference scoring from your own generation code with the built-in merge metrics."
@@ -11948,7 +11959,7 @@ class LoRAMergeSelector(LoRAOptimizer):
                 }),
                 "auto_strength_floor": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "Minimum auto-strength scale factor for orthogonal LoRAs. Leave at -1 to use the AutoTuner's stored setting when available."
+                    "tooltip": "Floor on how much auto-strength may shrink your LoRA strengths — a uniform down-scale multiplier (never scales UP or flips signs). 1.0 = don't shrink at all, 0.5 = shrink to at most half, 0 = no limit. Applies to negative LoRAs by magnitude (sign kept) and to >1.0 strengths. Leave at -1 to use the architecture-aware default (or the AutoTuner's stored setting when available)."
                 }),
                 "decision_smoothing": ("FLOAT", {
                     "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05,
