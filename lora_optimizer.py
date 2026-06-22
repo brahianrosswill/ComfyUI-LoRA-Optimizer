@@ -13798,6 +13798,13 @@ class LoRAExtractFromModel:
                 f"Proceeding with shared keys only."
             )
 
+        # SVD over every layer of a large model is the bottleneck. The source
+        # weights are usually offloaded to CPU after a merge/sample, so move
+        # each delta to the GPU for the decomposition; the robust SVD falls
+        # back to CPU on its own if a layer fails to converge there.
+        compute_device = LoRAOptimizer._get_compute_device()
+        logging.info(f"[LoRAExtract] SVD device: {compute_device}")
+
         # Counters for diagnostics
         n_processed = 0
         n_skipped_zero = 0
@@ -13829,13 +13836,10 @@ class LoRAExtractFromModel:
             if not W_base.is_floating_point():
                 continue
 
-            # The two models' weights may sit on different devices (ComfyUI's
-            # dynamic VRAM offloads some to CPU and keeps others on GPU), so
-            # align onto a single device before subtracting. Prefer the GPU
-            # tensor's device when one side is already there; the robust SVD
-            # falls back to CPU on its own if the GPU path fails.
-            target_device = W_fine.device if W_fine.is_cuda else W_base.device
-            delta = W_fine.to(target_device, torch.float32) - W_base.to(target_device, torch.float32)
+            # Subtract on the compute device. This both fixes the cross-device
+            # case (ComfyUI may keep base on CPU and finetuned on GPU, or vice
+            # versa) and runs the downstream SVD on the GPU when available.
+            delta = W_fine.to(compute_device, torch.float32) - W_base.to(compute_device, torch.float32)
             result = _extract_lora_svd(delta, rank=rank, rank_mode=rank_mode, energy_threshold=energy_threshold)
 
             if result is None:
