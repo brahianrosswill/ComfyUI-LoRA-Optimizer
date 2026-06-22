@@ -4842,6 +4842,36 @@ class LoRAMergeFormula:
         return (output,)
 
 
+def _full_svd_robust(mat: torch.Tensor):
+    """Full SVD -> (U, S, Vh), robust to non-convergence on ROCm/MAGMA.
+
+    Unlike _truncated_svd_robust, this keeps the complete singular spectrum
+    (needed for the auto-rank energy threshold). Tries the input device, then
+    CPU (LAPACK is far more stable), then CPU with a tiny jitter that separates
+    repeated singular values. Returns None if all attempts fail.
+    """
+    try:
+        return torch.linalg.svd(mat, full_matrices=False)
+    except Exception:
+        pass
+    mat_cpu = mat.detach().to("cpu", torch.float32)
+    try:
+        return torch.linalg.svd(mat_cpu, full_matrices=False)
+    except Exception:
+        pass
+    try:
+        scale = mat_cpu.abs().mean()
+        if scale > 0:
+            g = torch.Generator().manual_seed(0)
+            mat_cpu = mat_cpu + (scale * 1e-6) * torch.randn(
+                mat_cpu.shape, generator=g, dtype=mat_cpu.dtype)
+        return torch.linalg.svd(mat_cpu, full_matrices=False)
+    except Exception:
+        logging.warning("[LoRAExtract] SVD failed to converge on all paths "
+                        "(GPU/CPU/jitter); skipping this layer.")
+        return None
+
+
 def _extract_lora_svd(delta: torch.Tensor, rank: int, rank_mode: str, energy_threshold: float):
     """
     SVD-decompose a weight delta into (lora_up, lora_down, alpha).
@@ -4870,7 +4900,10 @@ def _extract_lora_svd(delta: torch.Tensor, rank: int, rank_mode: str, energy_thr
 
     delta = delta.float()
 
-    U, S, Vh = torch.linalg.svd(delta, full_matrices=False)
+    svd_result = _full_svd_robust(delta)
+    if svd_result is None:
+        return None
+    U, S, Vh = svd_result
 
     # Apply singular value floor to exclude noise
     sv_floor = SV_FLOOR_RATIO * S[0].item()
@@ -4891,7 +4924,10 @@ def _extract_lora_svd(delta: torch.Tensor, rank: int, rank_mode: str, energy_thr
     lora_up = U[:, :r] * sqrt_s.unsqueeze(0)    # (rows, r)
     lora_down = sqrt_s.unsqueeze(1) * Vh[:r, :]  # (r, cols)
 
-    return lora_up, lora_down, float(r)
+    # Land the factors on CPU: the SVD may have run on GPU, but extracted LoRA
+    # tensors live on CPU like a freshly loaded .safetensors, and keeping
+    # hundreds of layers' worth on the GPU would needlessly grow VRAM.
+    return lora_up.cpu(), lora_down.cpu(), float(r)
 
 
 class LoRAOptimizer(_LoRAMergeBase):
@@ -13793,7 +13829,13 @@ class LoRAExtractFromModel:
             if not W_base.is_floating_point():
                 continue
 
-            delta = W_fine.float() - W_base.float()
+            # The two models' weights may sit on different devices (ComfyUI's
+            # dynamic VRAM offloads some to CPU and keeps others on GPU), so
+            # align onto a single device before subtracting. Prefer the GPU
+            # tensor's device when one side is already there; the robust SVD
+            # falls back to CPU on its own if the GPU path fails.
+            target_device = W_fine.device if W_fine.is_cuda else W_base.device
+            delta = W_fine.to(target_device, torch.float32) - W_base.to(target_device, torch.float32)
             result = _extract_lora_svd(delta, rank=rank, rank_mode=rank_mode, energy_threshold=energy_threshold)
 
             if result is None:
