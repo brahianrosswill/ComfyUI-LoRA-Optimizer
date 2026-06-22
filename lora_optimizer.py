@@ -6309,9 +6309,10 @@ class LoRAOptimizer(_LoRAMergeBase):
 
         # Near-orthogonal LoRAs: ~50% sign conflict is the base rate for
         # independent vectors, not actual semantic conflict. TIES trimming
-        # destroys both signals. Use weighted_average as the global mode,
-        # upgraded to SLERP per-prefix to preserve magnitude (important for
-        # video LoRAs where motion energy matters).
+        # destroys both signals. weighted_average is the global-mode fallback;
+        # per-prefix, orthogonal non-opposing groups upgrade to the bounded-
+        # additive sum_preserve (each LoRA keeps its full strength so a style
+        # LoRA isn't collapsed to a convex fraction) — see _decide_prefix_mode.
         if (strategy_set in ("full", "no_slerp")
                 and abs(avg_cos_sim) < arch_preset["orthogonal_cos_sim_max"]
                 and effective_conflict < arch_preset["orthogonal_conflict_max"]
@@ -6319,10 +6320,8 @@ class LoRAOptimizer(_LoRAMergeBase):
             mode = "weighted_average"
             reasoning.append(f"Cosine similarity {avg_cos_sim:.2f} near zero (orthogonal LoRAs) — "
                              f"sign conflict {avg_conflict_ratio:.1%} is base-rate noise, not real conflict")
-            if strategy_set == "full":
-                reasoning.append("  Using weighted_average (upgraded to SLERP per-prefix to preserve magnitude)")
-            else:
-                reasoning.append("  Using weighted_average to preserve both signals (SLERP upgrade disabled by profile)")
+            reasoning.append("  Per-prefix: orthogonal non-opposing groups use sum_preserve "
+                             "(bounded additive) to keep each LoRA's full magnitude")
             density = 0.5
             sign_method = "frequency"
             return (mode, density, sign_method, reasoning)
