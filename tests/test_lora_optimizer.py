@@ -890,10 +890,22 @@ class SumPreserveMergeTests(unittest.TestCase):
         mode, *_ = self._decide(0.0, "basic")
         self.assertEqual(mode, "sum_preserve")
 
-    def test_decide_orthogonal_full_still_slerp(self):
-        # 'full' keeps the (video-tuned) SLERP path; sum_preserve is the no_slerp/basic option.
+    def test_decide_orthogonal_full_also_sum_preserve(self):
+        # Orthogonal groups use sum_preserve in ALL strategy sets now (incl. full),
+        # so the AutoTuner's top config preserves the style instead of flattening it
+        # via SLERP.
         mode, *_ = self._decide(0.0, "full")
+        self.assertEqual(mode, "sum_preserve")
+
+    def test_decide_nonorthogonal_aligned_full_still_slerp(self):
+        # SLERP is retained for its actual sweet spot: NON-orthogonal, similar-
+        # direction (cos in the 0.25-0.5 aligned band), low-conflict groups, full set.
+        mode, *_ = self._decide(0.35, "full")
         self.assertEqual(mode, "slerp")
+
+    def test_decide_nonorthogonal_aligned_no_slerp_stays_weighted_average(self):
+        mode, *_ = self._decide(0.35, "no_slerp")
+        self.assertEqual(mode, "weighted_average")
 
     def test_decide_opposing_stays_weighted_average(self):
         # Opposing (cos < 0) groups keep weighted_average so directional cancellation survives.

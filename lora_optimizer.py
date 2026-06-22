@@ -179,10 +179,13 @@ AUTOTUNER_MEMORY_VERSION = 1
 # modes) can shift at ulp level
 # 1.10.2: explicit auto_strength_floor now bounds the reduction on aligned/
 # opposing stacks too (the orthogonality gate only applies to -1 defaults)
-# 1.11.0: orthogonal, non-opposing prefixes in the no_slerp/basic strategy sets
-# now merge with the bounded-additive "sum_preserve" mode instead of
-# weighted_average's /Σw collapse — candidate merges and their scores change for
-# any stack with orthogonal overlap (the style-LoRA washout fix). Also adds the
+# 1.11.0: orthogonal, non-opposing prefixes now merge with the bounded-additive
+# "sum_preserve" mode (in ALL strategy sets — it replaces both weighted_average's
+# /Σw collapse AND the SLERP upgrade for orthogonal groups, since the heuristic
+# scorer's uniform-norm reward would otherwise rank SLERP's magnitude-flattening
+# above the style-preserving merge). SLERP now only serves non-orthogonal
+# aligned-band low-conflict groups. Candidate merges and scores change for any
+# stack with orthogonal overlap (the style-LoRA washout fix). Also adds the
 # per-LoRA preserve flag (sparsification + TIES sign-election exemption).
 AUTOTUNER_ALGO_VERSION = "1.11.0"
 
@@ -6390,10 +6393,26 @@ class LoRAOptimizer(_LoRAMergeBase):
         pf_raw_cos = pf.get("decision_cosine", pf.get("avg_cos_sim", 0.0)) if smooth_slerp_gate else pf.get("avg_cos_sim", 0.0)
         pf_orthogonal = abs(pf_raw_cos) < arch_preset["orthogonal_cos_sim_max"]
         pf_opposing = pf_raw_cos < 0
-        # Full-rank gate: skip SLERP upgrade — for full-rank patches the
-        # information is spread across all dimensions, and SLERP's
-        # hypersphere interpolation loses signal from both LoRAs.
+        # Orthogonal, non-opposing groups -> bounded-additive sum_preserve, in ALL
+        # strategy sets (takes precedence over the SLERP upgrade). weighted_average's
+        # /Sum-w collapses each LoRA to a convex fraction (a style LoRA at strength 2
+        # still lands below 1x its delta, because s/(s+s') asymptotes to 1.0), and
+        # SLERP rotates two independent directions into a 45-degree blend that loses
+        # both. For genuinely orthogonal deltas the honest combine is the (capped)
+        # sum: each LoRA keeps its own subspace and its emphasis. Doing this for ALL
+        # strategy sets means the AutoTuner's top config preserves the style by
+        # default -- its heuristic scorer rewards uniform norms (norm_cv) + target
+        # sparsity, which otherwise ranks SLERP's magnitude-flattening ABOVE the
+        # style-preserving merge. Opposing groups keep weighted_average for their
+        # directional cancellation.
         if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
+                and pf_orthogonal and not pf_opposing):
+            pf_mode = "sum_preserve"
+        # SLERP now only serves NON-orthogonal, similar-direction low-conflict groups
+        # (the conflict<=threshold weighted_average branch with cos in the aligned
+        # 0.25-0.5 band) in the full strategy set -- a magnitude-preserving smooth
+        # blend where direction interpolation is actually appropriate.
+        elif (pf_mode == "weighted_average" and pf["n_loras"] >= 2
                 and strategy_set == "full"
                 and not pf_opposing
                 and not (is_full_rank and fr_preset.get("disable_slerp_upgrade", False))):
@@ -6401,16 +6420,6 @@ class LoRAOptimizer(_LoRAMergeBase):
         if (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)
                 and pf_mode == "weighted_average" and pf_orthogonal):
             pf_mode = "weighted_sum"
-        # Bounded-additive for orthogonal, non-opposing groups that didn't take
-        # the SLERP path (no_slerp / basic strategy sets). weighted_average's /Σw
-        # collapses each LoRA to a convex fraction — a style LoRA set to strength 2
-        # still lands below 1x its delta because s/(s+s') asymptotes to 1.0. For
-        # genuinely orthogonal deltas the honest combine is the (capped) sum, which
-        # keeps each LoRA's emphasis. Opposing groups keep weighted_average so their
-        # directional cancellation is preserved.
-        if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
-                and pf_orthogonal and not pf_opposing):
-            pf_mode = "sum_preserve"
         return pf_mode, pf_density, pf_sign, pf_orthogonal, pf_opposing
 
     def _build_report(self, lora_stats, pairwise_conflicts, collection_stats,

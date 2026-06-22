@@ -48,14 +48,18 @@ bug 458f6dd and the orthogonal-floor clamp at `_compute_branch_auto_scale:5837`)
 
 ### Routing (`_decide_prefix_mode`, ~6229)
 
-Orthogonal (`|cos| < orthogonal_cos_sim_max`), **non-opposing** (`cos ≥ 0`), `n_loras ≥ 2`:
+Orthogonal (`|cos| < orthogonal_cos_sim_max`), **non-opposing** (`cos ≥ 0`), `n_loras ≥ 2`: → **sum_preserve** in **all**
+strategy sets.
 
-- `full` strategy → **slerp** (unchanged — video motion-energy path, already better than `weighted_average`).
-- `no_slerp` / `basic` → **sum_preserve** (was `weighted_average` washout).
+> **Revised after a real run.** The first cut kept `full` → SLERP and only used `sum_preserve` for `no_slerp`/`basic`.
+> But the AutoTuner's heuristic scorer (`_score_merge_result`: `effective_rank·0.4 + (1−norm_cv)·0.3 + sparsity_fit·0.3`)
+> has **no magnitude/energy term** and rewards *uniform norms* — so it ranked the SLERP config (energy 1.22×) **above**
+> the `sum_preserve` config (energy 1.91×) and applied it, leaving the style washed out by default. Since SLERP is
+> strictly worse than `sum_preserve` for orthogonal groups (it rotates two independent directions into a 45° blend that
+> loses both, vs keeping each in its own subspace), orthogonal groups now use `sum_preserve` everywhere and SLERP is
+> retained only for **non-orthogonal, similar-direction** (cos ≈ 0.25–0.5) low-conflict groups in the `full` set.
 
-This gives the AutoTuner two distinct orthogonal candidates (slerp + sum_preserve); the user's failing run applied
-the `no_slerp` candidate, which now preserves the style. Opposing groups keep `weighted_average` (cancellation is
-intended). Conflicted groups (excess conflict > threshold) keep TIES.
+Opposing groups keep `weighted_average` (cancellation is intended). Conflicted groups (excess conflict > threshold) keep TIES.
 
 ### Implementation points
 

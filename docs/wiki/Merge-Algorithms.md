@@ -93,8 +93,8 @@ Two orthogonal LoRAs combine to ≈1.41× the strongest single contribution (< 1
 
 ### When Selected
 
-- Per-prefix: 2+ LoRAs, **orthogonal** (low cosine similarity), **non-opposing** (cos ≥ 0), in the `no_slerp` or `basic` strategy sets
-- The `full` strategy set keeps SLERP for these prefixes (the AutoTuner ranks both as candidates)
+- Per-prefix: 2+ LoRAs, **orthogonal** (low cosine similarity), **non-opposing** (cos ≥ 0) — in **all** strategy sets (`full`, `no_slerp`, `basic`)
+- Takes precedence over the SLERP upgrade, so the AutoTuner's top-ranked config preserves the style **by default**. (The heuristic scorer rewards uniform norms + a target sparsity, which would otherwise rank SLERP's magnitude-flattening *above* the style-preserving merge — that is why orthogonal groups no longer use SLERP.)
 
 ### Properties
 
@@ -206,7 +206,8 @@ The strongest LoRA anchors the direction; subsequent LoRAs blend in.
 
 ### When Selected
 
-- `full` strategy set: auto-selected when conflict ≤ 25% AND LoRAs are detected as orthogonal (low cosine similarity)
+- `full` strategy set: auto-selected for **non-orthogonal, similar-direction** groups — cosine similarity in the aligned ~0.25–0.5 band with conflict ≤ 25%, where interpolating between two close directions is appropriate
+- **Orthogonal** groups now use [Sum-Preserve](#sum-preserve-bounded-additive) instead — SLERP would rotate two independent directions into a 45° blend that loses both
 - Not auto-selected in the `no_slerp` or `basic` strategy sets
 - Can be forced via `merge_strategy_override`
 
