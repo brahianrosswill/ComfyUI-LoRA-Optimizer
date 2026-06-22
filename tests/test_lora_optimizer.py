@@ -817,53 +817,15 @@ class LoRAOptimizerTests(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
-class SumPreserveMergeTests(unittest.TestCase):
-    """Bounded-additive 'sum_preserve' mode keeps a style LoRA's full strength for
-    orthogonal/non-opposing groups instead of weighted_average's /Sum-w collapse,
-    while a per-group energy cap stops N>=3 stacks from oversaturating."""
+class PrefixModeRoutingTests(unittest.TestCase):
+    """Orthogonal groups BLEND by default (weighted_average / slerp). Additive
+    preservation is never auto-selected — the analyzer can't tell 'preserve this
+    style' from 'blend these characters', and auto-additive oversaturates ordinary
+    multi-LoRA merges. Style preservation is opt-in via the preserve flag only."""
 
     def setUp(self):
         self.optimizer = lora_optimizer.LoRAOptimizer()
-        self.model = _make_model()
         self.arch = lora_optimizer._ARCH_PRESETS["dit"]
-
-    def test_sum_preserve_two_orthogonal_uncapped(self):
-        # Two unit orthogonal diffs at full weight: ||d1+d2|| = sqrt(2) ~ 1.41 < 1.5,
-        # so no cap fires and each LoRA keeps its full contribution (the prodigy fix).
-        d1 = torch.tensor([1.0, 0.0, 0.0, 0.0])
-        d2 = torch.tensor([0.0, 1.0, 0.0, 0.0])
-        res = self.optimizer._merge_diffs([(d1.clone(), 1.0), (d2.clone(), 1.0)],
-                                          "sum_preserve")
-        torch.testing.assert_close(res, torch.tensor([1.0, 1.0, 0.0, 0.0]))
-
-    def test_sum_preserve_caps_three_orthogonal(self):
-        # Three unit orthogonal diffs: ||sum|| = sqrt(3) ~ 1.73 > 1.5*max_single,
-        # so the group is scaled back to exactly 1.5x the strongest single contribution.
-        diffs = [
-            (torch.tensor([1.0, 0.0, 0.0]), 1.0),
-            (torch.tensor([0.0, 1.0, 0.0]), 1.0),
-            (torch.tensor([0.0, 0.0, 1.0]), 1.0),
-        ]
-        res = self.optimizer._merge_diffs(diffs, "sum_preserve")
-        self.assertAlmostEqual(res.norm().item(), 1.5, places=5)
-
-    def test_sum_preserve_beats_weighted_average_for_weaker_lora(self):
-        # The reported failure: a strong style LoRA (w=2) orthogonal to a content
-        # LoRA (w=1). weighted_average lands the style at 2/3 of its delta; sum_preserve
-        # keeps it at full 2x.
-        style = torch.tensor([0.0, 1.0, 0.0, 0.0])   # orthogonal to content
-        content = torch.tensor([1.0, 0.0, 0.0, 0.0])
-        wavg = self.optimizer._merge_diffs(
-            [(content.clone(), 1.0), (style.clone(), 2.0)], "weighted_average")
-        sump = self.optimizer._merge_diffs(
-            [(content.clone(), 1.0), (style.clone(), 2.0)], "sum_preserve")
-        self.assertAlmostEqual(wavg[1].item(), 2.0 / 3.0, places=5)  # style washed out
-        self.assertAlmostEqual(sump[1].item(), 2.0, places=5)         # style preserved
-
-    def test_sum_preserve_single_diff_passthrough(self):
-        d1 = torch.tensor([1.0, 0.0, 0.0, 0.0])
-        res = self.optimizer._merge_diffs([(d1.clone(), 2.0)], "sum_preserve")
-        torch.testing.assert_close(res, torch.tensor([2.0, 0.0, 0.0, 0.0]))
 
     def _pf(self, cos, n_loras=2):
         return {
@@ -880,91 +842,35 @@ class SumPreserveMergeTests(unittest.TestCase):
             self._pf(cos, n_loras), strategy_set, self.arch,
             smooth_slerp_gate=False, is_full_rank=False, fr_preset={})
 
-    def test_decide_orthogonal_no_slerp_routes_to_sum_preserve(self):
+    def test_orthogonal_no_slerp_weighted_average(self):
         mode, _d, _s, orth, opp = self._decide(0.0, "no_slerp")
-        self.assertEqual(mode, "sum_preserve")
+        self.assertEqual(mode, "weighted_average")
         self.assertTrue(orth)
-        self.assertFalse(opp)
 
-    def test_decide_orthogonal_basic_routes_to_sum_preserve(self):
+    def test_orthogonal_basic_weighted_average(self):
         mode, *_ = self._decide(0.0, "basic")
-        self.assertEqual(mode, "sum_preserve")
+        self.assertEqual(mode, "weighted_average")
 
-    def test_decide_orthogonal_full_also_sum_preserve(self):
-        # Orthogonal groups use sum_preserve in ALL strategy sets now (incl. full),
-        # so the AutoTuner's top config preserves the style instead of flattening it
-        # via SLERP.
+    def test_orthogonal_full_slerp(self):
         mode, *_ = self._decide(0.0, "full")
-        self.assertEqual(mode, "sum_preserve")
+        self.assertEqual(mode, "slerp")
 
-    def test_decide_nonorthogonal_aligned_full_still_slerp(self):
-        # SLERP is retained for its actual sweet spot: NON-orthogonal, similar-
-        # direction (cos in the 0.25-0.5 aligned band), low-conflict groups, full set.
+    def test_nonorthogonal_aligned_full_slerp(self):
         mode, *_ = self._decide(0.35, "full")
         self.assertEqual(mode, "slerp")
 
-    def test_decide_nonorthogonal_aligned_no_slerp_stays_weighted_average(self):
-        mode, *_ = self._decide(0.35, "no_slerp")
-        self.assertEqual(mode, "weighted_average")
-
-    def test_decide_opposing_stays_weighted_average(self):
-        # Opposing (cos < 0) groups keep weighted_average so directional cancellation survives.
+    def test_opposing_weighted_average(self):
         mode, _d, _s, orth, opp = self._decide(-0.1, "no_slerp")
         self.assertEqual(mode, "weighted_average")
         self.assertTrue(opp)
 
-    def test_exact_linear_sum_preserve_matches_dense_when_uncapped(self):
-        target_group = {
-            "target_key": "layer.weight", "is_clip": False,
-            "aliases": ["alias_a", "alias_b"], "label_prefix": "alias_a",
-        }
-        active_loras = [
-            _make_lora_entry({"alias_a": 1.0}, name="A"),
-            _make_lora_entry({"alias_b": 2.0}, name="B"),
-        ]
-        # aligned scalar diffs (1.0, 2.0): ||sum||=3.0 == 1.5*max_single(2.0) -> uncapped
-        norm_stats = {"per_lora_norm_sq": {0: 1.0, 1: 4.0},
-                      "pairwise_dots": {(0, 1): 2.0}}
-        info = self.optimizer._build_exact_linear_patch(
-            target_group, active_loras, raw_n_loras=2, mode="sum_preserve",
-            norm_stats=norm_stats)
-        diff = self.optimizer._expand_patch_to_diff(info["patch"])
-        self.assertAlmostEqual(diff.item(), 3.0, places=5)
-
-    def test_exact_linear_sum_preserve_folds_cap_scale(self):
-        # Synthetic orthogonal stats (dot=0, equal norms) over three unit diffs:
-        # ||sum||=sqrt(3) > 1.5 -> cap_scale = 1.5/sqrt(3), folded into the factors.
-        target_group = {
-            "target_key": "layer.weight", "is_clip": False,
-            "aliases": ["alias_a", "alias_b", "alias_c"], "label_prefix": "alias_a",
-        }
-        active_loras = [
-            _make_lora_entry({"alias_a": 1.0}, name="A"),
-            _make_lora_entry({"alias_b": 1.0}, name="B"),
-            _make_lora_entry({"alias_c": 1.0}, name="C"),
-        ]
-        norm_stats = {"per_lora_norm_sq": {0: 1.0, 1: 1.0, 2: 1.0},
-                      "pairwise_dots": {(0, 1): 0.0, (0, 2): 0.0, (1, 2): 0.0}}
-        info = self.optimizer._build_exact_linear_patch(
-            target_group, active_loras, raw_n_loras=3, mode="sum_preserve",
-            norm_stats=norm_stats)
-        diff = self.optimizer._expand_patch_to_diff(info["patch"])
-        expected = 3.0 * (1.5 / math.sqrt(3.0))  # weighted_sum 3.0 * cap_scale
-        self.assertAlmostEqual(diff.item(), expected, places=5)
-
-    def test_exact_linear_sum_preserve_without_stats_falls_back(self):
-        target_group = {
-            "target_key": "layer.weight", "is_clip": False,
-            "aliases": ["alias_a", "alias_b"], "label_prefix": "alias_a",
-        }
-        active_loras = [
-            _make_lora_entry({"alias_a": 1.0}, name="A"),
-            _make_lora_entry({"alias_b": 2.0}, name="B"),
-        ]
-        info = self.optimizer._build_exact_linear_patch(
-            target_group, active_loras, raw_n_loras=2, mode="sum_preserve",
-            norm_stats=None)
-        self.assertIsNone(info)
+    def test_additive_is_never_auto_selected(self):
+        # Regression for the multi-LoRA oversaturation: no orthogonality/strategy
+        # combination may auto-route to a sum/sum_preserve mode.
+        for cos in (0.0, 0.1, -0.1, 0.35, 0.6):
+            for ss in ("full", "no_slerp", "basic"):
+                mode, *_ = self._decide(cos, ss)
+                self.assertNotIn(mode, ("sum_preserve", "weighted_sum"))
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
@@ -974,6 +880,29 @@ class PreserveFlagTests(unittest.TestCase):
 
     def setUp(self):
         self.optimizer = lora_optimizer.LoRAOptimizer()
+
+    def test_preserve_overlay_weighted_average(self):
+        # The style-LoRA use case: a flagged style is added at FULL strength on top
+        # of the weighted_average blend of the rest, instead of being averaged down.
+        content = torch.tensor([2.0, 0.0, 0.0, 0.0])   # not preserved
+        style = torch.tensor([0.0, 3.0, 0.0, 0.0])     # preserved (orthogonal)
+        blended = self.optimizer._merge_diffs(
+            [(content.clone(), 1.0), (style.clone(), 1.0)], "weighted_average")
+        kept = self.optimizer._merge_diffs(
+            [(content.clone(), 1.0), (style.clone(), 1.0)], "weighted_average",
+            preserve_flags=[False, True])
+        # plain blend halves both; preserve keeps content blended (single -> full) and
+        # the style at full on top
+        torch.testing.assert_close(blended, torch.tensor([1.0, 1.5, 0.0, 0.0]))
+        torch.testing.assert_close(kept, torch.tensor([2.0, 3.0, 0.0, 0.0]))
+
+    def test_preserve_does_not_affect_unflagged_blend(self):
+        # No flags -> ordinary balanced blend is untouched (the multi-LoRA case).
+        a = torch.tensor([2.0, 0.0])
+        b = torch.tensor([0.0, 4.0])
+        res = self.optimizer._merge_diffs(
+            [(a.clone(), 1.0), (b.clone(), 1.0)], "weighted_average")
+        torch.testing.assert_close(res, torch.tensor([1.0, 2.0]))
 
     def test_ties_deletes_minority_sign_without_preserve(self):
         # Content (+10) out-votes a style (-1) in TIES sign election; the style's

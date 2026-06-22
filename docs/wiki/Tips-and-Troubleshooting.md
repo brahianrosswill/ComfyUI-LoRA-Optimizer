@@ -113,12 +113,14 @@ The optimizer's two-pass architecture usually keeps peak memory near one active 
 
 ### "My style LoRA disappears when merged with a content/character LoRA"
 
-This is the classic style-washout case. Two things now address it:
+By default the optimizer **blends** orthogonal LoRAs (weighted_average / SLERP). That is the right behaviour when you are combining characters or concepts — but it averages a style LoRA down to a fraction of its delta, so the style fades. (This is *not* auto-fixed, because the analyzer can't tell "preserve this style" from "blend these characters" — both look orthogonal — and forcing additive on every orthogonal merge oversaturates ordinary multi-LoRA blends.)
 
-1. **Sum-Preserve (automatic, default)** — orthogonal prefixes (a style LoRA is usually orthogonal to a character LoRA) now use the [Sum-Preserve](Merge-Algorithms#sum-preserve-bounded-additive) mode in **all** strategy sets, instead of `weighted_average` (which divided the style down to a fraction of its delta) or SLERP (which rotated both directions into a flattened blend). The AutoTuner's top-ranked config preserves the style by default — no manual selection needed. You should see `sum_preserve` in the Per-Group Strategy / `sum+` in the block map, and the report's `Energy` value stay near the additive level rather than collapsing toward 1.0×.
-2. **`preserve` flag (explicit)** — if there is real *conflict* between the style and content (TIES prefixes) or you run with sparsification, turn on **`preserve`** for the style LoRA on the Stack node. It is then never trimmed and is exempt from TIES sign-election (which deletes a style's minority-sign direction); its full contribution is added on top of the conflict-resolved content merge.
+**The fix is explicit: turn on the `preserve` flag for the style LoRA** on the LoRA Stack (or LoRA Stack Dynamic, advanced mode). A preserved LoRA is held *out* of the merge — the rest blend normally, then its full-strength delta is added on top. It is also exempt from sparsification and from TIES sign-election (which would delete a style's minority-sign direction). So:
 
-Historically "additive looks better than per-prefix" pointed at exactly this — additive kept the style but did no conflict resolution. Sum-Preserve gives you the additive look *inside* `per_prefix`, while real conflicts still get TIES.
+- Merging a style LoRA with a character/content LoRA → flag the **style** as `preserve`. The character blends as usual; the style stays at full strength.
+- Merging several character/concept LoRAs (no style) → flag **nothing**; the balanced blend is what you want.
+
+Historically "additive looks better than per-prefix" pointed at exactly this — additive kept the style but did no conflict resolution. The `preserve` flag gives you that additive behaviour **for the tagged LoRA only**, while everything else still blends (and real conflicts still get TIES).
 
 ### "Results are oversaturated / blown out"
 

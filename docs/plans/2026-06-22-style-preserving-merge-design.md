@@ -1,12 +1,31 @@
 # Style-Preserving Merge — Design
 
 **Date:** 2026-06-22
-**Status:** Fix 1 shipped (sum_preserve); Fix 2 shipped (preserve flag — sparsification + TIES exemption).
-The auto-strength exclusion in Fix 2 was **descoped**: auto-strength applies a single uniform scalar
-(`model_auto_scale`) baked into the linear fast path, the scale-invariant group cache replay, and patch
-building — excluding one LoRA would break that "one scale" assumption pervasively, for a reduction that is
-mild and floor-bounded. The two merge-path exemptions (no trimming, no sign-election deletion) carry the
-style-protection value. Revisit per-LoRA auto-strength only if a real case needs it.
+**Status:** FINAL DESIGN = the per-LoRA `preserve` flag only. The automatic `sum_preserve` mode (Fix 1) was
+**reverted** — see the postmortem below. Default merging is unchanged from `main` (orthogonal → weighted_average /
+SLERP); style preservation is opt-in via the flag.
+
+> ## Postmortem — why automatic `sum_preserve` was reverted
+>
+> Fix 1 routed orthogonal groups to a bounded-additive `sum_preserve` mode. It fixed the 2-LoRA style+content case,
+> but a real run of **3 character/concept LoRAs (no style)** then oversaturated badly (energy 2.52× vs `main`'s
+> 1.02×) — additive stacking is exactly wrong for a balanced multi-LoRA blend. The root realization: **the analyzer
+> cannot distinguish "preserve this style LoRA" from "blend these characters" — both are orthogonal.** Additive vs
+> averaging is a question of *user intent*, not of any measurable signal (the deep-research wave already refuted
+> auto-detecting "style" from weight statistics). So additive must NEVER be auto-selected; it has to be driven by the
+> explicit `preserve` flag.
+>
+> **What shipped instead:** default routing reverted to `main` (weighted_average / SLERP for orthogonal). The
+> `preserve` flag became a general overlay in `_merge_diffs`: blend the non-preserved LoRAs with the chosen mode,
+> then add each preserved LoRA's full-strength delta on top (also exempt from sparsification + TIES sign-election).
+> The standalone `sum_preserve` mode, its exact-linear handling, the `_ORTHO_SUM_HEADROOM` constant, and the `sum+`
+> display were all removed. The auto-strength per-LoRA exclusion stays **descoped** (single uniform scalar baked into
+> the linear path + group-cache replay; mild/floor-bounded).
+
+---
+
+> **NOTE:** the sections below are the ORIGINAL Fix-1 design (automatic `sum_preserve`). They are kept for history;
+> the postmortem above supersedes them. The `preserve`-flag plumbing (Fix 2) shipped as described.
 **Trigger:** Merging a style LoRA (e.g. `prodigy`) into a content/concept LoRA via `per_prefix`
 makes the style vanish; `additive` keeps it but does no conflict resolution.
 
