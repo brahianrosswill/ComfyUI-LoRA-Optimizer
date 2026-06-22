@@ -2287,7 +2287,28 @@ class _LoRAMergeBase:
 
             for alias in target_group["aliases"]:
                 cache_key = (alias, i)
-                if diff_cache is not None and cache_key in diff_cache:
+                lora_info = self._get_lora_key_info(item["lora"], alias)
+
+                # Recompute low-rank diffs instead of caching them. When the
+                # factors are smaller than the dense diff (r*(out+in) < out*in —
+                # true for any genuine low-rank LoRA), recomputing up@down moves
+                # less data than a cache hit AND skips the diff-cache disk spill.
+                # That spill — a multi-GB cache paging off a slow/NAS temp volume
+                # — was costing ~1s per group in Pass 2 (profiled: diff_prep =
+                # 98% of merge time). The GPU matmul is microseconds. Gated on
+                # GPU, where recompute is cheap.
+                bypass_cache = False
+                if lora_info is not None and use_gpu:
+                    _r = int(lora_info[1].shape[0])
+                    _dense = 1
+                    for _d in target_shape:
+                        _dense *= int(_d)
+                    _out = int(target_shape[0]) if len(target_shape) > 0 else 1
+                    _in_flat = _dense // max(_out, 1)
+                    bypass_cache = _r * (_out + _in_flat) < _dense
+
+                if (diff_cache is not None and not bypass_cache
+                        and cache_key in diff_cache):
                     diff = diff_cache.get(cache_key, device=device if use_gpu else None)
                     if diff is not None:
                         diff = diff.float()
@@ -2296,7 +2317,6 @@ class _LoRAMergeBase:
                         diff_accum = diff if diff_accum is None else diff_accum + diff
                     continue
 
-                lora_info = self._get_lora_key_info(item["lora"], alias)
                 if lora_info is not None:
                     mat_up, mat_down, alpha, mid = lora_info
                     rank_sum += mat_down.shape[0]
@@ -2334,7 +2354,7 @@ class _LoRAMergeBase:
                         diff = None
 
                 if diff is not None:
-                    if diff_cache is not None:
+                    if diff_cache is not None and not bypass_cache:
                         diff_cache.put(cache_key, diff)
                     diff = diff.float()
                     diff_accum = diff if diff_accum is None else diff_accum + diff
