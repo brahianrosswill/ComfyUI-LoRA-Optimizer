@@ -13735,6 +13735,12 @@ class LoRAExtractFromModel:
                 "finetuned_clip": ("CLIP", {
                     "tooltip": "The CLIP encoder for the finetuned model. Must be connected together with base_clip."
                 }),
+                "lora_stack": ("LORA_STACK", {
+                    "tooltip": "Optional. Connect a LoRA Stack (or another extractor) here to merge "
+                               "the extracted LoRA TOGETHER with those LoRAs. The extracted LoRA is "
+                               "appended to the incoming stack. Leave disconnected to output the "
+                               "extracted LoRA on its own."
+                }),
             }
         }
 
@@ -13749,7 +13755,7 @@ class LoRAExtractFromModel:
         "or connect lora_data to SaveMergedLoRA to save the extracted LoRA to disk."
     )
 
-    def extract(self, base_model, finetuned_model, rank, rank_mode, energy_threshold, strength, base_clip=None, finetuned_clip=None):
+    def extract(self, base_model, finetuned_model, rank, rank_mode, energy_threshold, strength, base_clip=None, finetuned_clip=None, lora_stack=None):
         base_sd = dict(base_model.model.state_dict())
         fine_sd = dict(finetuned_model.model.state_dict())
         if base_clip is not None and finetuned_clip is not None:
@@ -13888,15 +13894,18 @@ class LoRAExtractFromModel:
                 f"extraction will produce a high-rank approximation."
             )
 
-        # LORA_STACK output
-        lora_stack = [{
+        # LORA_STACK output — append the extracted LoRA to any incoming stack so
+        # it merges TOGETHER with the upstream LoRAs (otherwise the optimizer
+        # only ever sees this single extracted entry).
+        out_stack = list(lora_stack) if lora_stack else []
+        out_stack.append({
             "name": "<extracted from finetuned_model>",
             "lora": raw_lora_dict,
             "strength": strength,
             "conflict_mode": "all",
             "key_filter": "all",
             "metadata": {},
-        }]
+        })
 
         # LORA_DATA output
         lora_data = {
@@ -13914,7 +13923,7 @@ class LoRAExtractFromModel:
             },
         }
 
-        return (lora_stack, lora_data)
+        return (out_stack, lora_data)
 
 
 class LoRAEstimatorNode:
