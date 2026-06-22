@@ -80,19 +80,23 @@ else:
 
 
 def _triton_svdvals(mat2d: torch.Tensor, n_sv: int) -> torch.Tensor:
-    """Single 2D matrix → singular values, using kernel when available.
-    Handles transpose internally — callers can pass any 2D tensor."""
+    """Single 2D matrix → singular values via torch.linalg, robust to ROCm
+    non-convergence. Handles transpose internally — callers pass any 2D tensor.
+
+    The bundled Triton batched-SVD kernel is intentionally NOT used here. Every
+    caller passes ONE matrix at a time (B=1), where the batched kernel offers no
+    speedup over torch.linalg.svdvals on an already-thin (<=32-wide) matrix — yet
+    it is the only reachable path to the Triton JIT kernels, which can hard-crash
+    the process with an uncatchable "__triton_launcher.c" abort on some
+    torch/Triton/driver combinations (e.g. torch 2.12+cu130). The kernel module
+    stays loaded for batched_procrustes (pure torch, no Triton kernels). Set
+    LORA_OPTIMIZER_DISABLE_TRITON=1 to skip loading the kernel module entirely.
+    """
     if mat2d.dim() != 2:
         return torch.linalg.svdvals(mat2d)[..., :n_sv]
     m, n = mat2d.shape
     if m < n:
         mat2d = mat2d.T
-    if _batched_svd is not None and min(m, n) <= 32:
-        try:
-            _, s, _ = _batched_svd(mat2d.unsqueeze(0))
-            return s.squeeze(0)[:n_sv]
-        except Exception:
-            pass
     try:
         return torch.linalg.svdvals(mat2d)[:n_sv]
     except Exception:
