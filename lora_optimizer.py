@@ -186,7 +186,9 @@ AUTOTUNER_MEMORY_VERSION = 1
 # deleted by TIES sign-election. Auto-merge selection is UNCHANGED (additive is
 # never auto-routed — it would oversaturate ordinary multi-LoRA blends; style
 # preservation is opt-in only). Ranking shifts only for stacks that set the flag.
-AUTOTUNER_ALGO_VERSION = "1.11.0"
+# 1.11.1: per-LoRA merge flags (preserve/conflict_mode/key_filter) now fold into the
+# AutoTuner cache keys; bump invalidates any rankings cached during 1.11.0 development.
+AUTOTUNER_ALGO_VERSION = "1.11.1"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
