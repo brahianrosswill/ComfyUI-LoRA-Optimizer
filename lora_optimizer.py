@@ -7910,14 +7910,47 @@ class LoRAOptimizer(_LoRAMergeBase):
         if _overwrite_count > 0:
             logging.info(f"[LoRA Optimizer] {_overwrite_count} target-key collisions resolved "
                          f"(different LoRA key formats targeting the same model weight — diffs accumulated)")
+        _pass2_secs = time.time() - t_pass2
         logging.info(f"[LoRA Optimizer]   Model patches: {len(model_patches)}, "
-                     f"CLIP patches: {len(clip_patches)} ({time.time() - t_pass2:.1f}s)")
+                     f"CLIP patches: {len(clip_patches)} ({_pass2_secs:.1f}s)")
         if _merge_prof:
-            total_prof = sum(v[1] for v in _merge_prof.values()) or 1e-9
+            profiled = sum(v[1] for v in _merge_prof.values())
+            # % is against wall-clock Pass-2 time, and an "other" row accounts
+            # for whatever the timed phases don't cover (cache lookups, patch
+            # device moves, score-during-merge, result collection) — so the
+            # breakdown sums to ~100% and untimed overhead can't hide.
+            denom = max(_pass2_secs, profiled, 1e-9)
             logging.info("[LoRA Optimizer]   Merge profile (phase: total_s, count, avg_ms, %):")
             for phase, (cnt, secs) in sorted(_merge_prof.items(), key=lambda kv: -kv[1][1]):
                 logging.info(f"[LoRA Optimizer]     {phase:<22} {secs:6.2f}s  "
-                             f"n={cnt:<5} {secs / cnt * 1000:6.1f}ms  {secs / total_prof * 100:4.1f}%")
+                             f"n={cnt:<5} {secs / cnt * 1000:6.1f}ms  {secs / denom * 100:4.1f}%")
+            _other = max(0.0, _pass2_secs - profiled)
+            if _other > 0.05:
+                logging.info(f"[LoRA Optimizer]     {'other (cache/move/score)':<22} "
+                             f"{_other:6.2f}s  {'':<7} {'':>6}  {_other / denom * 100:4.1f}%")
+            # Auto-flag: merge *math* (slerp/consensus/ties/weighted_*) is allowed
+            # to dominate — that's the real work. OVERHEAD phases dominating is a
+            # pathology (this is how the diff-cache disk spill would have announced
+            # itself). Warn with a targeted hint so issues surface without a manual
+            # read of the numbers.
+            _OVERHEAD_HINTS = {
+                "diff_prep": "diff reconstruction — low-rank diffs should recompute in ~ms; "
+                             "check diff_cache_mode (disk spill?) and that the temp dir is on a fast local disk",
+                "compress": "compression SVD — patch_compression rebuilds low-rank every candidate; "
+                            "try patch_compression='disabled' during the sweep",
+                "linear_fast": "fast linear path — should be ~ms/item; unexpectedly slow, check input LoRA sizes",
+                "other (cache/move/score)": "untimed overhead (cache I/O, patch device moves, score-during-merge) "
+                                            "— check vram_budget / cache_patches / diff_cache_mode",
+            }
+            if _pass2_secs >= 1.0:
+                _rows = list(_merge_prof.items()) + (
+                    [("other (cache/move/score)", (1, _other))] if _other > 0.05 else [])
+                for phase, (cnt, secs) in _rows:
+                    pct = secs / denom * 100
+                    if phase in _OVERHEAD_HINTS and pct >= 40.0:
+                        logging.warning(
+                            f"[LoRA Optimizer]   ⚠ merge overhead: '{phase}' = {pct:.0f}% of Pass 2 "
+                            f"({secs:.1f}s) — {_OVERHEAD_HINTS[phase]}")
         if lowrank_count > 0:
             logging.info(f"[LoRA Optimizer]   Low-rank patches: {lowrank_count} "
                          f"(full-rank: {fullrank_count}) — "
