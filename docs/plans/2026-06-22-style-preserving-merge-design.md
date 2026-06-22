@@ -1,7 +1,12 @@
 # Style-Preserving Merge — Design
 
 **Date:** 2026-06-22
-**Status:** in progress
+**Status:** Fix 1 shipped (sum_preserve); Fix 2 shipped (preserve flag — sparsification + TIES exemption).
+The auto-strength exclusion in Fix 2 was **descoped**: auto-strength applies a single uniform scalar
+(`model_auto_scale`) baked into the linear fast path, the scale-invariant group cache replay, and patch
+building — excluding one LoRA would break that "one scale" assumption pervasively, for a reduction that is
+mild and floor-bounded. The two merge-path exemptions (no trimming, no sign-election deletion) carry the
+style-protection value. Revisit per-LoRA auto-strength only if a real case needs it.
 **Trigger:** Merging a style LoRA (e.g. `prodigy`) into a content/concept LoRA via `per_prefix`
 makes the style vanish; `additive` keeps it but does no conflict resolution.
 

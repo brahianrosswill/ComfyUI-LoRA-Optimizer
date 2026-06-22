@@ -498,6 +498,15 @@ class LoRAStack:
                                "'no_audio': only non-audio (video) layers. "
                                "e.g. merge two LTX LoRAs but keep one's sound: set the other to 'no_audio'."
                 }),
+                "preserve": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Mark this as a STYLE LoRA to protect it in conflict merges. "
+                               "When on, this LoRA is never trimmed by sparsification and is "
+                               "exempt from TIES sign-election (which otherwise deletes a style's "
+                               "minority-sign direction) — its full contribution is added on top of "
+                               "the conflict-resolved content merge. Use when merging a style LoRA "
+                               "with a character/content LoRA and the style keeps disappearing."
+                }),
             },
             "optional": {
                 "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to chain multiple LoRAs together."}),
@@ -510,7 +519,7 @@ class LoRAStack:
     CATEGORY = "LoRA Optimizer"
     DESCRIPTION = "Adds a LoRA to the stack for use with LoRA Optimizer"
 
-    def add_to_stack(self, lora_name, strength, conflict_mode="all", key_filter="all", lora_stack=None):
+    def add_to_stack(self, lora_name, strength, conflict_mode="all", key_filter="all", preserve=False, lora_stack=None):
         lora_list = list(lora_stack) if lora_stack else []
 
         lora_path = folder_paths.get_full_path_or_raise("loras", lora_name)
@@ -522,6 +531,7 @@ class LoRAStack:
             "strength": strength,
             "conflict_mode": conflict_mode,
             "key_filter": key_filter,
+            "preserve": bool(preserve),
             "metadata": _read_safetensors_metadata(lora_path),
         })
 
@@ -597,6 +607,14 @@ class LoRAStackDynamic:
                            f"'unique_only': only keys present in exactly 1 LoRA. "
                            f"'audio_only': only audio layers (LTX-2 / ACE-Step). "
                            f"'no_audio': only non-audio (video) layers."
+            })
+            inputs["required"][f"preserve_{i}"] = ("BOOLEAN", {
+                "default": False,
+                "tooltip": f"Mark LoRA #{i} as a STYLE LoRA to protect it in conflict merges. "
+                           f"When on, it is never trimmed by sparsification and is exempt from "
+                           f"TIES sign-election (which deletes a style's minority-sign direction) "
+                           f"— its full contribution is added on top of the conflict-resolved merge. "
+                           f"Use when a style LoRA keeps disappearing when merged with a content LoRA."
             })
         inputs["optional"] = {
             "lora_stack": ("LORA_STACK", {"tooltip": "Connect another LoRA Stack node here to add even more LoRAs to the list."}),
@@ -682,11 +700,12 @@ class LoRAStackDynamic:
             kf = kwargs.get(f"key_filter_{i}", "all")
             if settings_visibility == "simple":
                 wt = kwargs.get(f"strength_{i}", 1.0)
-                loras.append((resolved, wt, wt, conflict_mode, kf))
+                loras.append((resolved, wt, wt, conflict_mode, kf, False))
             else:
                 model_str = kwargs.get(f"model_strength_{i}", 1.0)
                 clip_str = kwargs.get(f"clip_strength_{i}", 1.0)
-                loras.append((resolved, model_str, clip_str, conflict_mode, kf))
+                preserve = bool(kwargs.get(f"preserve_{i}", False))
+                loras.append((resolved, model_str, clip_str, conflict_mode, kf, preserve))
 
         # Chained lora_stack entries
         if lora_stack is not None:
@@ -696,7 +715,8 @@ class LoRAStackDynamic:
                         s = l.get("strength", 1.0)
                         cm = l.get("conflict_mode", "all")
                         kf = l.get("key_filter", "all")
-                        loras.append((l["name"], s, s, cm, kf))
+                        pres = bool(l.get("preserve", False))
+                        loras.append((l["name"], s, s, cm, kf, pres))
                 elif isinstance(l, (tuple, list)):
                     if l[0] != "None":
                         loras.append(tuple(l))
@@ -3492,14 +3512,23 @@ class _LoRAMergeBase:
                      compute_device=None, sparsification="disabled",
                      sparsification_density=0.7, sparsification_generator=None,
                      merge_refinement="none", dare_dampening=0.0,
-                     keep_on_gpu=False):
+                     keep_on_gpu=False, preserve_flags=None):
         """
         Merges a list of diffs with their weights.
         When compute_device is given, tensors are moved there for faster ops,
         then the result is returned on CPU (unless keep_on_gpu=True).
+
+        preserve_flags: optional list of bools aligned with diffs_with_weights.
+        A LoRA marked preserve=True (a "style" LoRA the user tagged) is exempt
+        from sparsification (its diff is never trimmed/dropped) and from TIES
+        sign-election deletion (its full contribution is always added, even where
+        it holds the minority sign), so a tagged style survives a conflict merge.
         """
         if len(diffs_with_weights) == 0:
             return None
+        if preserve_flags is None:
+            preserve_flags = [False] * len(diffs_with_weights)
+        any_preserve = any(preserve_flags)
 
         if len(diffs_with_weights) == 1:
             diff, weight = diffs_with_weights[0]
@@ -3542,6 +3571,8 @@ class _LoRAMergeBase:
                                else self._della_sparsify_conflict)
                 for idx in range(len(diffs_with_weights)):
                     diff, weight = diffs_with_weights[idx]
+                    if preserve_flags[idx]:
+                        continue  # tagged style LoRA: keep its diff dense
                     kwargs = dict(generator=sparsification_generator)
                     if is_dare:
                         kwargs["dampening"] = dare_dampening
@@ -3555,6 +3586,10 @@ class _LoRAMergeBase:
                                else self._della_sparsify)
                 for idx in range(len(diffs_with_weights)):
                     diff, weight = diffs_with_weights[idx]
+                    if preserve_flags[idx]:
+                        # tagged style LoRA: keep its diff dense (still moved to dev)
+                        diffs_with_weights[idx] = (diff.to(device=dev, dtype=torch.float32).to(dtype), weight)
+                        continue
                     diff = diff.to(device=dev, dtype=torch.float32)
                     kwargs = dict(generator=sparsification_generator)
                     if is_dare:
@@ -3873,6 +3908,11 @@ class _LoRAMergeBase:
             # Memory-optimized: free input diffs after trimming to reduce peak VRAM.
             trimmed = []
             abs_weights = []
+            # Tagged style LoRAs bypass TIES: they are NOT trimmed and NOT subject
+            # to sign election (which would delete the minority-sign direction a
+            # style often holds). Their full-strength contribution is summed here
+            # and added on top of the TIES-merged content below.
+            preserved_sum = None
             is_conflict = sparsification in ("dare_conflict", "della_conflict")
 
             if is_conflict:
@@ -3884,22 +3924,27 @@ class _LoRAMergeBase:
                     del d
                     if w < 0:
                         d_f = -d_f
+                    if preserve_flags[idx]:
+                        contrib = d_f * abs(w)
+                        preserved_sum = contrib if preserved_sum is None else preserved_sum + contrib
+                        continue
                     signed_diffs.append(d_f)
                     abs_weights.append(abs(w))
 
-                conflict_mask = self._compute_conflict_mask(
-                    [(d, 1.0) for d in signed_diffs])
-
-                is_dare = sparsification == "dare_conflict"
-                sparsify_fn = (self._dare_sparsify_conflict if is_dare
-                               else self._della_sparsify_conflict)
-                for d_f in signed_diffs:
-                    kwargs = dict(generator=sparsification_generator)
-                    if is_dare:
-                        kwargs["dampening"] = dare_dampening
-                    trimmed.append(sparsify_fn(d_f, conflict_mask, sparsification_density,
-                                               **kwargs))
-                del signed_diffs, conflict_mask
+                if signed_diffs:
+                    conflict_mask = self._compute_conflict_mask(
+                        [(d, 1.0) for d in signed_diffs])
+                    is_dare = sparsification == "dare_conflict"
+                    sparsify_fn = (self._dare_sparsify_conflict if is_dare
+                                   else self._della_sparsify_conflict)
+                    for d_f in signed_diffs:
+                        kwargs = dict(generator=sparsification_generator)
+                        if is_dare:
+                            kwargs["dampening"] = dare_dampening
+                        trimmed.append(sparsify_fn(d_f, conflict_mask, sparsification_density,
+                                                   **kwargs))
+                    del conflict_mask
+                del signed_diffs
             else:
                 for idx in range(len(diffs_with_weights)):
                     d, w = diffs_with_weights[idx]
@@ -3908,6 +3953,10 @@ class _LoRAMergeBase:
                     del d
                     if w < 0:
                         d_f = -d_f
+                    if preserve_flags[idx]:
+                        contrib = d_f * abs(w)
+                        preserved_sum = contrib if preserved_sum is None else preserved_sum + contrib
+                        continue
                     # DARE/DELLA replaces TIES trim step when enabled
                     if sparsification == "dare":
                         trimmed.append(self._dare_sparsify(d_f, sparsification_density, generator=sparsification_generator, dampening=dare_dampening))
@@ -3916,6 +3965,13 @@ class _LoRAMergeBase:
                     else:
                         trimmed.append(self._ties_trim(d_f, density))
                     abs_weights.append(abs(w))
+
+            # Every contributor was a tagged style LoRA — nothing to TIES-merge.
+            if not trimmed:
+                result = (preserved_sum if preserved_sum is not None
+                          else torch.zeros(ref_diff.shape, dtype=torch.float32, device=dev))
+                result = result.to(dtype)
+                return result.cpu() if to_cpu else result
 
             # Refine/full merge refinement pipeline for TIES
             # TALL-masks before orthogonalization (see non-TIES comment above)
@@ -3954,6 +4010,9 @@ class _LoRAMergeBase:
             del trimmed, majority_sign
             if ties_selfish is not None:
                 result = result.to(dtype=torch.float32) + ties_selfish.to(device=result.device, dtype=torch.float32)
+            if preserved_sum is not None:
+                # Tagged style added at full strength on top of the TIES-merged content.
+                result = result.to(dtype=torch.float32) + preserved_sum.to(device=result.device, dtype=torch.float32)
             result = result.to(dtype)
             return result.cpu() if to_cpu else result
 
@@ -3995,6 +4054,7 @@ class _LoRAMergeBase:
                 lora_name, model_str, clip_str = entry[0], entry[1], entry[2]
                 conflict_mode = entry[3] if len(entry) > 3 else "all"
                 key_filter = entry[4] if len(entry) > 4 else "all"
+                preserve = bool(entry[5]) if len(entry) > 5 else False
 
                 # Load LoRA with caching
                 if lora_name in self.loaded_loras:
@@ -4020,6 +4080,7 @@ class _LoRAMergeBase:
                     "clip_strength": clip_str,
                     "conflict_mode": conflict_mode,
                     "key_filter": key_filter,
+                    "preserve": preserve,
                     "metadata": metadata,
                 })
 
@@ -4036,6 +4097,7 @@ class _LoRAMergeBase:
                     "clip_strength": item.get("clip_strength", None),
                     "conflict_mode": item.get("conflict_mode", "all"),
                     "key_filter": item.get("key_filter", "all"),
+                    "preserve": bool(item.get("preserve", False)),
                     "metadata": item.get("metadata", {}),
                     "_precomputed_diffs": item.get("_precomputed_diffs", False),
                 })
@@ -5011,13 +5073,15 @@ class LoRAOptimizer(_LoRAMergeBase):
                 for entry in lora_stack:
                     cm = entry[3] if len(entry) > 3 else "all"
                     kf = entry[4] if len(entry) > 4 else "all"
+                    pres = bool(entry[5]) if len(entry) > 5 else False
                     cs = float(entry[2]) if entry[2] is not None else -1.0
-                    entries.append((str(entry[0]), float(entry[1]), cs, cm, kf))
+                    entries.append((str(entry[0]), float(entry[1]), cs, cm, kf, pres))
             elif isinstance(first, dict):
                 for item in lora_stack:
                     cm = item.get("conflict_mode", "all")
                     kf = item.get("key_filter", "all")
-                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf))
+                    pres = bool(item.get("preserve", False))
+                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf, pres))
             entries.sort()
             h.update(json.dumps(entries).encode())
         h.update(f"|os={output_strength}|csm={clip_strength_multiplier}|as={auto_strength}|om={optimization_mode}|cp={patch_compression}|sd={svd_device}|nk={normalize_keys}|sp={sparsification}|spd={sparsification_density}|dd={dare_dampening}|mso={merge_strategy_override}|mq={merge_refinement}|bp={strategy_set}|ap={architecture_preset}|asf={auto_strength_floor}|ds={decision_smoothing}|ssg={smooth_slerp_gate}".encode())
@@ -7464,9 +7528,11 @@ class LoRAOptimizer(_LoRAMergeBase):
                 return None
 
             diffs_list = []
+            preserve_list = []
             storage_dtype = prepared["storage_dtype"]
             for i in sorted(prepared["diffs"].keys()):
                 diffs_list.append((prepared["diffs"][i], prepared["eff_strengths"][i]))
+                preserve_list.append(bool(active_loras[i].get("preserve", False)))
 
             if len(diffs_list) <= 1 and pf_mode != "weighted_sum":
                 pf_mode = "weighted_sum"
@@ -7521,6 +7587,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 # downcast below run there, so the CPU transfer (when needed)
                 # moves half the bytes and skips a full CPU-side read
                 keep_on_gpu=True,
+                preserve_flags=preserve_list,
             )
             merged_norm = merged_diff.float().norm().item() if merged_diff is not None else 0.0
             diffs_list.clear()  # Free input diffs from GPU
@@ -13100,13 +13167,15 @@ class LoRAConflictEditor(_LoRAMergeBase):
                 for entry in lora_stack:
                     cm = entry[3] if len(entry) > 3 else "all"
                     kf = entry[4] if len(entry) > 4 else "all"
+                    pres = bool(entry[5]) if len(entry) > 5 else False
                     cs = float(entry[2]) if entry[2] is not None else -1.0
-                    entries.append((str(entry[0]), float(entry[1]), cs, cm, kf))
+                    entries.append((str(entry[0]), float(entry[1]), cs, cm, kf, pres))
             elif isinstance(first, dict):
                 for item in lora_stack:
                     cm = item.get("conflict_mode", "all")
                     kf = item.get("key_filter", "all")
-                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf))
+                    pres = bool(item.get("preserve", False))
+                    entries.append((str(item.get("name", "")), float(item.get("strength", 0)), cm, kf, pres))
             entries.sort()
             h.update(json.dumps(entries).encode())
         h.update(f"|ms={merge_strategy}".encode())
@@ -13141,10 +13210,11 @@ class LoRAConflictEditor(_LoRAMergeBase):
                 enriched = [dict(item, conflict_mode=resolved)]
             else:
                 # clip_strength may be None (dict-format LoRAs use global multiplier);
-                # preserve None so the optimizer applies clip_strength_multiplier correctly
+                # keep None so the optimizer applies clip_strength_multiplier correctly
                 enriched = [(
                     item["name"], item["strength"], item["clip_strength"],
-                    resolved, item.get("key_filter", "all")
+                    resolved, item.get("key_filter", "all"),
+                    bool(item.get("preserve", False))
                 )]
             report = (
                 "=" * 46 + "\n"
@@ -13379,7 +13449,8 @@ class LoRAConflictEditor(_LoRAMergeBase):
                 else:
                     enriched.append((item["name"], item["strength"],
                                      item["clip_strength"], item.get("conflict_mode", "all"),
-                                     item.get("key_filter", "all")))
+                                     item.get("key_filter", "all"),
+                                     bool(item.get("preserve", False))))
             else:
                 mode = resolved_modes[active_idx]
                 if is_dict_format:
@@ -13393,6 +13464,7 @@ class LoRAConflictEditor(_LoRAMergeBase):
                         item["clip_strength"],
                         mode,
                         item.get("key_filter", "all"),
+                        bool(item.get("preserve", False)),
                     ))
                 active_idx += 1
 

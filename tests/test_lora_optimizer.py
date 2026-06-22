@@ -385,13 +385,15 @@ class LoRAOptimizerTests(unittest.TestCase):
         }
 
         enriched, _report, _strategy = editor.analyze_and_enrich(
-            [("demo", 1.0, 1.0, "all", "shared_only")],
+            [("demo", 1.0, 1.0, "all", "shared_only", True)],
             "auto",
             conflict_mode_1="auto",
         )
 
-        self.assertEqual(len(enriched[0]), 5)
+        # tuple grew to 6 with the preserve flag; key_filter + preserve round-trip
+        self.assertEqual(len(enriched[0]), 6)
         self.assertEqual(enriched[0][4], "shared_only")
+        self.assertIs(enriched[0][5], True)
 
     def test_save_merged_lora_uses_canonical_prefix(self):
         saver = lora_optimizer.SaveMergedLoRA()
@@ -951,6 +953,102 @@ class SumPreserveMergeTests(unittest.TestCase):
             target_group, active_loras, raw_n_loras=2, mode="sum_preserve",
             norm_stats=None)
         self.assertIsNone(info)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class PreserveFlagTests(unittest.TestCase):
+    """A per-LoRA preserve flag protects a tagged style LoRA from TIES sign-election
+    deletion and from sparsification trimming in conflict merges."""
+
+    def setUp(self):
+        self.optimizer = lora_optimizer.LoRAOptimizer()
+
+    def test_ties_deletes_minority_sign_without_preserve(self):
+        # Content (+10) out-votes a style (-1) in TIES sign election; the style's
+        # minority-sign direction is dropped entirely.
+        content = torch.tensor([10.0, 10.0, 10.0, 10.0])
+        style = torch.tensor([-1.0, -1.0, -1.0, -1.0])
+        base = self.optimizer._merge_diffs(
+            [(content.clone(), 1.0), (style.clone(), 1.0)], "ties", density=1.0)
+        self.assertAlmostEqual(base[0].item(), 10.0, places=5)
+
+    def test_ties_preserve_keeps_minority_sign_style(self):
+        # With preserve on the style, its full contribution is added on top of the
+        # TIES-merged content: 10 + (-1) = 9 (the style survives the conflict).
+        content = torch.tensor([10.0, 10.0, 10.0, 10.0])
+        style = torch.tensor([-1.0, -1.0, -1.0, -1.0])
+        kept = self.optimizer._merge_diffs(
+            [(content.clone(), 1.0), (style.clone(), 1.0)], "ties", density=1.0,
+            preserve_flags=[False, True])
+        self.assertAlmostEqual(kept[0].item(), 9.0, places=5)
+
+    def test_ties_all_preserved_is_full_sum(self):
+        # Every contributor tagged -> nothing to TIES-merge -> plain full sum.
+        a = torch.tensor([3.0, 3.0])
+        b = torch.tensor([-2.0, -2.0])
+        res = self.optimizer._merge_diffs(
+            [(a.clone(), 1.0), (b.clone(), 1.0)], "ties", density=0.5,
+            preserve_flags=[True, True])
+        torch.testing.assert_close(res, torch.tensor([1.0, 1.0]))
+
+    def test_sparsification_all_preserved_equals_disabled(self):
+        # All preserved -> sparsification is skipped -> identical to disabled.
+        d1 = torch.tensor([1.0, 2.0, 3.0, 4.0])
+        d2 = torch.tensor([0.5, 1.5, 2.5, 3.5])
+        disabled = self.optimizer._merge_diffs(
+            [(d1.clone(), 1.0), (d2.clone(), 1.0)], "weighted_sum",
+            sparsification="disabled")
+        gen = torch.Generator(device="cpu")
+        gen.manual_seed(0)
+        all_pres = self.optimizer._merge_diffs(
+            [(d1.clone(), 1.0), (d2.clone(), 1.0)], "weighted_sum",
+            sparsification="dare", sparsification_density=0.5,
+            sparsification_generator=gen, preserve_flags=[True, True])
+        torch.testing.assert_close(disabled, all_pres)
+
+    def test_normalize_stack_carries_preserve_tuple_and_dict(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        opt.loaded_loras = {"loraA": {}, "loraB": {}}
+        tup = opt._normalize_stack([
+            ("loraA", 1.0, 1.0, "all", "all", True),
+            ("loraB", 1.0, 1.0, "all", "all"),  # legacy 5-tuple -> preserve False
+        ])
+        self.assertTrue(tup[0]["preserve"])
+        self.assertFalse(tup[1]["preserve"])
+
+        dct = opt._normalize_stack([
+            {"name": "x", "lora": {}, "strength": 1.0, "preserve": True},
+        ])
+        self.assertTrue(dct[0]["preserve"])
+
+    def test_build_stack_advanced_emits_preserve(self):
+        node = lora_optimizer.LoRAStackDynamic()
+        with mock.patch.object(
+            lora_optimizer.LoRAStackDynamic, "_resolve_lora_name",
+            side_effect=lambda n: n,
+        ):
+            result, = node.build_stack(
+                settings_visibility="advanced", input_mode="text", lora_count=2,
+                lora_name_text_1="lora_a", lora_name_text_2="lora_b",
+                model_strength_1=1.0, clip_strength_1=1.0, preserve_1=True,
+                model_strength_2=1.0, clip_strength_2=1.0, preserve_2=False,
+            )
+        # tuple layout: (name, model_str, clip_str, conflict_mode, key_filter, preserve)
+        self.assertIs(result[0][5], True)
+        self.assertIs(result[1][5], False)
+
+    def test_build_stack_simple_defaults_preserve_false(self):
+        node = lora_optimizer.LoRAStackDynamic()
+        with mock.patch.object(
+            lora_optimizer.LoRAStackDynamic, "_resolve_lora_name",
+            side_effect=lambda n: n,
+        ):
+            result, = node.build_stack(
+                settings_visibility="simple", input_mode="text", lora_count=1,
+                lora_name_text_1="lora_a", strength_1=1.0,
+            )
+        self.assertEqual(len(result[0]), 6)
+        self.assertIs(result[0][5], False)
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")

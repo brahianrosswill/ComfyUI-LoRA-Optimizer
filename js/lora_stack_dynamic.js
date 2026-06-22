@@ -12,44 +12,52 @@ const SLOT_WIDGET_NAMES = [
     "clip_strength",
     "conflict_mode",
     "key_filter",
+    "preserve",
 ];
 
 // --- Legacy workflow migration ---
-// The litegraph workflow format restores widget values POSITIONALLY. The
-// `enabled_{i}` toggle was added as the first widget of each slot after some
-// workflows were saved, so older saves have 7 values/slot instead of 8. Without
-// migration the positional restore shifts every per-slot value by one — the
-// LoRA path lands in the `enabled` toggle and each `lora_name` combo receives
-// "None", silently wiping the stack on load. Re-insert a default `enabled=true`
-// at each slot head so the saved values realign with the current widget order.
+// The litegraph workflow format restores widget values POSITIONALLY, so any
+// per-slot widget added later shifts every saved value unless we re-pad old
+// saves to the current slot layout. Two such additions have happened:
+//   - `enabled_{i}` was inserted at each slot HEAD  (7 -> 8 per slot)
+//   - `preserve_{i}` was appended at each slot TAIL (8 -> 9 per slot)
+// Without migration the positional restore desyncs — the LoRA path lands in the
+// wrong widget and `lora_name` combos receive "None", silently wiping the stack.
+// Re-pad each slot so saved values realign with the current widget order.
 const CONTROL_WIDGET_COUNT = 3;   // settings_visibility, input_mode, lora_count
 const TRAILING_WIDGET_COUNT = 1;  // base_model_filter
-const OLD_PER_SLOT = 7;           // before enabled_{i}
-const NEW_PER_SLOT = 8;           // with enabled_{i}
+const SLOT_V7 = 7;                // before enabled_{i}
+const SLOT_V8 = 8;                // with enabled_{i}, before preserve_{i}
+const NEW_PER_SLOT = 9;           // with enabled_{i} (head) + preserve_{i} (tail)
 
 function migrateWidgetsValues(wv) {
     if (!Array.isArray(wv)) return wv;
     const slotRegion = wv.length - CONTROL_WIDGET_COUNT - TRAILING_WIDGET_COUNT;
     if (slotRegion <= 0) return wv;
-    // Current format already carries enabled (8/slot) — leave untouched.
+    // Current format already carries both enabled + preserve (9/slot) — untouched.
     if (slotRegion % NEW_PER_SLOT === 0) return wv;
-    // Legacy format (7/slot): insert enabled=true at each slot head.
-    if (slotRegion % OLD_PER_SLOT === 0) {
-        const nSlots = slotRegion / OLD_PER_SLOT;
-        const out = wv.slice(0, CONTROL_WIDGET_COUNT);
-        let p = CONTROL_WIDGET_COUNT;
-        for (let i = 0; i < nSlots; i++) {
-            out.push(true);
-            for (let k = 0; k < OLD_PER_SLOT; k++) out.push(wv[p++]);
-        }
-        for (; p < wv.length; p++) out.push(wv[p]); // trailing base_model_filter
-        console.log(
-            `[LoRAStackDynamic] Migrated legacy workflow (${wv.length} -> ${out.length} ` +
-            `widget values): re-inserted enabled toggles to restore LoRA names.`
-        );
-        return out;
+
+    // Disambiguate 7 vs 8 by preferring an EXACT divisor (both are possible for
+    // some lengths; 8/slot is the more recent layout, so test it first).
+    let oldPerSlot = null;
+    if (slotRegion % SLOT_V8 === 0) oldPerSlot = SLOT_V8;
+    else if (slotRegion % SLOT_V7 === 0) oldPerSlot = SLOT_V7;
+    if (oldPerSlot === null) return wv; // unrecognized layout — don't touch
+
+    const nSlots = slotRegion / oldPerSlot;
+    const out = wv.slice(0, CONTROL_WIDGET_COUNT);
+    let p = CONTROL_WIDGET_COUNT;
+    for (let i = 0; i < nSlots; i++) {
+        if (oldPerSlot === SLOT_V7) out.push(true);   // re-insert enabled at slot head
+        for (let k = 0; k < oldPerSlot; k++) out.push(wv[p++]);
+        out.push(false);                              // append preserve=false at slot tail
     }
-    return wv; // unrecognized layout — don't touch
+    for (; p < wv.length; p++) out.push(wv[p]); // trailing base_model_filter
+    console.log(
+        `[LoRAStackDynamic] Migrated workflow (${oldPerSlot}/slot -> ${NEW_PER_SLOT}/slot, ` +
+        `${wv.length} -> ${out.length} widget values): re-padded slots to restore LoRA names.`
+    );
+    return out;
 }
 
 function toggleWidget(node, widget, show, suffix = "") {
@@ -160,6 +168,7 @@ function updateVisibility(node) {
         toggleWidget(node, findWidget(node, `clip_strength_${i}`), visible && !isSimple);
         toggleWidget(node, findWidget(node, `conflict_mode_${i}`), visible && !isSimple);
         toggleWidget(node, findWidget(node, `key_filter_${i}`), visible && !isSimple);
+        toggleWidget(node, findWidget(node, `preserve_${i}`), visible && !isSimple);
     }
 
     // Hide base_model_filter in text mode (only useful for dropdown combos)
