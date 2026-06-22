@@ -10007,11 +10007,13 @@ class LoRAAutoTuner(LoRAOptimizer):
             f"|spd={scoring_speed}|mid={id(model)}|cid={id(clip)}"
             f"|asf={auto_strength_floor}|ds={decision_smoothing}|eh={evaluator_hash}"
             f"|sf={scoring_formula}|ssg={smooth_slerp_gate}"
-            f"|mm={memory_mode}".encode()
+            f"|mm={memory_mode}|cc={community_cache}".encode()
         ).hexdigest()[:16]
         # selection is deliberately NOT in the key: changing it replays the
-        # selected config from the cached sweep instead of re-sweeping
-        if cache_patches == "enabled" and hasattr(self, '_autotuner_cache') and at_cache_key in self._autotuner_cache:
+        # selected config from the cached sweep instead of re-sweeping.
+        # clear_and_run must always recompute — never serve the in-node cache.
+        if (cache_patches == "enabled" and memory_mode != "clear_and_run"
+                and hasattr(self, '_autotuner_cache') and at_cache_key in self._autotuner_cache):
             cached_result, cached_mode, cached_selection = self._autotuner_cache[at_cache_key]
             cached_tuner = cached_result[4]
             top_list = cached_tuner.get("top_n") if isinstance(cached_tuner, dict) else None
