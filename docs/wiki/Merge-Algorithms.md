@@ -8,12 +8,13 @@ For the overall pipeline and composition order, see [[How It Works]].
 
 ## Overview
 
-The optimizer has five merge algorithms. Each prefix in the model can use a different one based on local conflict data.
+The optimizer has six merge algorithms. Each prefix in the model can use a different one based on local conflict data.
 
 | Algorithm | Best For | Properties |
 |-----------|----------|------------|
 | [Weighted Sum](#weighted-sum) | Single-LoRA prefixes | Lossless, fully SVD-compressible |
-| [Weighted Average](#weighted-average) | Low-conflict overlapping prefixes | Lossless, fully SVD-compressible |
+| [Weighted Average](#weighted-average) | Opposing / partially-aligned overlapping prefixes | Lossless, fully SVD-compressible |
+| [Sum-Preserve](#sum-preserve-bounded-additive) | Orthogonal prefixes (style + content) | Magnitude-preserving, energy-capped |
 | [TIES](#ties-merging) | High-conflict prefixes (>25% sign conflict) | Nonlinear, lossy SVD |
 | [SLERP](#slerp) | Low-conflict, similar-magnitude LoRAs | Magnitude-preserving |
 | [Consensus](#consensus-merging) | Highly similar LoRAs (high cosine similarity) | Importance-weighted, spectral cleanup |
@@ -62,16 +63,45 @@ Same as weighted sum, but divided by the sum of strengths. This ensures the outp
 
 ### When Selected
 
-- Per-prefix: 2+ LoRAs present AND sign conflict ratio ≤ 25%
+- Per-prefix: 2+ LoRAs present, low conflict, and the directions are **opposing** (cos < 0) — the division keeps the directional cancellation
 - Global: aggregate conflict ≤ 25% AND cosine similarity between 0.3–0.7
-- Can be upgraded to SLERP in the `full` strategy set when LoRAs are orthogonal
+- Orthogonal, non-opposing prefixes go to **Sum-Preserve** instead (`no_slerp`/`basic`) or **SLERP** (`full`) — see below
 
 ### Properties
 
 - Fair blending — each LoRA contributes proportionally
 - Prevents magnitude inflation from stacking
 - Fully compressible by SVD (linear operation)
-- Doesn't handle sign conflicts (opposing contributions cancel partially)
+- **Caveat:** because it divides by `Σ|strength|`, a LoRA's *absolute* contribution is capped at a convex fraction — a style LoRA set to strength 2 still lands below 1× its delta (`s/(s+s')` → 1.0). For orthogonal stacks this washes out the weaker signal; that is why orthogonal prefixes now route to Sum-Preserve.
+
+---
+
+## Sum-Preserve (Bounded Additive)
+
+Keeps each LoRA at its full strength like Weighted Sum, but adds a per-group energy cap so orthogonal stacks don't oversaturate. Introduced to stop a **style LoRA from disappearing** when merged with a content/character LoRA.
+
+### Formula
+
+```
+result   = Σ_k (strength_k × diff_k)                 # full strength, like weighted_sum
+max_single = max_k ‖strength_k × diff_k‖             # strongest single contribution
+cap        = 1.5 × max_single                        # _ORTHO_SUM_HEADROOM
+if ‖result‖ > cap:  result ×= cap / ‖result‖
+```
+
+Two orthogonal LoRAs combine to ≈1.41× the strongest single contribution (< 1.5×) and pass through **un-capped** — each keeps its full delta, so the style survives. Three equal orthogonal LoRAs hit ≈1.73× and are scaled back to exactly 1.5× — bounded, no oversaturation. The cap is **per-group** and independent of the global auto-strength floor, so it can't be defeated by the orthogonal-floor clamp the way a raw weighted-sum flip would be.
+
+### When Selected
+
+- Per-prefix: 2+ LoRAs, **orthogonal** (low cosine similarity), **non-opposing** (cos ≥ 0), in the `no_slerp` or `basic` strategy sets
+- The `full` strategy set keeps SLERP for these prefixes (the AutoTuner ranks both as candidates)
+
+### Properties
+
+- Preserves each LoRA's emphasis — `strength` behaves as an *amount*, not a *ratio*
+- Energy-capped per group — safe for 3+ orthogonal LoRAs
+- Fully compressible by SVD (the cap folds into the factors as a scalar)
+- This is what "additive looks better than per-prefix" was pointing at — now available inside `per_prefix` while real conflicts still get TIES
 
 ---
 

@@ -111,6 +111,15 @@ The optimizer's two-pass architecture usually keeps peak memory near one active 
 3. **Check key overlap** — if LoRAs don't share keys, there's nothing to merge and the optimizer passes them through at full strength already
 4. **Check key filter** — `shared_only` or `unique_only` may be filtering out keys you want
 
+### "My style LoRA disappears when merged with a content/character LoRA"
+
+This is the classic style-washout case. Two things now address it:
+
+1. **Sum-Preserve (automatic)** — orthogonal prefixes (a style LoRA is usually orthogonal to a character LoRA) now use the [Sum-Preserve](Merge-Algorithms#sum-preserve-bounded-additive) mode in the `no_slerp`/`basic` strategy sets instead of `weighted_average`, which used to divide the style down to a fraction of its delta. If you run the **AutoTuner**, it generates and ranks the Sum-Preserve candidate automatically — pick the config that shows `sum_preserve` in the Per-Group Strategy / `sum+` in the block map. If you use the plain Optimizer, set `strategy_set=no_slerp`.
+2. **`preserve` flag (explicit)** — if there is real *conflict* between the style and content (TIES prefixes) or you run with sparsification, turn on **`preserve`** for the style LoRA on the Stack node. It is then never trimmed and is exempt from TIES sign-election (which deletes a style's minority-sign direction); its full contribution is added on top of the conflict-resolved content merge.
+
+Historically "additive looks better than per-prefix" pointed at exactly this — additive kept the style but did no conflict resolution. Sum-Preserve gives you the additive look *inside* `per_prefix`, while real conflicts still get TIES.
+
 ### "Results are oversaturated / blown out"
 
 1. **Enable auto-strength** — prevents compounding from stacking

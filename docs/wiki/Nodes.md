@@ -16,6 +16,7 @@ Builds a list of LoRAs for the optimizer. Chain multiple Stack nodes to add any 
 | `strength` | FLOAT | Yes | How much this LoRA contributes (default 1.0) |
 | `conflict_mode` | COMBO | Yes | Where this LoRA's contributions apply: `all`, `low_conflict`, `high_conflict` |
 | `key_filter` | COMBO | Yes | Which prefixes this LoRA contributes to: `all`, `shared_only`, `unique_only`, `audio_only`, `no_audio` |
+| `preserve` | BOOLEAN | Yes | Mark as a **style LoRA** to protect it in conflict merges. When on, it is never trimmed by sparsification and is exempt from TIES sign-election (which otherwise deletes a style's minority-sign direction) — its full contribution is added on top of the conflict-resolved content merge. Turn on when a style LoRA keeps disappearing when merged with a content/character LoRA. |
 | `lora_stack` | LORA_STACK | No | Previous stack to append to (for chaining) |
 
 ### Outputs
@@ -55,6 +56,7 @@ Single node with 1–10 adjustable LoRA slots. Replaces chaining multiple Stack 
 | `clip_strength_i` | FLOAT | CLIP patch strength |
 | `conflict_mode_i` | COMBO | `all`, `low_conflict`, `high_conflict` |
 | `key_filter_i` | COMBO | `all`, `shared_only`, `unique_only`, `audio_only`, `no_audio` |
+| `preserve_i` | BOOLEAN | Protect LoRA #i as a style LoRA (exempt from sparsification + TIES sign-election; full contribution added on top). See `preserve` on the LoRA Stack node. |
 
 ### Outputs
 

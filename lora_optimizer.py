@@ -179,7 +179,12 @@ AUTOTUNER_MEMORY_VERSION = 1
 # modes) can shift at ulp level
 # 1.10.2: explicit auto_strength_floor now bounds the reduction on aligned/
 # opposing stacks too (the orthogonality gate only applies to -1 defaults)
-AUTOTUNER_ALGO_VERSION = "1.10.2"
+# 1.11.0: orthogonal, non-opposing prefixes in the no_slerp/basic strategy sets
+# now merge with the bounded-additive "sum_preserve" mode instead of
+# weighted_average's /Σw collapse — candidate merges and their scores change for
+# any stack with orthogonal overlap (the style-LoRA washout fix). Also adds the
+# per-LoRA preserve flag (sparsification + TIES sign-election exemption).
+AUTOTUNER_ALGO_VERSION = "1.11.0"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
