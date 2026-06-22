@@ -3721,6 +3721,28 @@ class TestMergeOnWrite(unittest.TestCase):
                 loaded = lora_optimizer.LoRAAutoTuner._pair_cache_load("a", "b")
                 self.assertEqual(set(loaded), {"p1", "p2"})
 
+    @unittest.skipIf(torch is None, "torch not available")
+    def test_content_hash_inmemory_fallback_for_fileless_lora(self):
+        """A LoRA with no file on disk (e.g. the extractor's output) gets a
+        stable content hash from its in-memory weights instead of None."""
+        with mock.patch.object(lora_optimizer.folder_paths, "get_full_path",
+                               return_value=None):
+            item = {"name": "<extracted>", "lora": {
+                "blk.lora_up.weight": torch.ones(4, 2),
+                "blk.lora_down.weight": torch.ones(2, 4) * 0.5,
+            }}
+            h1 = lora_optimizer.LoRAAutoTuner._lora_content_hash(item)
+            h2 = lora_optimizer.LoRAAutoTuner._lora_content_hash(item)
+            self.assertIsNotNone(h1)
+            self.assertEqual(len(h1), 16)
+            self.assertEqual(h1, h2)  # deterministic
+            # different weights -> different hash
+            item2 = {"name": "<extracted>", "lora": {
+                "blk.lora_up.weight": torch.zeros(4, 2),
+                "blk.lora_down.weight": torch.ones(2, 4) * 0.5,
+            }}
+            self.assertNotEqual(h1, lora_optimizer.LoRAAutoTuner._lora_content_hash(item2))
+
     def test_content_hash_save_merges_unless_gc(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch("lora_optimizer.AUTOTUNER_MEMORY_DIR", tmpdir):

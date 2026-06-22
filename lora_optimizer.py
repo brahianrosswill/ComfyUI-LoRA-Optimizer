@@ -9207,11 +9207,29 @@ class LoRAAutoTuner(LoRAOptimizer):
 
     @staticmethod
     def _lora_content_hash(lora_item):
-        """SHA256[:16] of file contents, cached locally by (path, mtime, size)."""
+        """SHA256[:16] of file contents, cached locally by (path, mtime, size).
+
+        Falls back to hashing the in-memory weights when the LoRA has no file
+        on disk (e.g. LoRAExtractFromModel's synthetic entry), so it still gets
+        a stable content hash instead of disabling the community cache.
+        """
         try:
             name = lora_item["name"]
             path = folder_paths.get_full_path("loras", name)
             if path is None:
+                lora_sd = lora_item.get("lora")
+                if isinstance(lora_sd, dict) and lora_sd:
+                    h = hashlib.sha256()
+                    for k in sorted(lora_sd.keys()):
+                        v = lora_sd[k]
+                        h.update(k.encode())
+                        if hasattr(v, "detach"):
+                            t = v.detach().to("cpu", torch.float32).contiguous()
+                            h.update(str(tuple(t.shape)).encode())
+                            h.update(t.numpy().tobytes())
+                        else:
+                            h.update(repr(v).encode())
+                    return h.hexdigest()[:16]
                 return None
             st = os.stat(path)
             cache_key = f"{path}|{st.st_mtime}|{st.st_size}"
