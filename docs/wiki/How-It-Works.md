@@ -288,7 +288,7 @@ Different model architectures have different numerical characteristics. The arch
 | Preset | Architectures | Density Range | Noise Floor | Max Strength Cap |
 |--------|--------------|---------------|-------------|-----------------|
 | `sd_unet` | SD 1.5, SDXL | 0.1 – 0.9 | 10% | 3.0 |
-| `dit` | Flux, Wan, Z-Image, LTX, Ideogram 4, HunyuanVideo | 0.4 – 0.95 | 5% | 5.0 |
+| `dit` | Flux, Wan, Z-Image, LTX, Ideogram 4, Anima, HunyuanVideo | 0.4 – 0.95 | 5% | 5.0 |
 | `acestep_dit` | ACE-Step (music DiT) | 0.4 – 0.95 | 5% | 5.0 |
 | `llm` | Qwen, LLaMA | 0.1 – 0.8 | 15% | 3.0 |
 | `auto` (default) | Auto-detected from LoRA keys | Selected automatically | — | — |
@@ -925,6 +925,7 @@ Bridges `LORA_DATA` to a `WANVIDEOMODEL`. Handles the `_orig_mod.` key mismatch 
 | **Ideogram 4** (NextDiT) | `layers.N.attention.qkv`/`attention.o`, fal `conditional_transformer.` prefix | ai-toolkit / fal / PEFT prefixes unified; qkv stays fused (detected **before** Z-Image) |
 | **Wan** 2.1/2.2 | `blocks.N` with `self_attn`/`ffn` | LyCORIS / diffusers / Musubi / Fun LoRA / finetrainer unified, RS-LoRA alpha fix |
 | **ACE-Step** v1.0/v1.5 | `layers.N` with `self_attn`/`cross_attn` + `q_proj`/`k_proj`/`v_proj` | Attention key unification, music-DiT preset |
+| **Anima** (Cosmos-Predict2 DiT) | `blocks.N.{self_attn,cross_attn}.{q,k,v,output}_proj`, `mlp.layer1/2`, unique `llm_adapter` (detected **before** ACE-Step/Wan/LTX) | Kohya `lora_unet_*` / diffusers `transformer_blocks.attn1/attn2` / ComfyUI unified to `diffusion_model.blocks.N.*`; split QKV |
 | **LTX Video** | `adaln_single`, `attn1`/`attn2` | Trainer format unification |
 | **Qwen-Image** | `img_mlp`/`txt_mlp`/`img_mod`/`txt_mod` | Dual-stream key unification |
 

@@ -352,7 +352,7 @@ _VIDEO_ARCH_ORTHOGONAL_FLOOR = {"wan": 1.0, "ltx": 1.0, "acestep": 1.0}
 _ARCH_TO_PRESET = {
     "sdxl": "sd_unet", "sd15": "sd_unet", "unknown": "sd_unet",
     "flux": "dit", "wan": "dit", "zimage": "dit", "ltx": "dit",
-    "ideogram4": "dit",
+    "ideogram4": "dit", "anima": "dit",
     "acestep": "acestep_dit",
     "qwen_image": "llm",
 }
@@ -937,7 +937,7 @@ class _LoRAMergeBase:
         """
         Detect model architecture from LoRA key patterns.
         Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'sd15', 'ltx',
-        'qwen_image', 'ideogram4', or 'unknown'.
+        'qwen_image', 'ideogram4', 'anima', or 'unknown'.
         """
         keys = list(lora_sd.keys())
         keys_str = ' '.join(k.lower() for k in keys)
@@ -1006,6 +1006,26 @@ class _LoRAMergeBase:
             return 'flux'
         if any('double_blocks' in k or 'single_blocks' in k for k in keys):
             return 'flux'
+
+        # Anima (CircleStone Labs) — a Cosmos-Predict2 DiT with SPLIT QKV. MUST be
+        # checked before ACE-Step / Wan / LTX: its blocks.N.self_attn.q_proj and
+        # its Qwen3 text encoder (lora_te_layers_N_*) otherwise match those.
+        # Unambiguous discriminators: the unique `llm_adapter`, the Cosmos triple
+        # `adaln_modulation_{self_attn,cross_attn,mlp}`, the GPT2 `mlp.layer1/2`,
+        # and `{self_attn,cross_attn}.output_proj`. (The 'lora_unet' prefix some
+        # trainers emit is a convention — Anima is a DiT, not a UNet.)
+        if any('llm_adapter' in k for k in keys):
+            return 'anima'
+        _anima_block = any(('blocks.' in k or 'blocks_' in k)
+                           and ('self_attn' in k or 'cross_attn' in k) for k in keys)
+        if _anima_block and any(
+                'adaln_modulation_self_attn' in k or 'adaln_modulation_cross_attn' in k
+                or 'mlp.layer1' in k or 'mlp.layer2' in k
+                or '_mlp_layer1' in k or '_mlp_layer2' in k
+                or 'self_attn.output_proj' in k or 'cross_attn.output_proj' in k
+                or '_self_attn_output_proj' in k or '_cross_attn_output_proj' in k
+                for k in keys):
+            return 'anima'
 
         # ACE-Step v1.5: layers.N with self_attn/cross_attn using q_proj/k_proj/v_proj
         if any('layers.' in k and ('self_attn' in k or 'cross_attn' in k)
@@ -1507,6 +1527,65 @@ class _LoRAMergeBase:
         return normalized
 
     @staticmethod
+    def _normalize_keys_anima(lora_sd):
+        """
+        Normalize Anima (CircleStone Labs / Cosmos-Predict2 DiT) LoRA keys to the
+        canonical ComfyUI format:
+            diffusion_model.blocks.N.{self_attn,cross_attn}.{q,k,v,output}_proj
+            diffusion_model.blocks.N.mlp.layer1 / layer2
+            diffusion_model.blocks.N.adaln_modulation_{self_attn,cross_attn,mlp}.N
+            diffusion_model.llm_adapter.blocks.N.*
+            diffusion_model.final_layer.{linear, adaln_modulation.N}
+
+        Anima uses SPLIT QKV (separate q/k/v) — no fuse/refuse handling needed.
+        Converts:
+          - diffusion-pipe / ComfyUI  (diffusion_model.blocks.N.*)  — already canonical
+          - Kohya sd-scripts          (lora_unet_blocks_N_*)        — underscore→dot restore
+          - Diffusers Cosmos          (transformer_blocks.N.attn1/attn2.to_*) — best effort
+        Text-encoder (Qwen3) lora_te_* keys pass through unchanged.
+        """
+        normalized = {}
+        for k, v in lora_sd.items():
+            nk = k
+            if nk.startswith('base_model.model.'):
+                nk = nk[len('base_model.model.'):]
+            if nk.startswith('transformer.') and 'transformer_blocks' not in nk[:13]:
+                nk = nk[len('transformer.'):]
+
+            if nk.startswith('lora_unet_'):
+                # Kohya: dots were flattened to underscores; restore structural dots.
+                nk = 'diffusion_model.' + nk[len('lora_unet_'):]
+                nk = re.sub(r'^diffusion_model\.llm_adapter_blocks_(\d+)_',
+                            r'diffusion_model.llm_adapter.blocks.\1.', nk)
+                nk = re.sub(r'^diffusion_model\.blocks_(\d+)_',
+                            r'diffusion_model.blocks.\1.', nk)
+                nk = re.sub(r'(self_attn|cross_attn)_(q|k|v|output)_proj', r'\1.\2_proj', nk)
+                nk = re.sub(r'(self_attn|cross_attn)_(q|k)_norm', r'\1.\2_norm', nk)
+                nk = re.sub(r'mlp_(layer\d)', r'mlp.\1', nk)
+                nk = re.sub(r'adaln_modulation_(self_attn|cross_attn|mlp)_(\d+)',
+                            r'adaln_modulation_\1.\2', nk)
+                nk = re.sub(r'final_layer_(linear|adaln_modulation)', r'final_layer.\1', nk)
+                nk = re.sub(r'(final_layer\.adaln_modulation)_(\d+)', r'\1.\2', nk)
+            elif nk.startswith('transformer_blocks.'):
+                # Diffusers Cosmos -> canonical native names.
+                nk = nk.replace('transformer_blocks.', 'diffusion_model.blocks.', 1)
+                nk = nk.replace('.attn1.', '.self_attn.').replace('.attn2.', '.cross_attn.')
+                nk = nk.replace('.to_out.0', '.output_proj')
+                nk = (nk.replace('.to_q', '.q_proj').replace('.to_k', '.k_proj')
+                        .replace('.to_v', '.v_proj'))
+                nk = nk.replace('.norm_q', '.q_norm').replace('.norm_k', '.k_norm')
+                nk = nk.replace('.ff.net.0.proj', '.mlp.layer1').replace('.ff.net.2', '.mlp.layer2')
+            elif nk.startswith(('blocks.', 'llm_adapter.', 'final_layer.', 'net.')):
+                if nk.startswith('net.'):
+                    nk = nk[len('net.'):]
+                nk = 'diffusion_model.' + nk
+
+            # Collapse the internal 'net.' root if a diffusion_model.net.* key slipped through.
+            nk = nk.replace('diffusion_model.net.', 'diffusion_model.')
+            normalized[nk] = v
+        return normalized
+
+    @staticmethod
     def _normalize_keys_qwen_image(lora_sd):
         """
         Normalize Qwen-Image LoRA keys to canonical format.
@@ -1712,6 +1791,8 @@ class _LoRAMergeBase:
             return cls._normalize_keys_qwen_image(lora_sd)
         elif architecture == 'ideogram4':
             return cls._normalize_keys_ideogram4(lora_sd)
+        elif architecture == 'anima':
+            return cls._normalize_keys_anima(lora_sd)
         return lora_sd  # unknown — pass through unchanged
 
     @staticmethod
@@ -6215,6 +6296,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     'sd15': 'SD 1.5',
                     'ltx': 'LTX Video',
                     'qwen_image': 'Qwen-Image',
+                    'anima': 'Anima (Cosmos-Predict2 DiT)',
                 }
                 lines.append(f"Detected architecture: {arch_names.get(detected_arch, detected_arch)}")
             if normalize_keys == "enabled":
@@ -6229,6 +6311,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 'sdxl': 'SDXL',
                 'ltx': 'LTX Video',
                 'qwen_image': 'Qwen-Image',
+                'anima': 'Anima (Cosmos-Predict2 DiT)',
             }
             lines.append(f"Architecture: {arch_names.get(detected_arch, detected_arch)} (auto-detected)")
             lines.append(f"Key normalization: enabled")
