@@ -5056,6 +5056,46 @@ class LoRAOptimizer(_LoRAMergeBase):
     DESCRIPTION = "Auto-analyzes a LoRA stack and selects heuristic merge strategies per weight group. Outputs merged model + analysis report. Best for style/character LoRAs — apply edit, distillation (LCM/Turbo/Hyper), or DPO LoRAs via a standard Load LoRA node instead."
 
     @staticmethod
+    def _per_lora_merge_signature(lora_stack):
+        """Order-independent hash of the per-LoRA flags that change the MERGE but
+        not the Pass-1 analysis: conflict_mode, key_filter, preserve. Keyed by name
+        so reordering doesn't matter. Folded into IS_CHANGED + the AutoTuner in-node
+        and persistent-memory keys so toggling any of them re-tunes instead of
+        replaying a stale ranking. (Analysis caches stay keyed on file identity
+        only — those flags don't affect conflict/cosine numbers.)"""
+        if not lora_stack:
+            return ""
+        entries = []
+        for item in lora_stack:
+            if isinstance(item, dict):
+                if "_merge_formula" in item:
+                    continue
+                entries.append((str(item.get("name", "")),
+                                item.get("conflict_mode", "all"),
+                                item.get("key_filter", "all"),
+                                bool(item.get("preserve", False))))
+            elif isinstance(item, (tuple, list)) and len(item) >= 1:
+                entries.append((str(item[0]),
+                                item[3] if len(item) > 3 else "all",
+                                item[4] if len(item) > 4 else "all",
+                                bool(item[5]) if len(item) > 5 else False))
+        if not entries:
+            return ""
+        entries.sort()
+        return hashlib.sha256(
+            json.dumps(entries, separators=(",", ":")).encode()).hexdigest()[:16]
+
+    @staticmethod
+    def _stack_has_default_merge_flags(active_loras):
+        """True when no LoRA sets a per-LoRA merge flag (all conflict_mode/key_filter
+        are 'all' and no preserve). The shared community RANKING is computed without
+        these flags, so it's only valid for default stacks."""
+        return all((not item.get("preserve", False))
+                   and item.get("conflict_mode", "all") == "all"
+                   and item.get("key_filter", "all") == "all"
+                   for item in active_loras)
+
+    @staticmethod
     def _compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, auto_strength, optimization_mode="per_prefix", patch_compression="smart", svd_device="gpu", normalize_keys="disabled", sparsification="disabled", sparsification_density=0.7, dare_dampening=0.0, merge_strategy_override="", merge_refinement="none", strategy_set="full", architecture_preset="auto", auto_strength_floor=-1.0, decision_smoothing=0.25, smooth_slerp_gate=False):
         """
         Build a deterministic SHA-256 hash (16 hex chars) from the stack
@@ -9956,7 +9996,8 @@ class LoRAAutoTuner(LoRAOptimizer):
         # (lora_hash stays name+strength — tuner_data/selector compare it)
         stack_fp = hashlib.sha256(json.dumps(
             [[l["name"], l["strength"], l.get("clip_strength"),
-              l.get("conflict_mode", "all"), l.get("key_filter", "all")]
+              l.get("conflict_mode", "all"), l.get("key_filter", "all"),
+              bool(l.get("preserve", False))]
              for l in active_loras], separators=(",", ":")).encode()
         ).hexdigest()[:16]
         at_cache_key = hashlib.sha256(
@@ -10054,10 +10095,19 @@ class LoRAAutoTuner(LoRAOptimizer):
                 _arch_key_for_community, _ = _resolve_arch_preset(
                     architecture_preset, getattr(self, '_detected_arch', None) or 'unknown')
                 if community_cache == "upload_and_download":
-                    _community_tuner_data = self._community_download_caches(
-                        active_loras, content_hashes, lora_caches, pair_caches,
-                        arch_preset=_arch_key_for_community, top_n=top_n,
-                        lora_hashes=lora_hashes)
+                    # The shared ranking is computed WITHOUT per-LoRA merge flags;
+                    # if this stack sets preserve/conflict_mode/key_filter, skip it
+                    # and tune locally (the analysis caches above are still reused).
+                    if self._stack_has_default_merge_flags(active_loras):
+                        _community_tuner_data = self._community_download_caches(
+                            active_loras, content_hashes, lora_caches, pair_caches,
+                            arch_preset=_arch_key_for_community, top_n=top_n,
+                            lora_hashes=lora_hashes)
+                    else:
+                        logging.info(
+                            "[AutoTuner Community] Stack sets per-LoRA flags "
+                            "(preserve/conflict_mode/key_filter) — skipping the shared "
+                            "ranking and tuning locally (those flags change the merge).")
             else:
                 content_hashes = {}
 
@@ -10088,6 +10138,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "decision_smoothing": decision_smoothing,
                     "smooth_slerp_gate": smooth_slerp_gate,
                     "evaluator_hash": evaluator_hash,
+                    "per_lora_flags": self._per_lora_merge_signature(active_loras),
                 }
                 self._memory_save(
                     memory_lora_hash, self._memory_settings_hash(_mem_settings),
@@ -10170,6 +10221,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 "decision_smoothing": decision_smoothing,
                 "smooth_slerp_gate": smooth_slerp_gate,
                 "evaluator_hash": evaluator_hash,
+                "per_lora_flags": self._per_lora_merge_signature(active_loras),
             }
             settings_hash = self._memory_settings_hash(memory_settings)
 
@@ -11182,6 +11234,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 "decision_smoothing": decision_smoothing,
                 "smooth_slerp_gate": smooth_slerp_gate,
                 "evaluator_hash": evaluator_hash,
+                "per_lora_flags": self._per_lora_merge_signature(active_loras),
             }
             settings_hash = self._memory_settings_hash(memory_settings)
             self._memory_save(memory_lora_hash, settings_hash,
@@ -11556,7 +11609,8 @@ class LoRAAutoTuner(LoRAOptimizer):
         if evaluator is not None:
             evaluator_hash = (cls._stable_data_hash(evaluator) + "|"
                               + _evaluator_file_fingerprint(evaluator.get("module_path")))
-        return (id(model), id(lora_stack), output_strength, clip_strength_multiplier, top_n,
+        return (id(model), id(lora_stack), cls._per_lora_merge_signature(lora_stack),
+                output_strength, clip_strength_multiplier, top_n,
                 normalize_keys, scoring_svd, scoring_device,
                 architecture_preset,
                 vram_budget, community_cache, scoring_speed, scoring_formula, output_mode,
@@ -11795,7 +11849,10 @@ class LoRAMergeSelector(LoRAOptimizer):
                    output_strength, clip=None, clip_strength_multiplier=1.0,
                    auto_strength_floor=-1.0, decision_smoothing=0.25,
                    vram_budget=0.0):
-        return (id(tuner_data), selection, output_strength, clip_strength_multiplier,
+        # Include the per-LoRA merge flags: the Selector replays a config against
+        # this stack, so toggling preserve/conflict_mode/key_filter must re-run it.
+        return (id(tuner_data), cls._per_lora_merge_signature(lora_stack),
+                selection, output_strength, clip_strength_multiplier,
                 auto_strength_floor, decision_smoothing)
 
 

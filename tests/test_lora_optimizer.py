@@ -993,6 +993,69 @@ class PreserveFlagTests(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class PreserveCacheAwarenessTests(unittest.TestCase):
+    """Toggling the preserve flag must invalidate every AutoTuner cache layer
+    (IS_CHANGED, in-node, persistent memory) so the tuner actually re-runs."""
+
+    sig = staticmethod(lora_optimizer.LoRAOptimizer._per_lora_merge_signature)
+    default_flags = staticmethod(lora_optimizer.LoRAOptimizer._stack_has_default_merge_flags)
+
+    def test_signature_changes_with_preserve(self):
+        off = self.sig([("a", 1.0, 1.0, "all", "all", False)])
+        on = self.sig([("a", 1.0, 1.0, "all", "all", True)])
+        self.assertNotEqual(off, on)
+
+    def test_signature_changes_with_conflict_mode_and_key_filter(self):
+        base = self.sig([("a", 1.0, 1.0, "all", "all", False)])
+        self.assertNotEqual(base, self.sig([("a", 1.0, 1.0, "high_conflict", "all", False)]))
+        self.assertNotEqual(base, self.sig([("a", 1.0, 1.0, "all", "audio_only", False)]))
+
+    def test_signature_order_independent(self):
+        s1 = self.sig([("a", 1.0, 1.0, "all", "all", True),
+                       ("b", 1.0, 1.0, "all", "all", False)])
+        s2 = self.sig([("b", 1.0, 1.0, "all", "all", False),
+                       ("a", 1.0, 1.0, "all", "all", True)])
+        self.assertEqual(s1, s2)
+
+    def test_signature_ignores_strength(self):
+        # strength is handled elsewhere (sign in names hash); the merge-structure
+        # signature must not change with strength so strength sweeps still share.
+        s1 = self.sig([("a", 1.0, 1.0, "all", "all", True)])
+        s2 = self.sig([("a", 2.5, 0.5, "all", "all", True)])
+        self.assertEqual(s1, s2)
+
+    def test_signature_handles_dict_entries(self):
+        off = self.sig([{"name": "a", "conflict_mode": "all", "key_filter": "all", "preserve": False}])
+        on = self.sig([{"name": "a", "conflict_mode": "all", "key_filter": "all", "preserve": True}])
+        self.assertNotEqual(off, on)
+
+    def test_default_merge_flags(self):
+        self.assertTrue(self.default_flags([{"name": "a"}, {"name": "b"}]))
+        self.assertFalse(self.default_flags([{"name": "a", "preserve": True}]))
+        self.assertFalse(self.default_flags([{"name": "a", "key_filter": "audio_only"}]))
+        self.assertFalse(self.default_flags([{"name": "a", "conflict_mode": "high_conflict"}]))
+
+    def test_optimizer_cache_key_changes_with_preserve(self):
+        off = lora_optimizer.LoRAOptimizer._compute_cache_key(
+            [("a", 1.0, 1.0, "all", "all", False)], 1.0, 1.0, "disabled")
+        on = lora_optimizer.LoRAOptimizer._compute_cache_key(
+            [("a", 1.0, 1.0, "all", "all", True)], 1.0, 1.0, "disabled")
+        self.assertNotEqual(off, on)
+
+    def test_autotuner_is_changed_embeds_signature(self):
+        # The signature must be IN the IS_CHANGED output, so even if id(lora_stack)
+        # is reused across executions, toggling preserve still re-triggers the node.
+        model = _make_model()
+        stack_on = [("a", 1.0, 1.0, "all", "all", True)]
+        result = lora_optimizer.LoRAAutoTuner.IS_CHANGED(model, stack_on, 1.0)
+        self.assertIn(self.sig(stack_on), result)
+        stack_off = [("a", 1.0, 1.0, "all", "all", False)]
+        result_off = lora_optimizer.LoRAAutoTuner.IS_CHANGED(model, stack_off, 1.0)
+        self.assertIn(self.sig(stack_off), result_off)
+        self.assertNotEqual(self.sig(stack_on), self.sig(stack_off))
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class LoRASettingsNodeTests(unittest.TestCase):
     """Tests for LoRAMergeSettings, LoRAOptimizerSettings and LoRAAutoTunerSettings nodes."""
 
