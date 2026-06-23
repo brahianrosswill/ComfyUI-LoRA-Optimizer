@@ -89,6 +89,27 @@ else:
 #   touch <models>/autotuner_memory/PROFILE_MERGE
 _PROFILE_MERGE = os.environ.get("LORA_OPTIMIZER_PROFILE_MERGE", "").strip().lower() in ("1", "true", "yes", "on")
 
+# Set LORA_OPTIMIZER_SVD_DEVICE=cpu to force internal SVD/compression onto CPU
+# (LAPACK). The GPU randomized SVD (torch.svd_lowrank) can hard-abort at the C++
+# level ("terminate called" / "Fatal Python error: Aborted", uncatchable by
+# try/except) on some bleeding-edge CUDA stacks (seen on Blackwell + torch
+# 2.12/cu130) — CPU LAPACK is stable. Same kind of escape hatch as
+# LORA_OPTIMIZER_DISABLE_TRITON. The per-node svd_device='cpu' setting does the
+# same for the compression path; this env var forces it globally.
+_SVD_FORCE_CPU = os.environ.get("LORA_OPTIMIZER_SVD_DEVICE", "").strip().lower() == "cpu"
+
+
+def _svd_lowrank_safe(mat, q):
+    """Drop-in for torch.svd_lowrank(mat, q) -> (U[:, :q], S[:q], V[:, :q]), but
+    via torch.linalg.svd. torch.svd_lowrank's randomized QR can hard-ABORT at the
+    C++ level ("terminate called" / Fatal Python error: Aborted — uncatchable by
+    try/except, kills the process) on some CUDA stacks (Blackwell + torch
+    2.12/cu130), while torch.linalg.svd runs fine on the very same GPU. Slightly
+    slower at low rank, but none of these call sites are per-candidate hot paths."""
+    q = max(1, min(int(q), min(mat.shape)))
+    U, S, Vh = torch.linalg.svd(mat, full_matrices=False)
+    return U[:, :q], S[:q], Vh[:q, :].mH
+
 
 def _merge_profiling_enabled():
     """True if merge profiling is on via env var (import-time) or a sentinel
@@ -2725,7 +2746,7 @@ class _LoRAMergeBase:
 
         try:
             q = min(rank_cap, min(mat.shape))
-            U, _S, V = torch.svd_lowrank(mat, q=q)
+            U, _S, V = _svd_lowrank_safe(mat, q)
             return {"left": U[:, :q], "right": V[:, :q]}
         except Exception:
             try:
@@ -3362,14 +3383,14 @@ class _LoRAMergeBase:
 
         rank = min(out_dim, n * in_dim, 256)
         try:
-            U, S, V = torch.svd_lowrank(M, q=rank)
+            U, S, V = _svd_lowrank_safe(M, rank)
         except (torch.cuda.OutOfMemoryError, RuntimeError):
             if M.is_cuda:
                 logging.warning("[LoRA Optimizer] KnOTS SVD OOM on GPU, falling back to CPU")
                 torch.cuda.empty_cache()
                 M = M.cpu()
                 try:
-                    U, S, V = torch.svd_lowrank(M, q=rank)
+                    U, S, V = _svd_lowrank_safe(M, rank)
                 except RuntimeError:
                     logging.warning("[LoRA Optimizer] KnOTS SVD also failed on CPU, skipping alignment")
                     del M
@@ -3489,17 +3510,27 @@ class _LoRAMergeBase:
         rank = max(1, min(rank, min_dim))
 
         def _compute(m):
-            if rank > min_dim // 2:
-                U, S, Vh = torch.linalg.svd(m, full_matrices=False)
-                return U[:, :rank], S[:rank], Vh[:rank, :].T
-            q = min(rank + max(20, rank // 5), min_dim)
-            U, S, V = torch.svd_lowrank(m, q=q, niter=4)
-            return U[:, :rank], S[:rank], V[:, :rank]
+            # Always torch.linalg.svd (cuSOLVER gesvdj on GPU) — NOT
+            # torch.svd_lowrank. The randomized lowrank path's QR can hard-ABORT
+            # at the C++ level ("terminate called" / Fatal Python error: Aborted,
+            # uncatchable) on some stacks (Blackwell + torch 2.12/cu130), whereas
+            # linalg.svd runs fine on the very same GPU (the extract feature uses
+            # it on cuda). Full SVD truncated is slightly slower at low rank but
+            # this isn't a per-candidate hot path — compression runs in the final
+            # merge / SaveMergedLoRA, not during the sweep.
+            U, S, Vh = torch.linalg.svd(m, full_matrices=False)
+            return U[:, :rank], S[:rank], Vh[:rank, :].T
 
-        try:
-            return _compute(mat)
-        except Exception:
-            pass
+        # The GPU randomized SVD can hard-ABORT (C++ "terminate called", not a
+        # Python exception) on some CUDA stacks — uncatchable, kills the process.
+        # When LORA_OPTIMIZER_SVD_DEVICE=cpu, skip the GPU attempt entirely and go
+        # straight to stable CPU LAPACK rather than rely on the (uncatchable)
+        # fallback below.
+        if not _SVD_FORCE_CPU:
+            try:
+                return _compute(mat)
+            except Exception:
+                pass
         mat_cpu = mat.detach().to("cpu", torch.float32)
         try:
             return _compute(mat_cpu)
@@ -3537,8 +3568,12 @@ class _LoRAMergeBase:
         mat = diff.reshape(original_shape[0], -1).float()
         rank = min(rank, min(mat.shape))
 
-        # Move to requested device for SVD (GPU is much faster for matmul-heavy randomized SVD)
-        if svd_device is not None and mat.device != svd_device:
+        # Move to requested device for SVD (GPU is much faster for matmul-heavy randomized SVD).
+        # LORA_OPTIMIZER_SVD_DEVICE=cpu forces CPU to dodge the GPU svd_lowrank abort.
+        if _SVD_FORCE_CPU:
+            if mat.device.type != "cpu":
+                mat = mat.cpu()
+        elif svd_device is not None and mat.device != svd_device:
             mat = mat.to(svd_device)
         svd = LoRAOptimizer._truncated_svd_robust(mat, rank)
         del mat
@@ -3955,7 +3990,7 @@ class _LoRAMergeBase:
                 mat = result.reshape(result.shape[0], -1)
                 try:
                     rank_budget = min(min(mat.shape), 128)
-                    U, S, V = torch.svd_lowrank(mat, q=rank_budget)
+                    U, S, V = _svd_lowrank_safe(mat, rank_budget)
 
                     # Entropy-based effective rank
                     s_sum = S.sum()
