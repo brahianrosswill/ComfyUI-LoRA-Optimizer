@@ -7953,7 +7953,18 @@ class LoRAOptimizer(_LoRAMergeBase):
                         for i in range(n_loras)
                     ]
                     _diff_cache.prefetch(prefetch_keys)
+                # Debug pinpoint (profiler sentinel on): log the group BEFORE
+                # processing, then sync AFTER so any kernel abort surfaces here.
+                # The last "processing" line without a matching "ok" names the
+                # exact layer/group that faulted.
+                if _merge_prof is not None:
+                    _dbg_tk = target_group.get("target_key")
+                    _dbg_tk = _dbg_tk[0] if isinstance(_dbg_tk, tuple) else _dbg_tk
+                    logging.info(f"[merge-debug] processing {idx + 1}/{len(group_items)}: "
+                                 f"{_dbg_tk}  (n_loras={prefix_stats.get(label_prefix, {}).get('n_loras', '?')})")
                 result = _merge_one_group(label_prefix, target_group)
+                if _merge_prof is not None and _prof_cuda:
+                    torch.cuda.synchronize(compute_device)
                 if _sl_key is not None:
                     _sl_store(_sl_key, result)
                 _collect_merge_result(result)
