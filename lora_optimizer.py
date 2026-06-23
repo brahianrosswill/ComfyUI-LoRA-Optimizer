@@ -7701,11 +7701,21 @@ class LoRAOptimizer(_LoRAMergeBase):
                 _group_patch_cache["misses"] += 1
 
             linear_stats = None
+            # Single-LoRA groups (layers only one LoRA touches) have no conflict
+            # to sparsify and no second diff to align, so TIES/DARE/refinement
+            # are no-ops on them. Take the exact low-rank fast path for them even
+            # when those global toggles are on — this skips the wasteful
+            # dense-materialize + compression SVD and emits the LoRA's native
+            # factors directly. Size-safe: a single LoRA's compress_rank is
+            # max(rank, 64) >= its native rank, so compression never shrinks it
+            # (only pads rank<64 ones to 64) — bypassing is always equal-or-smaller.
+            _single_lora_group = pf_n_loras == 1  # exactly one contributor
+            _linear_quality_ok = (sparsification == "disabled"
+                                  and merge_refinement == "none")
             if (pf_mode in ("weighted_sum", "weighted_average", "normalize")
-                    and sparsification == "disabled"
-                    and merge_refinement == "none"
                     and not has_virtual_loras
-                    and not stack_has_preserve):
+                    and not stack_has_preserve
+                    and (_single_lora_group or _linear_quality_ok)):
                 _t_lin = _prof_t() if _merge_prof is not None else 0.0
                 linear_patch_info = self._build_exact_linear_patch(
                     target_group, active_loras, raw_n, pf_mode,

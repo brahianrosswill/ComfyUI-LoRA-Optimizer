@@ -4214,6 +4214,83 @@ class TestGlobalModeMergesWithDeclaredMode(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestSingleLoraSkipsCompression(unittest.TestCase):
+    """Single-LoRA groups (layers only one LoRA touches) take the exact
+    low-rank fast path even when sparsification/refinement is on — those are
+    conflict/multi-diff ops that are no-ops on a lone LoRA. This avoids the
+    wasteful dense-materialize + compression SVD and emits native factors
+    (a LoRAAdapter), while genuine multi-LoRA groups still go dense+compress."""
+
+    def _run(self, **kwargs):
+        class FakePatcher:
+            def __init__(self, model):
+                self.model = model
+
+            def clone(self):
+                return FakePatcher(self.model)
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches.keys())
+
+        inner = types.SimpleNamespace(
+            layer=types.SimpleNamespace(weight=torch.zeros(32, 32)),
+            layer2=types.SimpleNamespace(weight=torch.zeros(32, 32)))
+        model = FakePatcher(inner)
+
+        def make_lora(seed, scale, prefixes):
+            g = torch.Generator().manual_seed(seed)
+            d = {}
+            for prefix in prefixes:
+                d[f"{prefix}.lora_up.weight"] = torch.randn(32, 4, generator=g) * scale
+                d[f"{prefix}.lora_down.weight"] = torch.randn(4, 32, generator=g)
+                d[f"{prefix}.alpha"] = torch.tensor(4.0)
+            return d
+
+        stack = [
+            # alias_a is shared (2 LoRAs -> conflict); alias_b is single-LoRA
+            {"name": "A", "lora": make_lora(1, 0.1, ("alias_a", "alias_b")), "strength": 1.0},
+            {"name": "B", "lora": make_lora(2, 0.1, ("alias_a",)), "strength": 0.8},
+        ]
+        opt = lora_optimizer.LoRAOptimizer()
+        opt._get_model_keys = lambda m: {"alias_a": "layer.weight", "alias_b": "layer2.weight"}
+        _, _, _, _, lora_data = opt.optimize_merge(
+            model, stack, 1.0, cache_patches="disabled", **kwargs)
+        patches = {}
+        for k, v in lora_data["model_patches"].items():
+            patches[k[0] if isinstance(k, tuple) else k] = v
+        return patches
+
+    def _is_native_rank4(self, patch):
+        # The fast path emits the LoRA's native rank-4 factors untouched.
+        # The dense+compress path (DARE breaks the low-rank structure, then SVD
+        # re-fits) lands at a higher rank or stays a dense ("diff",) tuple.
+        return (isinstance(patch, lora_optimizer.LoRAAdapter)
+                and patch.weights[1].shape[0] == 4)
+
+    def test_single_lora_skips_compression_under_sparsification(self):
+        # sparsification on + compression on: the single-LoRA group must STILL
+        # take the low-rank fast path (no dense diff, no sparsification, no
+        # compression SVD) — proven by its native rank 4 surviving intact; the
+        # multi-LoRA group must NOT (it genuinely needs deconfliction).
+        patches = self._run(sparsification="dare", sparsification_density=0.9,
+                            patch_compression="smart")
+        self.assertTrue(self._is_native_rank4(patches["layer2.weight"]),
+                        "single-LoRA group should emit native rank-4 factors")
+        self.assertFalse(self._is_native_rank4(patches["layer.weight"]),
+                         "multi-LoRA group should still go dense+compress")
+
+    def test_single_lora_lowrank_path_is_size_safe(self):
+        # The bypassed single-LoRA patch is stored at the LoRA's native rank (4),
+        # never padded up to the rank-64 compression floor.
+        patches = self._run(sparsification="dare", sparsification_density=0.9,
+                            patch_compression="smart")
+        adapter = patches["layer2.weight"]
+        mat_up, mat_down = adapter.weights[0], adapter.weights[1]
+        self.assertEqual(mat_down.shape[0], 4)  # native rank, not 64
+        self.assertEqual(mat_up.shape[1], 4)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestBatchedKarcher(unittest.TestCase):
     """The batched Karcher implementation must match the per-unit reference
     loop it replaced (same math, different reduction order)."""
