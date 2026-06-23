@@ -7505,6 +7505,14 @@ class LoRAOptimizer(_LoRAMergeBase):
         _merge_prof_lock = threading.Lock() if _profiling_on else None
         _prof_cuda = (use_gpu and compute_device is not None
                       and getattr(compute_device, "type", None) == "cuda")
+        # A GPU compression SVD (torch.svd_lowrank) can race asynchronously on
+        # some stacks (Blackwell/cu130), corrupting state and aborting a later
+        # kernel — a C++ abort the Python try/except can't catch. When the
+        # compression SVD runs on GPU, serialize each group so the SVD finishes
+        # before the next group launches. Gated tightly (compression ON + GPU
+        # SVD) so fast no-compression merges keep their pipelined speed.
+        _compress_sync = (_prof_cuda and compress_rank > 0
+                          and resolved_svd_device is not None)
 
         def _prof_t():
             """Synced timestamp — without the sync, async CUDA kernels would
@@ -7963,7 +7971,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     logging.info(f"[merge-debug] processing {idx + 1}/{len(group_items)}: "
                                  f"{_dbg_tk}  (n_loras={prefix_stats.get(label_prefix, {}).get('n_loras', '?')})")
                 result = _merge_one_group(label_prefix, target_group)
-                if _merge_prof is not None and _prof_cuda:
+                if _compress_sync or (_merge_prof is not None and _prof_cuda):
                     torch.cuda.synchronize(compute_device)
                 if _sl_key is not None:
                     _sl_store(_sl_key, result)
