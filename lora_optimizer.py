@@ -1046,6 +1046,20 @@ class _LoRAMergeBase:
                 if shape is not None and len(shape) >= 1 and shape[0] == 13824:
                     return 'ideogram4'
 
+        # Krea 2 (krea/Krea-2) — from-scratch single-stream image DiT (NOT the
+        # older FLUX.1-Krea finetune). The unique marker across every trainer
+        # form is a per-attention sigmoid GATE projection — attn.to_gate (the
+        # "krea_2" trainer + diffusers forms) / attn.gate / attn.w{q,k,v,o} (the
+        # Comfy-Org native form). No other supported arch has an attention gate,
+        # so this MUST run before the qwen (transformer.transformer_blocks), flux,
+        # and ACE-Step (transformer_blocks.N.attn.to_q) branches would otherwise
+        # claim its diffusers-style keys. Verified vs 3 real LoRA forms:
+        #   diffusion_model.blocks.N.attn.wq            (Comfy-Org native)
+        #   diffusion_model.transformer_blocks.N.attn.to_gate  (krea_2 trainer)
+        #   transformer.transformer_blocks.N.attn.to_gate + text_fusion (diffusers)
+        if any(re.search(r'attn[._](?:to_gate|gate|w[qkvo])(?=[._])', k) for k in keys):
+            return 'krea2'
+
         # Z-Image Turbo (Lumina2): layers.N with attention patterns
         # Handles: diffusion_model.layers.N, single_transformer_blocks.N (non-FLUX),
         #          lora_unet_layers_N (Musubi Tuner)
@@ -1089,19 +1103,6 @@ class _LoRAMergeBase:
             return 'flux'
         if any('double_blocks' in k or 'single_blocks' in k for k in keys):
             return 'flux'
-
-        # Krea 2 (krea/Krea-2) — a from-scratch 12B single-stream image DiT, NOT
-        # the older FLUX.1-Krea finetune. diffusion_model.blocks.N with GQA
-        # attention named attn.wq/wk/wv/wo (wk/wv narrower than wq under GQA), a
-        # sigmoid attn.gate, and SwiGLU mlp.gate/up/down. The attn.w{q,k,v,o}
-        # naming is unique — WAN uses self_attn.q/k/v/o + ffn — so this is safe
-        # before the WAN/Anima single-stream blocks.N checks. Verified against the
-        # official Comfy-Org/Krea-2 rank-64 LoRA.
-        if any(re.search(r'blocks[._]\d+[._]attn[._]w[qkvo](?=[._])', k) for k in keys):
-            return 'krea2'
-        if (any(re.search(r'blocks[._]\d+[._]attn[._]gate(?=[._])', k) for k in keys)
-                and any(re.search(r'blocks[._]\d+[._]mlp[._]gate(?=[._])', k) for k in keys)):
-            return 'krea2'
 
         # Anima (CircleStone Labs) — a Cosmos-Predict2 DiT with SPLIT QKV. MUST be
         # checked before ACE-Step / Wan / LTX: its blocks.N.self_attn.q_proj and

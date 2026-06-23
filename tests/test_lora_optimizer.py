@@ -4624,6 +4624,27 @@ class Krea2DetectionTests(unittest.TestCase):
                  "lora_unet_blocks_0_mlp_gate.lora_up.weight"])
         self.assertEqual(self.det(s), "krea2")
 
+    def test_trainer_diffusion_model_form(self):
+        # The "krea_2" trainer: diffusion_model.transformer_blocks.N.attn.to_*
+        # with a sigmoid attn.to_gate. Must NOT be mistaken for ACE-Step (which
+        # also matches transformer_blocks.N.attn.to_q).
+        s = _sd(["diffusion_model.transformer_blocks.0.attn.to_q.lora_A.weight",
+                 "diffusion_model.transformer_blocks.0.attn.to_k.lora_A.weight",
+                 "diffusion_model.transformer_blocks.0.attn.to_v.lora_A.weight",
+                 "diffusion_model.transformer_blocks.0.attn.to_out.0.lora_A.weight",
+                 "diffusion_model.transformer_blocks.0.attn.to_gate.lora_A.weight",
+                 "diffusion_model.transformer_blocks.0.ff.gate.lora_A.weight"])
+        self.assertEqual(self.det(s), "krea2")
+
+    def test_diffusers_transformer_form(self):
+        # diffusers form: transformer.transformer_blocks.N.attn.to_* + to_gate
+        # + text_fusion. Must NOT be mistaken for Qwen-Image (transformer.transformer_blocks).
+        s = _sd(["transformer.transformer_blocks.0.attn.to_q.lora_A.weight",
+                 "transformer.transformer_blocks.0.attn.to_gate.lora_A.weight",
+                 "transformer.transformer_blocks.0.ff.gate.lora_A.weight",
+                 "transformer.text_fusion.refiner_blocks.0.attn.to_gate.lora_A.weight"])
+        self.assertEqual(self.det(s), "krea2")
+
     def test_gate_plus_mlp_gate_fallback(self):
         # Backup discriminator when attn.w{q,k,v,o} isn't in a partial LoRA.
         s = _sd(["diffusion_model.blocks.3.attn.gate.lora_up.weight",
