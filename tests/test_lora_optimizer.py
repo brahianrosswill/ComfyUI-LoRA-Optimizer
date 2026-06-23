@@ -4664,6 +4664,71 @@ class Krea2DetectionTests(unittest.TestCase):
         self.assertEqual(self.det(qwen), "qwen_image")
 
 
+class Krea2NormalizationTests(unittest.TestCase):
+    """Both Krea 2 trainer forms normalize to the model-native diffusion_model.* keys.
+    Mappings are shape-verified against krea2_turbo_bf16 (224/224, 264/264)."""
+
+    norm = staticmethod(lambda s: lora_optimizer.LoRAOptimizer._normalize_keys_krea2(s))
+
+    def test_trainer_form_attn_and_ff(self):
+        n = self.norm(_sd([
+            "diffusion_model.transformer_blocks.0.attn.to_q.lora_A.weight",
+            "diffusion_model.transformer_blocks.0.attn.to_out.0.lora_B.weight",
+            "diffusion_model.transformer_blocks.0.attn.to_gate.lora_A.weight",
+            "diffusion_model.transformer_blocks.0.ff.gate.lora_B.weight",
+            "diffusion_model.transformer_blocks.0.ff.down.lora_A.weight",
+        ]))
+        self.assertIn("diffusion_model.blocks.0.attn.wq.lora_A.weight", n)
+        self.assertIn("diffusion_model.blocks.0.attn.wo.lora_B.weight", n)
+        self.assertIn("diffusion_model.blocks.0.attn.gate.lora_A.weight", n)
+        self.assertIn("diffusion_model.blocks.0.mlp.gate.lora_B.weight", n)
+        self.assertIn("diffusion_model.blocks.0.mlp.down.lora_A.weight", n)
+
+    def test_diffusers_form_transformer_prefix_and_txtfusion(self):
+        n = self.norm(_sd([
+            "transformer.transformer_blocks.5.attn.to_k.lora_A.weight",
+            "transformer.text_fusion.layerwise_blocks.2.attn.to_v.lora_B.weight",
+            "transformer.text_fusion.refiner_blocks.0.mlp.gate.lora_A.weight",
+            "transformer.text_fusion.projector.lora_A.weight",
+        ]))
+        self.assertIn("diffusion_model.blocks.5.attn.wk.lora_A.weight", n)
+        self.assertIn("diffusion_model.txtfusion.layerwise_blocks.2.attn.wv.lora_B.weight", n)
+        self.assertIn("diffusion_model.txtfusion.refiner_blocks.0.mlp.gate.lora_A.weight", n)
+        self.assertIn("diffusion_model.txtfusion.projector.lora_A.weight", n)
+
+    def test_named_non_block_projections(self):
+        n = self.norm(_sd([
+            "transformer.img_in.lora_A.weight",
+            "transformer.final_layer.linear.lora_B.weight",
+            "transformer.time_mod_proj.lora_A.weight",
+            "transformer.time_embed.linear_1.lora_A.weight",
+            "transformer.time_embed.linear_2.lora_B.weight",
+            "transformer.txt_in.linear_1.lora_A.weight",
+            "transformer.txt_in.linear_2.lora_B.weight",
+        ]))
+        for expect in [
+            "diffusion_model.first.lora_A.weight",
+            "diffusion_model.last.linear.lora_B.weight",
+            "diffusion_model.tproj.1.lora_A.weight",
+            "diffusion_model.tmlp.0.lora_A.weight",
+            "diffusion_model.tmlp.2.lora_B.weight",
+            "diffusion_model.txtmlp.1.lora_A.weight",
+            "diffusion_model.txtmlp.3.lora_B.weight",
+        ]:
+            self.assertIn(expect, n)
+
+    def test_alpha_and_idempotent(self):
+        # alpha keys are remapped too; already-canonical keys are unchanged.
+        n = self.norm(_sd([
+            "diffusion_model.transformer_blocks.0.attn.to_q.alpha",
+            "diffusion_model.blocks.0.attn.wq.lora_A.weight",
+        ]))
+        self.assertIn("diffusion_model.blocks.0.attn.wq.alpha", n)
+        self.assertIn("diffusion_model.blocks.0.attn.wq.lora_A.weight", n)
+        # idempotent: re-normalizing canonical keys is a no-op
+        self.assertEqual(set(self.norm(n).keys()), set(n.keys()))
+
+
 @unittest.skipIf(torch is None, "torch is not installed")
 class AnimaNormalizationTests(unittest.TestCase):
     """All trainer forms normalize to canonical diffusion_model.blocks.N.* keys."""

@@ -1864,6 +1864,67 @@ class _LoRAMergeBase:
             normalized[new_k] = v
         return normalized
 
+    @staticmethod
+    def _normalize_keys_krea2(lora_sd):
+        """Normalize Krea 2 LoRA keys to the canonical ComfyUI-native
+        diffusion_model.* form that matches the actual Krea 2 model weights.
+
+        Two trainer forms are handled, both verified key-by-key (name AND shape)
+        against the official krea2_turbo model — 224/224 and 264/264 modules map:
+          - the "krea_2" trainer:  diffusion_model.transformer_blocks.N.attn.to_q ...
+          - the diffusers form:     transformer.transformer_blocks.N.attn.to_q ...,
+            transformer.text_fusion.{layerwise,refiner}_blocks.N.*, and the non-block
+            transformer.{img_in,txt_in,final_layer,time_embed,time_mod_proj}.
+        Without this, the diffusers `transformer.*` keys are mis-routed by ComfyUI's
+        FLUX branch (flux_to_diffusers) to non-existent double_blocks QKV tuple-offset
+        targets: the LoRA is silently dropped AND the bogus offset target can corrupt
+        the merge. The Krea 2 model uses single-stream blocks.N.attn.{wq,wk,wv,wo,gate}
+        + mlp.{gate,up,down}, txtfusion.{layerwise,refiner}_blocks, and named
+        projections first/last/tmlp/tproj/txtmlp.
+        """
+        def _norm_module(mod):
+            s = mod
+            s = re.sub(r'^transformer\.', '', s)
+            s = re.sub(r'^diffusion_model\.', '', s)
+            s = re.sub(r'^lora_unet_', '', s)
+            s = s.replace('transformer_blocks.', 'blocks.')
+            s = s.replace('text_fusion.', 'txtfusion.')
+            # attention projections (diffusers -> krea native)
+            s = re.sub(r'\battn\.to_q\b', 'attn.wq', s)
+            s = re.sub(r'\battn\.to_k\b', 'attn.wk', s)
+            s = re.sub(r'\battn\.to_v\b', 'attn.wv', s)
+            s = re.sub(r'\battn\.to_out\.0\b', 'attn.wo', s)
+            s = re.sub(r'\battn\.to_gate\b', 'attn.gate', s)
+            # SwiGLU feed-forward -> mlp
+            s = s.replace('ff.gate', 'mlp.gate').replace('ff.up', 'mlp.up').replace('ff.down', 'mlp.down')
+            # named non-block projections (verified by shape)
+            s = re.sub(r'^img_in$', 'first', s)
+            s = re.sub(r'^final_layer\.linear$', 'last.linear', s)
+            s = re.sub(r'^time_mod_proj$', 'tproj.1', s)
+            s = re.sub(r'^time_embed\.linear_1$', 'tmlp.0', s)
+            s = re.sub(r'^time_embed\.linear_2$', 'tmlp.2', s)
+            s = re.sub(r'^txt_in\.linear_1$', 'txtmlp.1', s)
+            s = re.sub(r'^txt_in\.linear_2$', 'txtmlp.3', s)
+            return 'diffusion_model.' + s
+
+        # Suffix-first match so '.lora_A.weight' wins over '.lora_A'
+        suffixes = ('.lora_A.weight', '.lora_B.weight', '.lora_down.weight',
+                    '.lora_up.weight', '.lora_A', '.lora_B', '.lora_down',
+                    '.lora_up', '.alpha', '.diff_b', '.diff')
+        normalized = {}
+        for k, v in lora_sd.items():
+            matched = None
+            for sfx in suffixes:
+                if k.endswith(sfx):
+                    matched = sfx
+                    break
+            if matched is None:
+                normalized[k] = v  # unrecognized form — leave untouched
+                continue
+            module = k[:-len(matched)]
+            normalized[_norm_module(module) + matched] = v
+        return normalized
+
     @classmethod
     def _normalize_keys(cls, lora_sd, architecture):
         """
@@ -1890,6 +1951,8 @@ class _LoRAMergeBase:
             return cls._normalize_keys_ideogram4(lora_sd)
         elif architecture == 'anima':
             return cls._normalize_keys_anima(lora_sd)
+        elif architecture == 'krea2':
+            return cls._normalize_keys_krea2(lora_sd)
         return lora_sd  # unknown — pass through unchanged
 
     @staticmethod
