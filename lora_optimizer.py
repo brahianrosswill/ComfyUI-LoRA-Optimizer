@@ -336,7 +336,7 @@ _ARCH_PRESETS = {
         "alignment_threshold": 0.1,
         "suggested_max_strength_cap": 5.0,
         "auto_strength_orthogonal_floor": 0.85,
-        "display_name": "DiT (Flux/WAN/Z-Image/LTX/Ideogram-4/HunyuanVideo)",
+        "display_name": "DiT (Flux/WAN/Z-Image/LTX/Ideogram-4/Krea-2/HunyuanVideo)",
         "full_rank": {
             "rank_threshold": 512,
             "disable_slerp_upgrade": True,
@@ -405,7 +405,7 @@ _VIDEO_ARCH_ORTHOGONAL_FLOOR = {"wan": 1.0, "ltx": 1.0, "acestep": 1.0}
 _ARCH_TO_PRESET = {
     "sdxl": "sd_unet", "sd15": "sd_unet", "unknown": "sd_unet",
     "flux": "dit", "wan": "dit", "zimage": "dit", "ltx": "dit",
-    "ideogram4": "dit", "anima": "dit",
+    "ideogram4": "dit", "anima": "dit", "krea2": "dit",
     "acestep": "acestep_dit",
     "qwen_image": "llm",
 }
@@ -1020,7 +1020,7 @@ class _LoRAMergeBase:
         """
         Detect model architecture from LoRA key patterns.
         Returns: 'zimage', 'flux', 'wan', 'acestep', 'sdxl', 'sd15', 'ltx',
-        'qwen_image', 'ideogram4', 'anima', or 'unknown'.
+        'qwen_image', 'ideogram4', 'anima', 'krea2', or 'unknown'.
         """
         keys = list(lora_sd.keys())
         keys_str = ' '.join(k.lower() for k in keys)
@@ -1089,6 +1089,19 @@ class _LoRAMergeBase:
             return 'flux'
         if any('double_blocks' in k or 'single_blocks' in k for k in keys):
             return 'flux'
+
+        # Krea 2 (krea/Krea-2) — a from-scratch 12B single-stream image DiT, NOT
+        # the older FLUX.1-Krea finetune. diffusion_model.blocks.N with GQA
+        # attention named attn.wq/wk/wv/wo (wk/wv narrower than wq under GQA), a
+        # sigmoid attn.gate, and SwiGLU mlp.gate/up/down. The attn.w{q,k,v,o}
+        # naming is unique — WAN uses self_attn.q/k/v/o + ffn — so this is safe
+        # before the WAN/Anima single-stream blocks.N checks. Verified against the
+        # official Comfy-Org/Krea-2 rank-64 LoRA.
+        if any(re.search(r'blocks[._]\d+[._]attn[._]w[qkvo](?=[._])', k) for k in keys):
+            return 'krea2'
+        if (any(re.search(r'blocks[._]\d+[._]attn[._]gate(?=[._])', k) for k in keys)
+                and any(re.search(r'blocks[._]\d+[._]mlp[._]gate(?=[._])', k) for k in keys)):
+            return 'krea2'
 
         # Anima (CircleStone Labs) — a Cosmos-Predict2 DiT with SPLIT QKV. MUST be
         # checked before ACE-Step / Wan / LTX: its blocks.N.self_attn.q_proj and
@@ -6558,6 +6571,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                     'ltx': 'LTX Video',
                     'qwen_image': 'Qwen-Image',
                     'anima': 'Anima (Cosmos-Predict2 DiT)',
+                    'krea2': 'Krea 2',
                 }
                 lines.append(f"Detected architecture: {arch_names.get(detected_arch, detected_arch)}")
             if normalize_keys == "enabled":

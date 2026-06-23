@@ -4601,6 +4601,48 @@ class AnimaDetectionTests(unittest.TestCase):
         self.assertEqual(self.det(ltx), "ltx")
 
 
+class Krea2DetectionTests(unittest.TestCase):
+    """Krea 2 (krea/Krea-2, from-scratch single-stream image DiT) detection."""
+
+    det = staticmethod(lambda s: lora_optimizer.LoRAOptimizer._detect_architecture(s))
+
+    def test_comfy_native_form(self):
+        # Mirrors the official Comfy-Org/Krea-2 rank-64 LoRA: GQA attn.wq/wk/wv/wo
+        # + sigmoid attn.gate + SwiGLU mlp.gate/up/down under diffusion_model.blocks.N
+        s = _sd(["diffusion_model.blocks.0.attn.wq.lora_up.weight",
+                 "diffusion_model.blocks.0.attn.wk.lora_up.weight",
+                 "diffusion_model.blocks.0.attn.wv.lora_up.weight",
+                 "diffusion_model.blocks.0.attn.wo.lora_up.weight",
+                 "diffusion_model.blocks.0.attn.gate.lora_up.weight",
+                 "diffusion_model.blocks.0.mlp.gate.lora_up.weight",
+                 "diffusion_model.blocks.0.mlp.up.lora_up.weight",
+                 "diffusion_model.blocks.0.mlp.down.lora_up.weight"])
+        self.assertEqual(self.det(s), "krea2")
+
+    def test_kohya_underscore_form(self):
+        s = _sd(["lora_unet_blocks_0_attn_wq.lora_down.weight",
+                 "lora_unet_blocks_0_mlp_gate.lora_up.weight"])
+        self.assertEqual(self.det(s), "krea2")
+
+    def test_gate_plus_mlp_gate_fallback(self):
+        # Backup discriminator when attn.w{q,k,v,o} isn't in a partial LoRA.
+        s = _sd(["diffusion_model.blocks.3.attn.gate.lora_up.weight",
+                 "diffusion_model.blocks.3.mlp.gate.lora_up.weight"])
+        self.assertEqual(self.det(s), "krea2")
+
+    def test_no_collision_with_wan_flux_qwen(self):
+        # Krea is checked before WAN; must not steal these, and they must not steal Krea.
+        wan = _sd(["diffusion_model.blocks.0.self_attn.q.a",
+                   "diffusion_model.blocks.0.cross_attn.k.b",
+                   "diffusion_model.blocks.0.ffn.0.c"])
+        flux = _sd(["diffusion_model.double_blocks.0.img_attn.qkv.lora_up.weight"])
+        qwen = _sd(["transformer.transformer_blocks.0.attn.to_q.a",
+                    "transformer.transformer_blocks.0.img_mlp.net.a"])
+        self.assertEqual(self.det(wan), "wan")
+        self.assertEqual(self.det(flux), "flux")
+        self.assertEqual(self.det(qwen), "qwen_image")
+
+
 @unittest.skipIf(torch is None, "torch is not installed")
 class AnimaNormalizationTests(unittest.TestCase):
     """All trainer forms normalize to canonical diffusion_model.blocks.N.* keys."""
