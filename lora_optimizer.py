@@ -232,7 +232,15 @@ AUTOTUNER_MEMORY_VERSION = 1
 # dense diffs to disk. A cache hit is now numerically identical to a recompute, so
 # results are independent of diff_cache_mode and match the old "disabled" path. Scores
 # shift ~1e-5 vs prior fp16-cached runs; bump invalidates those rankings.
-AUTOTUNER_ALGO_VERSION = "1.11.2"
+# 1.12.0: per-prefix SLERP-imbalance gate. The weighted_average→SLERP upgrade is now
+# suppressed when a prefix's max/min Frobenius ratio exceeds slerp_imbalance_ratio
+# (default 2.0) — SLERP averages directions and discards magnitude, so on imbalanced
+# orthogonal pairs it washed out the dominant LoRA (~40% retained at 6x) while frying
+# the weak one (~220%). A strongly-imbalanced orthogonal PAIR now routes to additive
+# (weighted_sum), which preserves the dominant LoRA without oversaturating (it defines
+# the auto-strength reference). Changes per-prefix mode selection for imbalanced stacks;
+# bump re-tunes them.
+AUTOTUNER_ALGO_VERSION = "1.12.0"
 
 
 def _warn_stale_tuner_data(tuner_data, context):
