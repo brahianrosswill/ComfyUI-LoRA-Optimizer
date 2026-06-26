@@ -827,19 +827,19 @@ class PrefixModeRoutingTests(unittest.TestCase):
         self.optimizer = lora_optimizer.LoRAOptimizer()
         self.arch = lora_optimizer._ARCH_PRESETS["dit"]
 
-    def _pf(self, cos, n_loras=2):
+    def _pf(self, cos, n_loras=2, mag_ratio=1.0):
         return {
             "conflict_ratio": 0.5,
-            "magnitude_ratio": 1.0,
+            "magnitude_ratio": mag_ratio,
             "n_loras": n_loras,
             "avg_cos_sim": cos,
             "excess_conflict": 0.0,
             "avg_subspace_overlap": 0.0,
         }
 
-    def _decide(self, cos, strategy_set, n_loras=2):
+    def _decide(self, cos, strategy_set, n_loras=2, mag_ratio=1.0):
         return self.optimizer._decide_prefix_mode(
-            self._pf(cos, n_loras), strategy_set, self.arch,
+            self._pf(cos, n_loras, mag_ratio), strategy_set, self.arch,
             smooth_slerp_gate=False, is_full_rank=False, fr_preset={})
 
     def test_orthogonal_no_slerp_weighted_average(self):
@@ -864,13 +864,94 @@ class PrefixModeRoutingTests(unittest.TestCase):
         self.assertEqual(mode, "weighted_average")
         self.assertTrue(opp)
 
-    def test_additive_is_never_auto_selected(self):
-        # Regression for the multi-LoRA oversaturation: no orthogonality/strategy
-        # combination may auto-route to a sum/sum_preserve mode.
+    def test_additive_not_auto_selected_for_balanced(self):
+        # Regression for the multi-LoRA oversaturation: a BALANCED stack
+        # (magnitude_ratio ~1) must never auto-route to a sum mode regardless of
+        # orthogonality/strategy.
         for cos in (0.0, 0.1, -0.1, 0.35, 0.6):
             for ss in ("full", "no_slerp", "basic"):
-                mode, *_ = self._decide(cos, ss)
+                mode, *_ = self._decide(cos, ss, mag_ratio=1.0)
                 self.assertNotIn(mode, ("sum_preserve", "weighted_sum"))
+
+    def test_imbalanced_orthogonal_pair_routes_to_weighted_sum(self):
+        # A strongly-imbalanced orthogonal PAIR routes to additive: SLERP/
+        # weighted_average wash out the dominant LoRA, weighted_sum preserves it
+        # (and can't oversaturate — the dominant defines the auto-strength ref).
+        mode, _d, _s, orth, opp = self._decide(0.0, "full", mag_ratio=6.0)
+        self.assertEqual(mode, "weighted_sum")
+        self.assertTrue(orth)
+        self.assertFalse(opp)
+
+    def test_imbalanced_orthogonal_suppresses_slerp(self):
+        # Below the cap → SLERP; at/above the cap → not SLERP.
+        self.assertEqual(self._decide(0.0, "full", mag_ratio=1.5)[0], "slerp")
+        self.assertNotEqual(self._decide(0.0, "full", mag_ratio=2.5)[0], "slerp")
+
+    def test_imbalanced_aligned_not_weighted_sum(self):
+        # Imbalanced but ALIGNED (non-orthogonal): SLERP is suppressed but it must
+        # NOT go additive (aligned LoRAs reinforce → additive would oversaturate).
+        mode, *_ = self._decide(0.35, "full", mag_ratio=6.0)
+        self.assertEqual(mode, "weighted_average")
+
+    def test_imbalanced_orthogonal_triple_stays_blended(self):
+        # 3+ LoRAs: weighted_sum is gated to pairs (a balanced sub-pair among 3+
+        # could compound past the auto-strength floor), so imbalanced triples fall
+        # back to weighted_average, never additive.
+        mode, *_ = self._decide(0.0, "full", n_loras=3, mag_ratio=6.0)
+        self.assertEqual(mode, "weighted_average")
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
+class ShapeMismatchReportTests(unittest.TestCase):
+    """A LoRA whose tensor shape doesn't match the target model at a layer is
+    dropped from the merge; _note_shape_mismatch records it (deduped, capped) so
+    the report can surface the incompatibility instead of dropping it silently."""
+
+    def setUp(self):
+        self.optimizer = lora_optimizer.LoRAOptimizer()
+        self.optimizer._shape_mismatches = {}
+
+    def test_records_and_dedups_by_key(self):
+        item = {"name": "concept/KNP_V2.safetensors"}
+        self.optimizer._note_shape_mismatch(item, "blocks.0.attn.gate", 2560, 6144)
+        self.optimizer._note_shape_mismatch(item, "blocks.0.attn.gate", 2560, 6144)  # dup
+        self.optimizer._note_shape_mismatch(item, "blocks.1.attn.wq", 2560, 6144)
+        per = self.optimizer._shape_mismatches["concept/KNP_V2.safetensors"]
+        self.assertEqual(len(per), 2)  # deduped by target key
+        self.assertEqual(per["blocks.0.attn.gate"], (2560, 6144))
+
+    def test_tuple_target_key_uses_first_element(self):
+        self.optimizer._note_shape_mismatch({"name": "x"}, ("blocks.0.attn.gate", True), 2560, 6144)
+        self.assertIn("blocks.0.attn.gate", self.optimizer._shape_mismatches["x"])
+
+    def test_capped_at_256(self):
+        for i in range(300):
+            self.optimizer._note_shape_mismatch({"name": "x"}, f"blocks.{i}", 2560, 6144)
+        self.assertLessEqual(len(self.optimizer._shape_mismatches["x"]), 256)
+
+    def test_lazy_init_when_attribute_absent(self):
+        opt = lora_optimizer.LoRAOptimizer()
+        if hasattr(opt, "_shape_mismatches"):
+            del opt._shape_mismatches
+        opt._note_shape_mismatch({"name": "y"}, "blocks.0", 2560, 6144)
+        self.assertIn("y", opt._shape_mismatches)
+
+    def test_report_lines_empty_when_no_mismatch(self):
+        self.assertEqual(self.optimizer._shape_mismatch_report_lines(), [])
+
+    def test_report_lines_render_warning(self):
+        item = {"name": "Krea 2/concept/KNP_V2.safetensors"}
+        for i in range(2):
+            for proj in ("gate", "wq", "wk", "wv"):
+                self.optimizer._note_shape_mismatch(item, f"blocks.{i}.attn.{proj}", 2560, 6144)
+        text = "\n".join(self.optimizer._shape_mismatch_report_lines())
+        self.assertIn("SHAPE INCOMPATIBILITY", text)
+        self.assertIn("8 layer(s) DROPPED", text)        # 2 blocks x 4 projections
+        self.assertIn("KNP_V2.safetensors", text)        # basename only, no dir
+        self.assertNotIn("concept/", text)
+        self.assertIn("LoRA dim=2560 vs model dim=6144", text)
+        self.assertIn("... and", text)                   # truncated past 3 examples
+        self.assertIn("SAME base model", text)           # actionable fix hint
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")

@@ -336,6 +336,10 @@ _ARCH_PRESETS = {
         "alignment_threshold": 0.1,
         "suggested_max_strength_cap": 5.0,
         "auto_strength_orthogonal_floor": 0.85,
+        # Per-prefix max/min Frobenius ratio above which the weighted_average→SLERP
+        # upgrade is suppressed (SLERP washes out the dominant LoRA on imbalanced
+        # orthogonal pairs). Orthogonal pairs above this route to additive instead.
+        "slerp_imbalance_ratio": 2.0,
         "display_name": "DiT (Flux/WAN/Z-Image/LTX/Ideogram-4/Krea-2/HunyuanVideo)",
         "full_rank": {
             "rank_threshold": 512,
@@ -2413,6 +2417,15 @@ class _LoRAMergeBase:
                         device=device if use_gpu else None,
                         to_cpu=not use_gpu,
                     )
+                    if diff is None:
+                        # LoRA has this key but its output dim doesn't match the
+                        # target model weight — this layer is dropped from the
+                        # merge. Surface it in the report instead of dropping it
+                        # silently (the LoRA was likely trained on a different
+                        # model variant/layout).
+                        self._note_shape_mismatch(
+                            item, target_key, int(mat_up.shape[0]),
+                            int(target_shape[0]) if len(target_shape) > 0 else None)
                 else:
                     # Try LoKr / LoHa formats
                     alt = self._get_lokr_diff(
@@ -2738,6 +2751,52 @@ class _LoRAMergeBase:
         if to_cpu and device is not None and device.type != "cpu":
             return diff.cpu()
         return diff
+
+    def _note_shape_mismatch(self, item, target_key, lora_dim, model_dim):
+        """Record a LoRA→model shape incompatibility for the merge report.
+
+        Called when a LoRA has a tensor at a target layer but its output
+        dimension doesn't match the model weight, so that layer is dropped from
+        the merge. Best-effort (runs in analysis worker threads), capped, and
+        deduped by target key so each dropped layer counts once per LoRA.
+        """
+        try:
+            store = self._shape_mismatches
+        except AttributeError:
+            store = self._shape_mismatches = {}
+        name = item.get("name", "?") if isinstance(item, dict) else str(item)
+        key = target_key[0] if isinstance(target_key, tuple) else target_key
+        per = store.setdefault(name, {})
+        skey = str(key)
+        if skey not in per and len(per) < 256:
+            per[skey] = (lora_dim, model_dim)
+
+    def _shape_mismatch_report_lines(self):
+        """Render the shape-incompatibility warning for the merge report from the
+        mismatches recorded in _note_shape_mismatch. Empty when there are none."""
+        mismatches = getattr(self, '_shape_mismatches', None)
+        if not mismatches:
+            return []
+        total = sum(len(v) for v in mismatches.values())
+        lines = [
+            "",
+            f"  !! SHAPE INCOMPATIBILITY — {total} layer(s) DROPPED from the merge",
+            "     A LoRA's tensor shape does not match the target model at these",
+            "     layers, so they could not be merged and were skipped. The LoRA's",
+            "     effect at these layers is MISSING from the result.",
+            "     Likely cause: this LoRA was trained on a DIFFERENT model variant",
+            "     or block layout than the model you are merging into.",
+        ]
+        for name, per in mismatches.items():
+            short = name.split('/')[-1].split('\\')[-1]
+            lines.append(f"     - {short}: {len(per)} layer(s) dropped")
+            for k, (ld, md) in list(per.items())[:3]:
+                lines.append(f"         {k}: LoRA dim={ld} vs model dim={md}")
+            if len(per) > 3:
+                lines.append(f"         ... and {len(per) - 3} more")
+        lines.append("     Fix: merge LoRAs trained on the SAME base model, or accept that")
+        lines.append("     these layers come only from the other LoRA(s)/base model.")
+        return lines
 
     @staticmethod
     def _stable_data_hash(value):
@@ -6593,13 +6652,31 @@ class LoRAOptimizer(_LoRAMergeBase):
         # ordinary multi-LoRA blends (Σ wᵢdᵢ grows with N). Style preservation is
         # therefore driven by the explicit per-LoRA `preserve` flag instead (handled
         # in _merge_diffs: blend the rest, add the tagged LoRA at full on top).
+        # Per-prefix magnitude imbalance gate. SLERP averages DIRECTIONS and
+        # discards magnitude: for an orthogonal pair where one LoRA dominates,
+        # the Karcher mean rotates the strong LoRA ~halfway toward the weak one
+        # and rescales to the AVERAGE of the two norms — washing out the
+        # dominant LoRA (≈40% retained at a 6x imbalance) while over-amplifying
+        # the weak one (≈220%). So only upgrade to SLERP when the contributors
+        # are reasonably balanced.
+        pf_mag_ratio = pf.get("magnitude_ratio", 1.0)
+        slerp_imbalance_cap = arch_preset.get("slerp_imbalance_ratio", 2.0)
+        pf_imbalanced = pf_mag_ratio >= slerp_imbalance_cap
         if (pf_mode == "weighted_average" and pf["n_loras"] >= 2
                 and strategy_set == "full"
                 and not pf_opposing
+                and not pf_imbalanced
                 and not (is_full_rank and fr_preset.get("disable_slerp_upgrade", False))):
             pf_mode = "slerp"
-        if (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)
-                and pf_mode == "weighted_average" and pf_orthogonal):
+        # A strongly-imbalanced ORTHOGONAL pair: additive (weighted_sum)
+        # preserves the dominant LoRA at full while SLERP/weighted_average both
+        # wash it out. Safe from oversaturation because the dominant LoRA
+        # defines the auto-strength reference energy (scale ≈ 1.0); the
+        # floor-clamped oversaturation risk is a balanced-multi-LoRA effect, so
+        # this is gated to n_loras == 2. The existing full-rank rule is kept.
+        if (pf_mode == "weighted_average" and pf_orthogonal and not pf_opposing
+                and ((pf_imbalanced and pf["n_loras"] == 2)
+                     or (is_full_rank and fr_preset.get("prefer_sum_orthogonal", False)))):
             pf_mode = "weighted_sum"
         return pf_mode, pf_density, pf_sign, pf_orthogonal, pf_opposing
 
@@ -6880,7 +6957,8 @@ class LoRAOptimizer(_LoRAMergeBase):
         lines.append(f"  Model patches: {merge_summary['model_patches']}")
         lines.append(f"  CLIP patches: {merge_summary['clip_patches']}")
         if merge_summary.get('skipped_keys', 0) > 0:
-            lines.append(f"  Skipped keys: {merge_summary['skipped_keys']} (shape mismatch, e.g. sliced weights)")
+            lines.append(f"  Skipped keys: {merge_summary['skipped_keys']} (no matching model weight)")
+        lines.extend(self._shape_mismatch_report_lines())
         os_val = merge_summary['output_strength']
         auto_os = merge_summary.get('auto_output_strength', False)
         if auto_os:
@@ -7023,6 +7101,13 @@ class LoRAOptimizer(_LoRAMergeBase):
         Pass 2: Recompute diffs per target group, merge immediately, discard
         Peak memory tracks the largest active target group, not the whole stack.
         """
+        # Reset the per-merge shape-incompatibility log (populated in
+        # _prepare_group_diffs when a LoRA's tensor shape doesn't match the
+        # target model weight). Only on report-producing top-level calls, so
+        # sub-merges / tuner candidates don't clear the parent's collection.
+        if not _skip_report:
+            self._shape_mismatches = {}
+
         # Free stale cached models when the input model/clip changes — prevents
         # the old patched clones from staying in RAM after switching models.
         if self._track_model_identity(model, clip):
