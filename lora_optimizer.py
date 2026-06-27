@@ -1069,7 +1069,11 @@ class _LoRAMergeBase:
         #   diffusion_model.blocks.N.attn.wq            (Comfy-Org native)
         #   diffusion_model.transformer_blocks.N.attn.to_gate  (krea_2 trainer)
         #   transformer.transformer_blocks.N.attn.to_gate + text_fusion (diffusers)
-        if any(re.search(r'attn[._](?:to_gate|gate|w[qkvo])(?=[._])', k) for k in keys):
+        # The gate/proj is always a leaf module followed by the LoRA suffix '.'
+        # (.lora_down/.lora_A/.lokr_w1/.alpha). Require the '.' so this does NOT
+        # false-match LTX-2's '*_attn.to_gate_logits' (where '_logits' follows) —
+        # that hijacked LTX-2 LoRAs as krea2 and broke their merge.
+        if any(re.search(r'attn[._](?:to_gate|gate|w[qkvo])(?=\.)', k) for k in keys):
             return 'krea2'
 
         # Z-Image Turbo (Lumina2): layers.N with attention patterns

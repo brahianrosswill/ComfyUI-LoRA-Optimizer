@@ -4844,6 +4844,22 @@ class Krea2DetectionTests(unittest.TestCase):
         self.assertEqual(self.det(flux), "flux")
         self.assertEqual(self.det(qwen), "qwen_image")
 
+    def test_ltx2_gate_logits_not_stolen_by_krea2(self):
+        # Regression: LTX-2 (LTXV 2.3) has dual video/audio + cross-modal attention
+        # with '*_attn.to_gate_logits'. The substring '..._attn.to_gate' must NOT
+        # trip krea2's gate detection (krea2's gate is a leaf followed by '.', LTX-2's
+        # is 'to_gate_logits' with '_' after). These LTX LoRAs were mis-detected as
+        # krea2 -> wrong normalization (transformer_blocks->blocks) -> nothing merged.
+        s = _sd([
+            "diffusion_model.transformer_blocks.0.attn1.to_q.lora_A.weight",
+            "diffusion_model.transformer_blocks.0.attn1.to_gate_logits.lora_A.weight",
+            "diffusion_model.transformer_blocks.0.attn2.to_k.lora_A.weight",
+            "diffusion_model.transformer_blocks.0.audio_to_video_attn.to_gate_logits.lora_A.weight",
+            "diffusion_model.transformer_blocks.0.video_to_audio_attn.to_v.lora_A.weight",
+        ])
+        self.assertNotEqual(self.det(s), "krea2")
+        self.assertEqual(self.det(s), "ltx")
+
 
 class Krea2NormalizationTests(unittest.TestCase):
     """Both Krea 2 trainer forms normalize to the model-native diffusion_model.* keys.
