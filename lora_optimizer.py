@@ -2448,9 +2448,18 @@ class _LoRAMergeBase:
                     if alt is not None:
                         diff, alt_rank, alt_dtype = alt
                         try:
-                            diff = diff.reshape(target_shape)
+                            reshaped = diff.reshape(target_shape)
                         except RuntimeError:
-                            diff = None
+                            # LoKr/LoHa reconstructs to a shape that doesn't match
+                            # the target model weight (e.g. a narrow block trained
+                            # on a different model variant) — this layer is dropped.
+                            # Record it for the report instead of dropping silently.
+                            self._note_shape_mismatch(
+                                item, target_key,
+                                int(diff.shape[0]) if diff.dim() > 0 else None,
+                                int(target_shape[0]) if len(target_shape) > 0 else None)
+                            reshaped = None
+                        diff = reshaped
                         if diff is not None:
                             rank_sum += alt_rank
                             raw_contributors.add(i)

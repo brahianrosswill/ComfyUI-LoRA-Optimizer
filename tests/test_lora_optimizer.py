@@ -953,6 +953,29 @@ class ShapeMismatchReportTests(unittest.TestCase):
         self.assertIn("... and", text)                   # truncated past 3 examples
         self.assertIn("SAME base model", text)           # actionable fix hint
 
+    def test_lokr_shape_mismatch_is_recorded(self):
+        # A LoKr concept whose reconstructed delta doesn't match the model weight
+        # must be recorded too — LoKr/LoHa go through a different branch than plain
+        # LoRA, so the capture has to cover it (regression for snofs-style LoKrs).
+        model = _make_model()  # model.layer.weight is (1, 1)
+        lora = {
+            "layer.lokr_w1": torch.eye(2, dtype=torch.float32),          # (2, 2)
+            "layer.lokr_w2": torch.tensor([[1.0]], dtype=torch.float32),  # (1, 1)
+        }  # kron(w1, w2) -> (2, 2), cannot reshape to the (1, 1) model weight
+        active_loras = [{
+            "name": "concept/snofs_krea_v1.safetensors", "lora": lora, "strength": 1.0,
+            "clip_strength": None, "key_filter": "all", "conflict_mode": "all",
+        }]
+        target_group = {
+            "target_key": "layer.weight", "is_clip": False,
+            "aliases": ["layer"], "label_prefix": "layer",
+        }
+        self.optimizer._prepare_group_diffs(
+            target_group, active_loras, model, None, torch.device("cpu"))
+        per = self.optimizer._shape_mismatches.get("concept/snofs_krea_v1.safetensors")
+        self.assertIsNotNone(per)
+        self.assertEqual(per["layer.weight"], (2, 1))  # LoKr dim 2 vs model dim 1
+
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
 class PreserveFlagTests(unittest.TestCase):
