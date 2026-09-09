@@ -1,0 +1,3437 @@
+{
+  "control_audit": {
+    "completed_at_utc": "2026-09-09T07:48:27.357798+00:00",
+    "cases": 9,
+    "gates": {
+      "technical_gate": true,
+      "direction_gate": true,
+      "ranking_gate": true,
+      "repeatability_gate": true,
+      "harness_silence_abstention_gate": true,
+      "modal_offset_delta_seconds": -0.8,
+      "necessary_controls_pass": true,
+      "qualified_for_av_quality": false,
+      "qualified_for_heldout": false
+    },
+    "independently_reconstructed_model_inputs": true,
+    "gpu_inference_rerun": false,
+    "original_media_unchanged": true
+  },
+  "calibration_audit": {
+    "completed_at_utc": "2026-09-09T07:54:13.234951+00:00",
+    "cases": 12,
+    "human_entries": 14,
+    "reconstructed_model_inputs": true,
+    "control_original_reproduction": {
+      "A05": true,
+      "A09": true
+    },
+    "gpu_inference_rerun": false,
+    "comparison_reproduced": true,
+    "qualified_for_av_quality": false,
+    "qualified_for_heldout": false
+  },
+  "human_comparison": {
+    "completed_at_utc": "2026-09-09T07:52:39.105666+00:00",
+    "rows": [
+      {
+        "pair": "combat_repair",
+        "variant": "ct",
+        "blind_id": "C01",
+        "source_sha256": "7b1acc15d6a42d5c0f39afd4dfc47a10523c78769f4f9b51d1c05df5f9612bc0",
+        "human_sync": 4,
+        "near_zero_mass": 0.9998460778501671,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_repair",
+        "variant": "second",
+        "blind_id": "C06",
+        "source_sha256": "7909a3b21a77d8a32424391dc11a22eb94001afef69a208ceb72f6504deee654",
+        "human_sync": 3,
+        "near_zero_mass": 0.999484847509623,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_repair",
+        "variant": "combat",
+        "blind_id": "C08",
+        "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "human_sync": 4,
+        "near_zero_mass": 0.9982298349880544,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_repair",
+        "variant": "np",
+        "blind_id": "C09",
+        "source_sha256": "d51549ac49b5581d5b3a72ecea61dc9dd984cbce3cdbd4f9c26452c6b510c3b6",
+        "human_sync": 4,
+        "near_zero_mass": 0.9996120103221994,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_repair",
+        "variant": "additive",
+        "blind_id": "C11",
+        "source_sha256": "e1ce095ceeb89393224f0bceff8b6d50a3bc9adf5fc98941869ee6dc9491bc76",
+        "human_sync": 1,
+        "near_zero_mass": 0.9991121242687391,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_repair",
+        "variant": "base",
+        "blind_id": "C12",
+        "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+        "human_sync": 1,
+        "near_zero_mass": 0.999732862485328,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_repair",
+        "variant": "winner",
+        "blind_id": "C14",
+        "source_sha256": "26589d051b26f1255fb84e50de5a5cb3d605ec64e8181e9c9b177ad5cad43539",
+        "human_sync": 3,
+        "near_zero_mass": 0.9997982251669582,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_cinema",
+        "variant": "combat",
+        "blind_id": "C02",
+        "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "human_sync": 4,
+        "near_zero_mass": 0.9982298349880544,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_cinema",
+        "variant": "winner",
+        "blind_id": "C03",
+        "source_sha256": "932acaacee0ea454f7199838b260cddafb90309e03e59d2f85069901fc8e03ca",
+        "human_sync": 2,
+        "near_zero_mass": 0.999407942371445,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_cinema",
+        "variant": "additive",
+        "blind_id": "C04",
+        "source_sha256": "17abaf2cd5ad849726f6719ecf617397ddac1839399ee069290656a51aea3880",
+        "human_sync": 3,
+        "near_zero_mass": 0.9997129202147271,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_cinema",
+        "variant": "ct",
+        "blind_id": "C05",
+        "source_sha256": "e7da469f7661037604d1cb355f2054aaebbb2ddc4396bd9075f85a999898acd5",
+        "human_sync": 3,
+        "near_zero_mass": 0.9996812781923373,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_cinema",
+        "variant": "second",
+        "blind_id": "C07",
+        "source_sha256": "0a16600f44c2819c0a64b6d3101484f77895597f2e38ebb32a99abbab773a50a",
+        "human_sync": 3,
+        "near_zero_mass": 0.999859691462047,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_cinema",
+        "variant": "np",
+        "blind_id": "C10",
+        "source_sha256": "0f193dc17fac4b936db03095f41904bf15d1dc5d284db6fa6a0cf72fc1fe8fc6",
+        "human_sync": 3,
+        "near_zero_mass": 0.9998396727893956,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      },
+      {
+        "pair": "combat_cinema",
+        "variant": "base",
+        "blind_id": "C13",
+        "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+        "human_sync": 2,
+        "near_zero_mass": 0.999732862485328,
+        "negative_abs_offset": 0,
+        "modal_offset": 0
+      }
+    ],
+    "comparisons": {
+      "combat_cinema": {
+        "near_zero_mass": {
+          "comparisons": [
+            {
+              "a": "C02",
+              "b": "C03",
+              "relation": "discordant",
+              "human": [
+                4,
+                2
+              ],
+              "model": [
+                0.9982298349880544,
+                0.999407942371445
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C04",
+              "relation": "discordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9982298349880544,
+                0.9997129202147271
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C05",
+              "relation": "discordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9982298349880544,
+                0.9996812781923373
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C07",
+              "relation": "discordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9982298349880544,
+                0.999859691462047
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C10",
+              "relation": "discordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9982298349880544,
+                0.9998396727893956
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C13",
+              "relation": "discordant",
+              "human": [
+                4,
+                2
+              ],
+              "model": [
+                0.9982298349880544,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C04",
+              "relation": "concordant",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0.999407942371445,
+                0.9997129202147271
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C05",
+              "relation": "concordant",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0.999407942371445,
+                0.9996812781923373
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C07",
+              "relation": "concordant",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0.999407942371445,
+                0.999859691462047
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C10",
+              "relation": "concordant",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0.999407942371445,
+                0.9998396727893956
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C13",
+              "relation": "human_tied",
+              "human": [
+                2,
+                2
+              ],
+              "model": [
+                0.999407942371445,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C05",
+              "relation": "human_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0.9997129202147271,
+                0.9996812781923373
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C07",
+              "relation": "human_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0.9997129202147271,
+                0.999859691462047
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C10",
+              "relation": "human_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0.9997129202147271,
+                0.9998396727893956
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C13",
+              "relation": "discordant",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0.9997129202147271,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C05",
+              "b": "C07",
+              "relation": "human_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0.9996812781923373,
+                0.999859691462047
+              ]
+            },
+            {
+              "a": "C05",
+              "b": "C10",
+              "relation": "human_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0.9996812781923373,
+                0.9998396727893956
+              ]
+            },
+            {
+              "a": "C05",
+              "b": "C13",
+              "relation": "discordant",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0.9996812781923373,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C07",
+              "b": "C10",
+              "relation": "human_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0.999859691462047,
+                0.9998396727893956
+              ]
+            },
+            {
+              "a": "C07",
+              "b": "C13",
+              "relation": "concordant",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0.999859691462047,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C10",
+              "b": "C13",
+              "relation": "concordant",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0.9998396727893956,
+                0.999732862485328
+              ]
+            }
+          ],
+          "counts": {
+            "concordant": 6,
+            "discordant": 8,
+            "model_tied": 0,
+            "human_tied": 7,
+            "both_tied": 0,
+            "missing": 0
+          },
+          "human_untied_eligible": 14,
+          "tie_adjusted_descriptive_fraction": 0.42857142857142855
+        },
+        "negative_abs_offset": {
+          "comparisons": [
+            {
+              "a": "C02",
+              "b": "C03",
+              "relation": "model_tied",
+              "human": [
+                4,
+                2
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C04",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C05",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C07",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C10",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C02",
+              "b": "C13",
+              "relation": "model_tied",
+              "human": [
+                4,
+                2
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C04",
+              "relation": "model_tied",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C05",
+              "relation": "model_tied",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C07",
+              "relation": "model_tied",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C10",
+              "relation": "model_tied",
+              "human": [
+                2,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C03",
+              "b": "C13",
+              "relation": "both_tied",
+              "human": [
+                2,
+                2
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C05",
+              "relation": "both_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C07",
+              "relation": "both_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C10",
+              "relation": "both_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C04",
+              "b": "C13",
+              "relation": "model_tied",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C05",
+              "b": "C07",
+              "relation": "both_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C05",
+              "b": "C10",
+              "relation": "both_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C05",
+              "b": "C13",
+              "relation": "model_tied",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C07",
+              "b": "C10",
+              "relation": "both_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C07",
+              "b": "C13",
+              "relation": "model_tied",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C10",
+              "b": "C13",
+              "relation": "model_tied",
+              "human": [
+                3,
+                2
+              ],
+              "model": [
+                0,
+                0
+              ]
+            }
+          ],
+          "counts": {
+            "concordant": 0,
+            "discordant": 0,
+            "model_tied": 14,
+            "human_tied": 0,
+            "both_tied": 7,
+            "missing": 0
+          },
+          "human_untied_eligible": 14,
+          "tie_adjusted_descriptive_fraction": 0.5
+        }
+      },
+      "combat_repair": {
+        "near_zero_mass": {
+          "comparisons": [
+            {
+              "a": "C01",
+              "b": "C06",
+              "relation": "concordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9998460778501671,
+                0.999484847509623
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C08",
+              "relation": "human_tied",
+              "human": [
+                4,
+                4
+              ],
+              "model": [
+                0.9998460778501671,
+                0.9982298349880544
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C09",
+              "relation": "human_tied",
+              "human": [
+                4,
+                4
+              ],
+              "model": [
+                0.9998460778501671,
+                0.9996120103221994
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C11",
+              "relation": "concordant",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0.9998460778501671,
+                0.9991121242687391
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C12",
+              "relation": "concordant",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0.9998460778501671,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C14",
+              "relation": "concordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9998460778501671,
+                0.9997982251669582
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C08",
+              "relation": "discordant",
+              "human": [
+                3,
+                4
+              ],
+              "model": [
+                0.999484847509623,
+                0.9982298349880544
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C09",
+              "relation": "concordant",
+              "human": [
+                3,
+                4
+              ],
+              "model": [
+                0.999484847509623,
+                0.9996120103221994
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C11",
+              "relation": "concordant",
+              "human": [
+                3,
+                1
+              ],
+              "model": [
+                0.999484847509623,
+                0.9991121242687391
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C12",
+              "relation": "discordant",
+              "human": [
+                3,
+                1
+              ],
+              "model": [
+                0.999484847509623,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C14",
+              "relation": "human_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0.999484847509623,
+                0.9997982251669582
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C09",
+              "relation": "human_tied",
+              "human": [
+                4,
+                4
+              ],
+              "model": [
+                0.9982298349880544,
+                0.9996120103221994
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C11",
+              "relation": "discordant",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0.9982298349880544,
+                0.9991121242687391
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C12",
+              "relation": "discordant",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0.9982298349880544,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C14",
+              "relation": "discordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9982298349880544,
+                0.9997982251669582
+              ]
+            },
+            {
+              "a": "C09",
+              "b": "C11",
+              "relation": "concordant",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0.9996120103221994,
+                0.9991121242687391
+              ]
+            },
+            {
+              "a": "C09",
+              "b": "C12",
+              "relation": "discordant",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0.9996120103221994,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C09",
+              "b": "C14",
+              "relation": "discordant",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0.9996120103221994,
+                0.9997982251669582
+              ]
+            },
+            {
+              "a": "C11",
+              "b": "C12",
+              "relation": "human_tied",
+              "human": [
+                1,
+                1
+              ],
+              "model": [
+                0.9991121242687391,
+                0.999732862485328
+              ]
+            },
+            {
+              "a": "C11",
+              "b": "C14",
+              "relation": "concordant",
+              "human": [
+                1,
+                3
+              ],
+              "model": [
+                0.9991121242687391,
+                0.9997982251669582
+              ]
+            },
+            {
+              "a": "C12",
+              "b": "C14",
+              "relation": "concordant",
+              "human": [
+                1,
+                3
+              ],
+              "model": [
+                0.999732862485328,
+                0.9997982251669582
+              ]
+            }
+          ],
+          "counts": {
+            "concordant": 9,
+            "discordant": 7,
+            "model_tied": 0,
+            "human_tied": 5,
+            "both_tied": 0,
+            "missing": 0
+          },
+          "human_untied_eligible": 16,
+          "tie_adjusted_descriptive_fraction": 0.5625
+        },
+        "negative_abs_offset": {
+          "comparisons": [
+            {
+              "a": "C01",
+              "b": "C06",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C08",
+              "relation": "both_tied",
+              "human": [
+                4,
+                4
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C09",
+              "relation": "both_tied",
+              "human": [
+                4,
+                4
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C11",
+              "relation": "model_tied",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C12",
+              "relation": "model_tied",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C01",
+              "b": "C14",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C08",
+              "relation": "model_tied",
+              "human": [
+                3,
+                4
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C09",
+              "relation": "model_tied",
+              "human": [
+                3,
+                4
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C11",
+              "relation": "model_tied",
+              "human": [
+                3,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C12",
+              "relation": "model_tied",
+              "human": [
+                3,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C06",
+              "b": "C14",
+              "relation": "both_tied",
+              "human": [
+                3,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C09",
+              "relation": "both_tied",
+              "human": [
+                4,
+                4
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C11",
+              "relation": "model_tied",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C12",
+              "relation": "model_tied",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C08",
+              "b": "C14",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C09",
+              "b": "C11",
+              "relation": "model_tied",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C09",
+              "b": "C12",
+              "relation": "model_tied",
+              "human": [
+                4,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C09",
+              "b": "C14",
+              "relation": "model_tied",
+              "human": [
+                4,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C11",
+              "b": "C12",
+              "relation": "both_tied",
+              "human": [
+                1,
+                1
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C11",
+              "b": "C14",
+              "relation": "model_tied",
+              "human": [
+                1,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            },
+            {
+              "a": "C12",
+              "b": "C14",
+              "relation": "model_tied",
+              "human": [
+                1,
+                3
+              ],
+              "model": [
+                0,
+                0
+              ]
+            }
+          ],
+          "counts": {
+            "concordant": 0,
+            "discordant": 0,
+            "model_tied": 16,
+            "human_tied": 0,
+            "both_tied": 5,
+            "missing": 0
+          },
+          "human_untied_eligible": 16,
+          "tie_adjusted_descriptive_fraction": 0.5
+        }
+      }
+    },
+    "qualified_for_av_quality": false,
+    "qualified_for_heldout": false,
+    "one_reviewer_only": true,
+    "shared_clips_are_correlated": true,
+    "scores_fitted": false
+  },
+  "setup": {
+    "completed_at_utc": "2026-09-09T07:44:14.997079+00:00",
+    "policy_sha256": "f727d974d1f10f0cf58fcb8a6cbe60e21066e7920e3ff091fd10244a9fe3098b",
+    "source_revision": "b66668a1521d7567cc760e5544b2b5b53179b687",
+    "checkpoint_sha256": "5b4b3557fbd96b61aaffa8bc70b28f9ff53f8fa98edc202655c5d94ab3c719ee",
+    "checkpoint_md5": "54037d261253aad8bd8ba82cdd7e71a7",
+    "checkpoint_bytes": 1131153989,
+    "config_sha256": "4785fa7f341e038c1a947d55eebc056a0807975731d71fede813a5d65924a60f",
+    "safe_globals": [
+      "builtins.dict",
+      "builtins.int",
+      "builtins.list",
+      "collections.defaultdict",
+      "numpy.core.multiarray.scalar",
+      "numpy.dtype",
+      "omegaconf.base.ContainerMetadata",
+      "omegaconf.base.Metadata",
+      "omegaconf.dictconfig.DictConfig",
+      "omegaconf.listconfig.ListConfig",
+      "omegaconf.nodes.AnyNode",
+      "typing.Any"
+    ],
+    "weights_only": true,
+    "model_tensors": 513,
+    "model_parameters": 237460245,
+    "python": "3.12.10 | packaged by conda-forge | (main, Apr 10 2025, 22:21:13) [GCC 13.3.0]",
+    "requirements_sha256": "9f1e9053764e8ee7583aafb2cd7a59b86e8b49bd90ff3d3a8f2239ae3281002d",
+    "helper_sha256": "f95f4453bf4bcde2ef97595607fd380950b185a1c295b235538ee8b62f848ff7",
+    "model_quality_qualified": false
+  },
+  "artifact_sha256": {
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-09-h3-synchformer-policy.json": "f727d974d1f10f0cf58fcb8a6cbe60e21066e7920e3ff091fd10244a9fe3098b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/calibration-inputs-flat-01.json": "a51212a23027089f5958b69a80418d510f029d4f5f2328064fcc95905dcfc967",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/setup-receipt.json": "823c2123fd54584f17f792160857fc9fcd4a6be0302a203d2e79a68440ff4f70",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/scripts/h3_synchformer.py": "e83de4e4003f96ef41ab4e300cefb31d04cad2b1d7efc0b263d6da0a6be85ce7",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/scripts/h3_local_av_evaluator.py": "033b32612c50a816858265afdb6776982aee53a5263a0a78db43eebfc40ee256",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/cfg-24-01-04T16-39-21.yaml": "4785fa7f341e038c1a947d55eebc056a0807975731d71fede813a5d65924a60f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/24-01-04T16-39-21.pt": "5b4b3557fbd96b61aaffa8bc70b28f9ff53f8fa98edc202655c5d94ab3c719ee",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-combat_00001_.mp4": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-original-r0.json": "dd7c9b322c5f89c6508978f1220ff016cf61fb9295c242307c547dd77099017f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-original-r0.input.json": "41a499d590fce00554c08b96b9b87ca71f59dd8f907c32778fa38287abbb558f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-muted-r0.json": "b7f84e3ccba3d259d3a5b629d231042624b8d82297f447cdc4070ea408e10ad7",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-muted-r0.input.json": "265df4f005a737e29473dcf98646daf3eacad7a972c42142eb082c4041c4e52b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-delay750-r0.json": "2e23c674028ab309d4ee0d5a8d4633da35634079a078b4a5c29be9d414c59177",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-delay750-r0.input.json": "bf1b72f59d477d5dac1658d495462790d2e34a14e9eb23a5e0ef51a28ea90feb",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-base_00001_.mp4": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A09-original-r0.json": "f8e4c470573b0a9e8500520c39bb067ef27f319154710ac1c8e00f159e9a5bd1",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A09-original-r0.input.json": "1c6b745827e15ce1fc12c1ec6040a30cf5cb2034aef9752cf91747190ef34479",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A09-muted-r0.json": "4d63c2bac807bf54e5528242d433446696b6bad08a57f71151886d96be013a79",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A09-muted-r0.input.json": "7fdd3e57fb87aa765760cb6151cf822d51e6c46dd51a287e3ab6b9b96eb04a11",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A09-delay750-r0.json": "307f37f270720747cfe2259101df41964f2b93621a29ed8be269513333ef5817",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A09-delay750-r0.input.json": "5b6cac77d8a3b74141a0eb16762f9bb935a2080644fa53ee455715ac99a95be9",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-original-r1.json": "db1545a6ec66e43b86b0d289419f7663b2cd5a087c30bcb95f5b406a77e7f3e4",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-original-r1.input.json": "67ed3afc1d2deaf3dd8d1d83314420320a85a4ef2ded1f296f7ee76b6a2a17fe",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-muted-r1.json": "7c4fdd9249894c60e2ce1831505727594a0be99116e8daa7bba539e9aa10b82f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-muted-r1.input.json": "f3fbdecf25d6f6b253f834fcb2d5850ef0ce2d3ddfe69cdaa80a836399f10238",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-delay750-r1.json": "8085428492328d8e181a6ac32f4580faaa4cc12bab699eaa0efaa1cd47fd86da",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/A05-delay750-r1.input.json": "e1ca37265279f9dcd19887648c59d42cb1e40f2b4975b30041f895e8d7ebade3",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/start.json": "eff9a2d4595e1e616a221f957c445707b5b04dc59e1cb8aadba07be3ebf8be46",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/controls-01/complete.json": "2681b94af51cd9137f75f93dfad628a3a09581b0315a0144171ab4906691845a",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/scripts/h3_synchformer_audit.py": "ac3af15995da264481c916144f1a8d44a2466b27723fe2198ad4d03b249cab2f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-09-h3-synchformer-calibration-policy.json": "b56d2432abd28400cfbdbf5b1ddf4843bd25b211bce94765f7f6dbe233ba74bf",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/scripts/h3_synchformer_calibration.py": "cacb0627fa437a73de434ab381b75a5b7e538f22c1581bf34e8930afe7830f9e",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-av2-ratings-seed03.json": "bfce769c991340b9f081ff61148c0025354968c2c6b934e73c527af07f46e0aa",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A01.json": "71989cf252291be2440700fd103b422045942c80b7c35666bd694418f8625f1c",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A01.input.json": "30bf00b386eb590a24bc669ee54f6fb5d339ca3605caf583cfc33bc852fea907",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A02.json": "3a146b3c277fb24ff5de990e7f0acb00a6c29b794a3db9ba0ff259e4a1b9dd1c",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A02.input.json": "c848ae7aed980178efe3a3ae0df7b2cee4ca0650cb7591af0f789d1691ce03c3",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A03.json": "18568d2465f240b18d13388147bbe6e28f6e2ecb7ac3312fe73c77dc348a9f91",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A03.input.json": "c2e5e6e5d00c0030259f4c50037d9a5ae403b991f9ca61e906f0ff89b3795971",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A04.json": "27e638be1fb481dda80a795fdf0b8835b1884af06e01a8d7e5f03f897b8b1b03",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A04.input.json": "3b8133e7210e8d708f708e1476e365f171fa43cfdf38962d8b378ea0fcd11638",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A05.json": "382c25adbac3742c7353511a1db1be1736e97f0fbfe982b07012a0c37f1d5aa2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A05.input.json": "f878891b8d424adf6047d32cb08c181dddfe288283a51251b25fb4e83dacfa74",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A06.json": "f2a16f9ee397c5b4c812916774b94b0b75e6919ce3306ce39815340fc4787ced",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A06.input.json": "761dfb45ecb673044c8acad511c3dcb4ad0f77e5db44a87ea1a7d749a1855ff8",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A07.json": "2fba0d4f493aade5ba023af9a5fcd92dadeee23152fd461ab5f00ac3f083beb2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A07.input.json": "e68efb2e0412ce27bfec6326bd7fb5c4f85e184c8ad805cbe48f16737815ec29",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A08.json": "b6e1da95c0f4134b4ce464435d77e88758b94e5b366cddcd3a0e1f63a922baac",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A08.input.json": "e2778e0bc71d31869baa940f758769b3155118592c782107d17e1eefc19534d6",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A09.json": "6c0ac468769bff01224e6bcd77b3dddd4c9e2916edcb03faeddda691c6d4fcbb",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A09.input.json": "478eb5bdc8d1b2dfc3a08dd76933b222b1c0db11208e7e708b16ef2af5b44f46",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A10.json": "b5df3957e4352696785c775b2aa68bf7bef47ba9dcf6928d6f9000bd8ce5d9a9",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A10.input.json": "89de20b8a9d409602565a468929ba78fee068c9e7f3072416426135a6271e5dc",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A11.json": "e13a7369849780dbd2c82228284b8c248d06a5ed9a032e5bc5c6fa86286f8a15",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A11.input.json": "aba776207ff1c3ec95ead2373f8350ea9b5587f6a81c93b6ce4b5648edc29b3f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A12.json": "0b6bd3251cb7c5cb0c9b13d5c1b879b9e507484ed2262a19b84cd1b25631a436",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A12.input.json": "21422e49765573c7530804aab5ec553bd831b685eb045b08027efa40e4294eda",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-second_00001_.mp4": "0a16600f44c2819c0a64b6d3101484f77895597f2e38ebb32a99abbab773a50a",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-np_00001_.mp4": "0f193dc17fac4b936db03095f41904bf15d1dc5d284db6fa6a0cf72fc1fe8fc6",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-additive_00001_.mp4": "17abaf2cd5ad849726f6719ecf617397ddac1839399ee069290656a51aea3880",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-repair-winner_00001_.mp4": "26589d051b26f1255fb84e50de5a5cb3d605ec64e8181e9c9b177ad5cad43539",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-repair-second_00001_.mp4": "7909a3b21a77d8a32424391dc11a22eb94001afef69a208ceb72f6504deee654",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-repair-ct_00001_.mp4": "7b1acc15d6a42d5c0f39afd4dfc47a10523c78769f4f9b51d1c05df5f9612bc0",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-winner_00001_.mp4": "932acaacee0ea454f7199838b260cddafb90309e03e59d2f85069901fc8e03ca",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-repair-np_00001_.mp4": "d51549ac49b5581d5b3a72ecea61dc9dd984cbce3cdbd4f9c26452c6b510c3b6",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-repair-additive_00001_.mp4": "e1ce095ceeb89393224f0bceff8b6d50a3bc9adf5fc98941869ee6dc9491bc76",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-ct_00001_.mp4": "e7da469f7661037604d1cb355f2054aaebbb2ddc4396bd9075f85a999898acd5",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/start.json": "4b6ae6b80a7b592911babd61ad27d0e7b1efbd49f31d95136409ad12f4250d75",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/complete.json": "b26222d4e44bf27dbd1f239d53cf7398596785c568e2a0e7719688c8e0086156",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/human-comparison.json": "3698a87d612d0d90145a6a69f1656dcce6dcc76d5568778be4a3d66bf44273bf",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/scripts/h3_synchformer_calibration_audit.py": "b866b31bc46838552b4e9f9dda19245e50178a56675e130484ddf8c9d431d21f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/conda_env.yml": "40a7aadc0c1fbf9ad4190d69aa79f1630ced24c8df4fad64be3e47f6873b446a",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/conda_env_for_AMD_ROCm.yml": "bcf18b9d2caf11527c0a3b19987f04b4d44112953078627512938e7d8f1f49f2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/configs/ft_synchability.yaml": "3573c892e8ae13cdb836e0b4fe1f96b737b0af27b7da7fcd4b4a2d81af039256",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/configs/segment_avclip.yaml": "e1fc11c786f395219460b99e042debaedd36b64dc95e896271c44fa9e7e74ff6",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/configs/sync.yaml": "37857426d91101c2490bf2977e15336bf526cfb23898119fa5f8bf93088d0677",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/dataset/audioset.py": "61914b2c5216a9bfaf60431d466f23715ceebca9fcc20043d183e8dfe86d9a0b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/dataset/dataset_utils.py": "975c909d537371e9f51c3d1956c4775b58cd943bfc39068f22d8df629a3f6eba",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/dataset/lrs.py": "9afcfda60a41c0d6591d14914542e71c050de6471d1c46622007211163bbe5fb",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/dataset/transforms.py": "d925db2897de7f373cf01ddb55128b011442cf9c6136998116663dc4787231a6",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/dataset/vggsound.py": "a5b387a7be4fa525cf7d99d92562dcbe734ac5e1a675ae090b30f61b25f57d2b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/example.py": "db6c0c67c76971ea5b9c7b19190d880fb20b9d6d6b4e2de51ad4b9cf2700a34c",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/main.py": "aafb06f3a3f6031f1e676b5f54ee0abfd67647ce0d40d21c6900e622cf12d0cd",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/bridges.py": "941600144bce69f8dcdc309b794585be67e034386cbc6ad9f0168243d3f8dfec",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/audio/ast.py": "5b64f45e34482ded0afc9f943f19c09608238a7b42939467f199f4b94e86f985",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/audio/hf_src/modeling_ast.py": "55a47fe94d3b9d2a5f6b50d7ab427b0c1c95706c13dc5e7e5295f9ed16c84076",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/audio/resnet.py": "30b998242aaa1ddcf98f6e8e654d1d57f9c2fe6b8cda8a823e7dff7376bf3c41",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/__init__.py": "13e158223b3f1d5fa3ce1a0fccb646a70354a055c1e21e007233e5798e9fede2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/__init__.py": "9675428e9ef88195d3262b5fde7e48c3844b94d40fa67c88633c6605df294d3e",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/coca_model.py": "63762d49bd7b67518d9c9fb0a96f69e3bd2f7cc536e514d9372683a61311d07b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/constants.py": "4289fac298908e2fb814ff84b4594ff49094a7eab074fed1b2ca6429339e923b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/factory.py": "da97fe5dab64881d54f7de01e4a1833a40df5ed782b01512570f6ac049c6265a",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/generation_utils.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/hf_configs.py": "706c17fe0f02298a03a03f21c7ccf19b8d5408e6da4dd517f804090774c02100",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/hf_model.py": "a322c444d3fb614d45b2b30ef544290503b531d3b5f6d5d148601a54361c382f",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/loss.py": "b9270a918c345636d3279d5ae2c1753d8c08158254dc1b69d1c2ad347e90c2f0",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/model.py": "217cf4cf9c552823cb572e57143763494d37f335f6bfc8b1e2a4ec87e40533eb",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/modified_resnet.py": "897534d25611fb83520f749cb19e000b7e19bc6d1946072c03e28dc37057d136",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/openai.py": "f96a14feff6f6af7625d7ca3ec12f095aeed657b0d7f3953512c1eaadeb999c2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/pretrained.py": "78433ace9a39401b0d94d9cfce75f63e25101f0ab802d266fe9f7bfeda2d93e2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/push_to_hf_hub.py": "b343d65a7b2b1b0d69b14f8ad264966c363f767793b3de85a3d1792b2dc55ba3",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/timm_model.py": "a8f57501c7552183a15badd4345c1e4f337a957f72abedbb339dbfcbc5d163f2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/tokenizer.py": "5f55e9e2050feb3168a4fcef881bb13ef142f37a298d288d3da8cbf07f839a14",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/transform.py": "41c5cfee01c7e3e2f29c5a3934954298ed3ff3bc73f45a8998427283871c44ba",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/transformer.py": "c24774c35819c04ce0ea48bbfacadb812a3a333a92fb01480e9a893772690f55",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/utils.py": "459dd691e95325eb7100ae107f81f05a84d5e4fc50f7ef6044a700390dffdeb5",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/open_clip/version.py": "c6ddb2615ac179aa2763e21289583c06f034cc8aa21d0fb405c9b02075ae123b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/__init__.py": "3e3bbaa7c0bc48841ea3b80de1aedd15399b9b07a7b08547171845786c274be9",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/data.py": "a7ac92f6cf550a64ea7527e611d91535b8cf774ad584813ce05a2f75deacc5c3",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/distributed.py": "87234c7de2c00d3e84b9653976b90c84f98b127ded78ecb4329e516288d6f547",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/file_utils.py": "37b9e166605feefa8de5b8d2b0032ccae8708b5edfa54d82353dafc78bf1b4aa",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/imagenet_zeroshot_data.py": "e64b90a99839ca0592d249a0b374e7b27810a3aa92dec0dbe6ba99d9598947be",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/logger.py": "a0c1c10c2938756319c058897d5b240d84107136707551890d90a05514a21974",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/params.py": "e313bfdcbaf1a1ca47cdd81ec30c3baa7590fdcbd17916e0ce35839a6f22ec03",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/precision.py": "29c7d1b5c749a22d4dec9c73c8b0ed8281fb0ff983458ea9c279685ea97dc765",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/profile.py": "78311933d2c1d935387ca93a774c63012597a58b13f554b4ef9a00574aee1136",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/scheduler.py": "53c48109f8a2c4edda0e417bbe4a9257242826d47f6edf7d4bf16b4381789a05",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/train.py": "022d497e76072afa5f2b96380a646c1c41b4c59174ac04320e324a4600542966",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/train_clip.py": "70f39040cf92a45a4e3e4067dd0e6f6069c4e2852381435d41fcec0322015e0c",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/train_clip_src/training/zero_shot.py": "c85913a2db644149d132ff24702b97f73376fee9051f1cfa6a1770d5db36ed73",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/__init__.py": "4fc0b7521d4d01cad8ca0f81f320bb09e9df87086634c082823e2831f3278cab",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer.py": "8c04f0010b405f31f5cc97e9d0ed98e90def28e81517c1fc1f2b0c57ef982085",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/divided_224_16x4.yaml": "80461bd19c1f7bc1213445eba48aa69554e4b0230c57d3acc80625d2e2519dce",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/joint_224_16x4.yaml": "6f86dc82fcabfc6e0ab1b769eb8a65a3a9f2be4d322d2aad1c459d2b77a2b94a",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/motionformer_224_16x4.yaml": "995529905ae4821b99a9ce98ef2deade350c17df3d5abfdea78617bee5feaa73",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/nystrom_helper.py": "904347991abedaa4f46aa19b16f66fb5c8f8f3a488ad4a536f7729e1157089f2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/orthoformer_helper.py": "5101965bdbff3d6997322e406ecd8c69dba614a03b99da0657698a449466514a",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/performer_helper.py": "4a89c020b1ee498b6aa642d554dc4204463c5aedd5f08c18af4dda8670dd9f7a",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/video_model_builder.py": "4e6d01f761f4c9ee2afc8e7268fedc2aced8567424e5e5cea80514c3cc431f96",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/motionformer_src/vit_helper.py": "f5372ad15d97d4f5695c275f701e54cae9d17e8f35526981bd87aeb7b5a675a8",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/feat_extractors/visual/s3d.py": "e417a1121a6db006e1b94e5285ff8bb31eccecf81b2957dd2097d9f92f986919",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/modules/transformer.py": "ca6dc2457dec62e1f53b32d499063c7a2eca73f30e398013edd124661a1bf20b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/model/sync_model.py": "e07a8227642e29f6074c8d0ead43cc1197b8c99881989613c327ad2ee4ee695b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/scripts/test_syncability.py": "3c4fb3d0bebcfefed637d498b46f423b30387c1cbf9365eadabdbbd1ebfa7fc9",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/scripts/train_sync.py": "84c1f10fc91e7ffb1f113cff6057d0de543bf7cb82852791d51ce7d6ff9be4b7",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/scripts/train_utils.py": "391bb5b53ce653a8f6876082cea1d3c02abff2ab110dd2cc76f7ea185f4b9d67",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/utils/logger.py": "783d26035b44311958917f70e443288e307255205280e049de57fefbd95f2a72",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/utils/utils.py": "ac880bb98c042cf9dd72a02c4475f64ee99bac3941c65c591d99b69282e52ee8",
+    "docs/research/data/2026-09-09-h3-synchformer-policy.json": "f727d974d1f10f0cf58fcb8a6cbe60e21066e7920e3ff091fd10244a9fe3098b",
+    "docs/research/data/2026-09-09-h3-synchformer-calibration-policy.json": "b56d2432abd28400cfbdbf5b1ddf4843bd25b211bce94765f7f6dbe233ba74bf",
+    "docs/research/h3-synchformer-requirements.txt": "9f1e9053764e8ee7583aafb2cd7a59b86e8b49bd90ff3d3a8f2239ae3281002d",
+    "docs/research/2026-09-09-h3-synchformer.md": "f28ef55a33ea9fbdb8fd19a36e3aed3eb17dba98cb4fd3d073f4c9a3a3b6c0e1",
+    "scripts/h3_synchformer.py": "e83de4e4003f96ef41ab4e300cefb31d04cad2b1d7efc0b263d6da0a6be85ce7",
+    "scripts/h3_synchformer_audit.py": "ac3af15995da264481c916144f1a8d44a2466b27723fe2198ad4d03b249cab2f",
+    "scripts/h3_synchformer_calibration.py": "cacb0627fa437a73de434ab381b75a5b7e538f22c1581bf34e8930afe7830f9e",
+    "scripts/h3_synchformer_calibration_audit.py": "b866b31bc46838552b4e9f9dda19245e50178a56675e130484ddf8c9d431d21f",
+    "tests/test_h3_synchformer.py": "9d62c04aeab832aaa0ebb99202827f3c1200a8cbeb3ac67792cb6e03c164c197",
+    "tests/test_h3_synchformer_calibration.py": "cc738d858c3aaf0b6b963745f8539167e6b7361bb393a9833824bd0400be1401",
+    ".h3-study-artifacts/20260909/synchformer/setup-runner.py": "f95f4453bf4bcde2ef97595607fd380950b185a1c295b235538ee8b62f848ff7",
+    ".h3-study-artifacts/20260909/synchformer/runs/controls-01/runner.py": "e83de4e4003f96ef41ab4e300cefb31d04cad2b1d7efc0b263d6da0a6be85ce7",
+    ".h3-study-artifacts/20260909/synchformer/runs/controls-01/auditor.py": "ac3af15995da264481c916144f1a8d44a2466b27723fe2198ad4d03b249cab2f",
+    ".h3-study-artifacts/20260909/synchformer/runs/controls-01/control-audit.json": "29c5f0370f2b1b079c0d63fdde97d507f1e39f459562bde13a45aa62004139ee",
+    ".h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/runner.py": "cacb0627fa437a73de434ab381b75a5b7e538f22c1581bf34e8930afe7830f9e",
+    ".h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/auditor.py": "b866b31bc46838552b4e9f9dda19245e50178a56675e130484ddf8c9d431d21f",
+    ".h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/calibration-audit.json": "0a6b39edf91f236939637a118e272cd5efe27334b7c97643a4839d658c73d1f9"
+  },
+  "inference_cases": [
+    {
+      "case_id": "A05",
+      "condition": "delay750",
+      "repeat": 0,
+      "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "prediction": {
+        "logits": [
+          1.9658203125,
+          1.8369140625,
+          3.771484375,
+          4.9453125,
+          6.11328125,
+          9.328125,
+          14.2890625,
+          10.0859375,
+          4.890625,
+          3.875,
+          1.76953125,
+          1.84375,
+          1.814453125,
+          1.4404296875,
+          0.60595703125,
+          -0.10723876953125,
+          0.68212890625,
+          0.38232421875,
+          0.7431640625,
+          0.9130859375,
+          1.09765625
+        ],
+        "probabilities": [
+          0.00000434933394381767,
+          0.000003823309722564789,
+          0.000026461392383703633,
+          0.00008558541683126382,
+          0.0002751960229633173,
+          0.006852216150224206,
+          0.9779999564754577,
+          0.01461991478333215,
+          0.00008103064403229711,
+          0.00002934735445855995,
+          0.0000035741724059699706,
+          0.000003849535164486073,
+          0.0000037383918394901346,
+          0.000002571866994100016,
+          0.0000011164560592936409,
+          5.471477709700276e-7,
+          0.0000012048213645461915,
+          8.927279634264595e-7,
+          0.000001280648342167554,
+          0.0000015178401069160315,
+          0.0000018255086390162345
+        ],
+        "modal_class": 6,
+        "raw_modal_offset_seconds": -0.8,
+        "raw_near_zero_mass": 0.000036771062029015995,
+        "assessable": true,
+        "reported_offset_seconds": -0.8,
+        "abstention": null
+      },
+      "wall_seconds": 0.7620458679739386,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "e1b822ac460280a80703aa35721e061f8af1211cc707071e3d73aff76f7a1af5"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "0f7060d759f7f8289780a0850d3172c407156f36025a77016b4da4efe2d26b11"
+      },
+      "waveform_sha256": "c48c92d01c6561ba65d20331c78b346fe6f47e1eb70d1aeaabd582ad8b45297d"
+    },
+    {
+      "case_id": "A05",
+      "condition": "delay750",
+      "repeat": 1,
+      "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "prediction": {
+        "logits": [
+          1.9658203125,
+          1.8369140625,
+          3.771484375,
+          4.9453125,
+          6.11328125,
+          9.328125,
+          14.2890625,
+          10.0859375,
+          4.890625,
+          3.875,
+          1.76953125,
+          1.84375,
+          1.814453125,
+          1.4404296875,
+          0.60595703125,
+          -0.10723876953125,
+          0.68212890625,
+          0.38232421875,
+          0.7431640625,
+          0.9130859375,
+          1.09765625
+        ],
+        "probabilities": [
+          0.00000434933394381767,
+          0.000003823309722564789,
+          0.000026461392383703633,
+          0.00008558541683126382,
+          0.0002751960229633173,
+          0.006852216150224206,
+          0.9779999564754577,
+          0.01461991478333215,
+          0.00008103064403229711,
+          0.00002934735445855995,
+          0.0000035741724059699706,
+          0.000003849535164486073,
+          0.0000037383918394901346,
+          0.000002571866994100016,
+          0.0000011164560592936409,
+          5.471477709700276e-7,
+          0.0000012048213645461915,
+          8.927279634264595e-7,
+          0.000001280648342167554,
+          0.0000015178401069160315,
+          0.0000018255086390162345
+        ],
+        "modal_class": 6,
+        "raw_modal_offset_seconds": -0.8,
+        "raw_near_zero_mass": 0.000036771062029015995,
+        "assessable": true,
+        "reported_offset_seconds": -0.8,
+        "abstention": null
+      },
+      "wall_seconds": 0.7585805739508942,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "e1b822ac460280a80703aa35721e061f8af1211cc707071e3d73aff76f7a1af5"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "0f7060d759f7f8289780a0850d3172c407156f36025a77016b4da4efe2d26b11"
+      },
+      "waveform_sha256": "c48c92d01c6561ba65d20331c78b346fe6f47e1eb70d1aeaabd582ad8b45297d"
+    },
+    {
+      "case_id": "A05",
+      "condition": "muted",
+      "repeat": 0,
+      "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "prediction": {
+        "logits": [
+          5.8125,
+          5.90234375,
+          5.69921875,
+          5.71484375,
+          5.7890625,
+          5.8515625,
+          5.796875,
+          5.9140625,
+          5.9375,
+          5.80859375,
+          5.65234375,
+          5.73828125,
+          5.92578125,
+          5.86328125,
+          5.87109375,
+          5.7890625,
+          5.87109375,
+          5.8203125,
+          6.07421875,
+          6.13671875,
+          6.1015625
+        ],
+        "probabilities": [
+          0.04503216201835761,
+          0.0492653353100764,
+          0.040209194806653914,
+          0.040842397488974384,
+          0.04398899310875759,
+          0.04682603941764835,
+          0.044334003057723344,
+          0.049846059493155945,
+          0.05102812472935661,
+          0.044856598256686225,
+          0.038367881717762835,
+          0.04181094703382727,
+          0.050433629069140874,
+          0.04737800995264038,
+          0.04774960029014699,
+          0.04398899310875759,
+          0.04774960029014699,
+          0.0453853536424841,
+          0.05850403323239222,
+          0.062277219200227815,
+          0.060125824775082534
+        ],
+        "modal_class": 19,
+        "raw_modal_offset_seconds": 1.8,
+        "raw_near_zero_mass": 0.12503542700827633,
+        "assessable": false,
+        "reported_offset_seconds": null,
+        "abstention": "exact silent model waveform"
+      },
+      "wall_seconds": 0.7428967099986039,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "e1b822ac460280a80703aa35721e061f8af1211cc707071e3d73aff76f7a1af5"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "1730f8902e19ff8c72a6c3aab16d3305758be7eb8d1acc83699733f22a0e81d6"
+      },
+      "waveform_sha256": "869e7fcb5698f872eef0372f4738d1331af917ad6e19731e2464acfcfd8b0755"
+    },
+    {
+      "case_id": "A05",
+      "condition": "muted",
+      "repeat": 1,
+      "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "prediction": {
+        "logits": [
+          5.8125,
+          5.90234375,
+          5.69921875,
+          5.71484375,
+          5.7890625,
+          5.8515625,
+          5.796875,
+          5.9140625,
+          5.9375,
+          5.80859375,
+          5.65234375,
+          5.73828125,
+          5.92578125,
+          5.86328125,
+          5.87109375,
+          5.7890625,
+          5.87109375,
+          5.8203125,
+          6.07421875,
+          6.13671875,
+          6.1015625
+        ],
+        "probabilities": [
+          0.04503216201835761,
+          0.0492653353100764,
+          0.040209194806653914,
+          0.040842397488974384,
+          0.04398899310875759,
+          0.04682603941764835,
+          0.044334003057723344,
+          0.049846059493155945,
+          0.05102812472935661,
+          0.044856598256686225,
+          0.038367881717762835,
+          0.04181094703382727,
+          0.050433629069140874,
+          0.04737800995264038,
+          0.04774960029014699,
+          0.04398899310875759,
+          0.04774960029014699,
+          0.0453853536424841,
+          0.05850403323239222,
+          0.062277219200227815,
+          0.060125824775082534
+        ],
+        "modal_class": 19,
+        "raw_modal_offset_seconds": 1.8,
+        "raw_near_zero_mass": 0.12503542700827633,
+        "assessable": false,
+        "reported_offset_seconds": null,
+        "abstention": "exact silent model waveform"
+      },
+      "wall_seconds": 0.7628169379895553,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "e1b822ac460280a80703aa35721e061f8af1211cc707071e3d73aff76f7a1af5"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "1730f8902e19ff8c72a6c3aab16d3305758be7eb8d1acc83699733f22a0e81d6"
+      },
+      "waveform_sha256": "869e7fcb5698f872eef0372f4738d1331af917ad6e19731e2464acfcfd8b0755"
+    },
+    {
+      "case_id": "A05",
+      "condition": "original",
+      "repeat": 0,
+      "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "prediction": {
+        "logits": [
+          -1.09375,
+          -0.207763671875,
+          -1.0263671875,
+          -0.339111328125,
+          0.6240234375,
+          1.2880859375,
+          3.04296875,
+          5.640625,
+          6.78125,
+          9.953125,
+          13.4765625,
+          5.8203125,
+          3.62890625,
+          3.390625,
+          2.365234375,
+          1.9130859375,
+          2.271484375,
+          1.2919921875,
+          -0.52587890625,
+          1.0986328125,
+          2.103515625
+        ],
+        "probabilities": [
+          4.556163032971065e-7,
+          0.0000011050405866662154,
+          4.873749904300197e-7,
+          9.690242981261814e-7,
+          0.0000025387432463561713,
+          0.00000493193632031489,
+          0.00002852025356214475,
+          0.000383090301746379,
+          0.0011985835171588405,
+          0.028588812135008048,
+          0.9691825237954975,
+          0.0004584990575488729,
+          0.000051241614554606687,
+          0.000040377420741238965,
+          0.000014481617857186401,
+          0.000009214070092741443,
+          0.000013185663108514343,
+          0.000004951239373296379,
+          8.039379655427052e-7,
+          0.000004080740833147561,
+          0.000011146899206800086
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9982298349880544,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 18.421592028986197,
+      "peak_allocated_bytes": 2167111680,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "e1b822ac460280a80703aa35721e061f8af1211cc707071e3d73aff76f7a1af5"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "daccbbd29152a87bb2246bd06039e44382beb24de719ef0f64247f028ad9b2fe"
+      },
+      "waveform_sha256": "8faf1ba77e1433ea11e690157ddf7067c188fe711058475fcd8a127565367c24"
+    },
+    {
+      "case_id": "A05",
+      "condition": "original",
+      "repeat": 1,
+      "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "prediction": {
+        "logits": [
+          -1.09375,
+          -0.207763671875,
+          -1.0263671875,
+          -0.339111328125,
+          0.6240234375,
+          1.2880859375,
+          3.04296875,
+          5.640625,
+          6.78125,
+          9.953125,
+          13.4765625,
+          5.8203125,
+          3.62890625,
+          3.390625,
+          2.365234375,
+          1.9130859375,
+          2.271484375,
+          1.2919921875,
+          -0.52587890625,
+          1.0986328125,
+          2.103515625
+        ],
+        "probabilities": [
+          4.556163032971065e-7,
+          0.0000011050405866662154,
+          4.873749904300197e-7,
+          9.690242981261814e-7,
+          0.0000025387432463561713,
+          0.00000493193632031489,
+          0.00002852025356214475,
+          0.000383090301746379,
+          0.0011985835171588405,
+          0.028588812135008048,
+          0.9691825237954975,
+          0.0004584990575488729,
+          0.000051241614554606687,
+          0.000040377420741238965,
+          0.000014481617857186401,
+          0.000009214070092741443,
+          0.000013185663108514343,
+          0.000004951239373296379,
+          8.039379655427052e-7,
+          0.000004080740833147561,
+          0.000011146899206800086
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9982298349880544,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7608898739563301,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "e1b822ac460280a80703aa35721e061f8af1211cc707071e3d73aff76f7a1af5"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "daccbbd29152a87bb2246bd06039e44382beb24de719ef0f64247f028ad9b2fe"
+      },
+      "waveform_sha256": "8faf1ba77e1433ea11e690157ddf7067c188fe711058475fcd8a127565367c24"
+    },
+    {
+      "case_id": "A09",
+      "condition": "delay750",
+      "repeat": 0,
+      "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "prediction": {
+        "logits": [
+          0.97607421875,
+          2.83203125,
+          2.38671875,
+          3.556640625,
+          4.30078125,
+          7.015625,
+          14.2734375,
+          10.921875,
+          5.8203125,
+          3.513671875,
+          1.1806640625,
+          0.91357421875,
+          0.446533203125,
+          0.51171875,
+          0.14404296875,
+          -0.1197509765625,
+          1.05078125,
+          1.9892578125,
+          1.9892578125,
+          1.6962890625,
+          0.6962890625
+        ],
+        "probabilities": [
+          0.0000016204490890405291,
+          0.000010367338728528886,
+          0.0000066415665212244375,
+          0.00002139740670198248,
+          0.00004503366663690638,
+          0.0006801096992151408,
+          0.9651768304603016,
+          0.0338097366830779,
+          0.00020580757031408317,
+          0.00002049746013334638,
+          0.000001988326181614485,
+          0.0000015222710418688704,
+          9.542422687131851e-7,
+          0.0000010185172136607606,
+          7.051618530563642e-7,
+          5.416572438384929e-7,
+          0.0000017461447496038933,
+          0.000004463293382212491,
+          0.000004463293382212491,
+          0.00000332981973879887,
+          0.0000012249722247109664
+        ],
+        "modal_class": 6,
+        "raw_modal_offset_seconds": -0.8,
+        "raw_near_zero_mass": 0.000024008057356829736,
+        "assessable": true,
+        "reported_offset_seconds": -0.8,
+        "abstention": null
+      },
+      "wall_seconds": 0.8076095400028862,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "35701d0e29cd472732815725561fb526e4dcc3ad6f8c670ac2644c3277aa711f"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "193f22577b231b5663af07a8f50f1db8c83e235c356baf6827e70818c2108b38"
+      },
+      "waveform_sha256": "2a3984ecac0ab6f0ed096597fc36e5519e2119c2d27e4ed656c665127aa9b50e"
+    },
+    {
+      "case_id": "A09",
+      "condition": "muted",
+      "repeat": 0,
+      "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "prediction": {
+        "logits": [
+          6.02734375,
+          5.9609375,
+          5.8515625,
+          5.91015625,
+          5.8671875,
+          5.69921875,
+          5.734375,
+          5.79296875,
+          5.87890625,
+          5.7890625,
+          5.6875,
+          5.73046875,
+          5.99609375,
+          5.89453125,
+          5.75,
+          5.8125,
+          5.7421875,
+          5.6484375,
+          5.80078125,
+          5.83984375,
+          5.83984375
+        ],
+        "probabilities": [
+          0.058208653288208456,
+          0.05446878447290236,
+          0.04882550284396831,
+          0.05177184794757389,
+          0.04959439263435352,
+          0.04192612016309092,
+          0.0434263011838796,
+          0.04604683476588307,
+          0.05017899564104452,
+          0.045867315170060347,
+          0.04143766606804357,
+          0.043256998080284256,
+          0.05641776130104237,
+          0.05096919984157226,
+          0.04411016591992098,
+          0.046955027203703294,
+          0.043766897885381253,
+          0.03985021401010154,
+          0.04640798456700114,
+          0.04825666850599212,
+          0.04825666850599212
+        ],
+        "modal_class": 0,
+        "raw_modal_offset_seconds": -2,
+        "raw_near_zero_mass": 0.13056197931838817,
+        "assessable": false,
+        "reported_offset_seconds": null,
+        "abstention": "exact silent model waveform"
+      },
+      "wall_seconds": 0.801048138004262,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "35701d0e29cd472732815725561fb526e4dcc3ad6f8c670ac2644c3277aa711f"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "1730f8902e19ff8c72a6c3aab16d3305758be7eb8d1acc83699733f22a0e81d6"
+      },
+      "waveform_sha256": "869e7fcb5698f872eef0372f4738d1331af917ad6e19731e2464acfcfd8b0755"
+    },
+    {
+      "case_id": "A09",
+      "condition": "original",
+      "repeat": 0,
+      "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "prediction": {
+        "logits": [
+          1.4892578125,
+          0.77001953125,
+          0.465576171875,
+          0.72021484375,
+          0.87548828125,
+          1.78515625,
+          1.55859375,
+          3.185546875,
+          4.14453125,
+          8.4921875,
+          14.25,
+          9.25,
+          5.49609375,
+          3.4921875,
+          1.2822265625,
+          1.671875,
+          0.99609375,
+          0.1077880859375,
+          0.1942138671875,
+          0.9658203125,
+          2.556640625
+        ],
+        "probabilities": [
+          0.00000284241454370056,
+          0.0000013846059702656743,
+          0.0000010211937047286102,
+          0.00000131733520716418,
+          0.0000015386176003249238,
+          0.000003821153421748249,
+          0.000003046489121584937,
+          0.00001550159535734449,
+          0.00004044436475313029,
+          0.0031262315167802715,
+          0.9899364913573214,
+          0.00667013961122626,
+          0.00015625508309712215,
+          0.00002106438226693604,
+          0.000002310866661727467,
+          0.000003411905967529454,
+          0.0000017358371772086937,
+          7.14040322495689e-7,
+          7.784970610158729e-7,
+          0.0000016840748834004475,
+          0.000008265057554651579
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.999732862485328,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7397708930075169,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "35701d0e29cd472732815725561fb526e4dcc3ad6f8c670ac2644c3277aa711f"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "5eb671e9e9eef030edb564e4c2405700c5db33e778f0d0f72daea4283594dcae"
+      },
+      "waveform_sha256": "85a05f8a7a1a659b7e93b604d385b8cd9b09e66520a5f7185b192217c4a6b36f"
+    },
+    {
+      "case_id": "A01",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "0a16600f44c2819c0a64b6d3101484f77895597f2e38ebb32a99abbab773a50a",
+      "prediction": {
+        "logits": [
+          0.4619140625,
+          -0.34423828125,
+          -1.07421875,
+          -0.7666015625,
+          -0.332763671875,
+          2.458984375,
+          1.595703125,
+          -0.4013671875,
+          1.048828125,
+          4.8828125,
+          13.6484375,
+          9.890625,
+          4.09375,
+          1.765625,
+          0.38671875,
+          2.361328125,
+          2.34765625,
+          0.3466796875,
+          -0.333984375,
+          0.65087890625,
+          1.6416015625
+        ],
+        "probabilities": [
+          0.0000018324021004894722,
+          8.183013477687849e-7,
+          3.9435447825339337e-7,
+          5.363931512399842e-7,
+          8.277451142321941e-7,
+          0.000013500112811743275,
+          0.000005694021654203892,
+          7.728629667686782e-7,
+          0.0000032954469109912208,
+          0.0001524026706173496,
+          0.9769113274105563,
+          0.022795961380873343,
+          0.00006923203346345921,
+          0.000006748624233387149,
+          0.0000016996671144098948,
+          0.000012244070657288065,
+          0.00001207781038835265,
+          0.0000016329584249151927,
+          8.267352996518493e-7,
+          0.000002213538957710049,
+          0.0000059614588781371835
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.999859691462047,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 2.6748007680289447,
+      "peak_allocated_bytes": 2167111680,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "79e6e048587532a23ce5055591441b844cda0d932a381f6f25ab33cbce996973"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "fc68d5703e80339ab5eca4627958ed6e4fa2399daa5bae8150bafa15f8a375c8"
+      },
+      "waveform_sha256": "ca8bfa40f8de81671ad002665df86b1792b30802ecb0a9a7122dbd688fdc9f14"
+    },
+    {
+      "case_id": "A02",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "0f193dc17fac4b936db03095f41904bf15d1dc5d284db6fa6a0cf72fc1fe8fc6",
+      "prediction": {
+        "logits": [
+          -0.56689453125,
+          -0.06488037109375,
+          -0.373291015625,
+          -1.1748046875,
+          1.345703125,
+          1.2822265625,
+          0.7958984375,
+          1.86328125,
+          2.931640625,
+          7.578125,
+          14.421875,
+          9.0859375,
+          5.12890625,
+          4.3203125,
+          1.0517578125,
+          1.2802734375,
+          1.1865234375,
+          -0.1922607421875,
+          0.09234619140625,
+          0.21875,
+          0.380615234375
+        ],
+        "probabilities": [
+          3.0749895919015186e-7,
+          5.080022428610897e-7,
+          3.7318535186845964e-7,
+          1.674293625575181e-7,
+          0.000002081968998352341,
+          0.000001953919816599044,
+          0.0000012014262494678888,
+          0.000003493458447687765,
+          0.000010168061474633486,
+          0.0010596945177414768,
+          0.9939935083289856,
+          0.004786469942668478,
+          0.00009151630972531607,
+          0.00004076905977025088,
+          0.0000015517274081580134,
+          0.0000019501072913384185,
+          0.0000017755928945663828,
+          4.4724452979341226e-7,
+          5.944950710321002e-7,
+          6.745975114833227e-7,
+          7.931254993910902e-7
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9998396727893956,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.8028639080002904,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "d364d1b080ceb1ef9f61d732975ae1a5dd9617c3f679222fc411f0aef496bb93"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "bff311feac51365e90b29580a1ca90fdd7da2298d646895f0abcb0ea3061cb3f"
+      },
+      "waveform_sha256": "9c93dc383b8b170fbad8c8da33949293f7e0b42b91ceb19ec91dc14e4767d75d"
+    },
+    {
+      "case_id": "A03",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "17abaf2cd5ad849726f6719ecf617397ddac1839399ee069290656a51aea3880",
+      "prediction": {
+        "logits": [
+          -0.23779296875,
+          -0.2076416015625,
+          -0.61328125,
+          -1.0859375,
+          0.91845703125,
+          0.77783203125,
+          0.86376953125,
+          2.017578125,
+          3.341796875,
+          7.19921875,
+          14.265625,
+          9.125,
+          5.23828125,
+          5.33203125,
+          1.2705078125,
+          0.87109375,
+          1.1279296875,
+          -0.377685546875,
+          -0.2880859375,
+          0.2244873046875,
+          0.162353515625
+        ],
+        "probabilities": [
+          4.991346091955684e-7,
+          5.144133805124819e-7,
+          3.428824016445369e-7,
+          2.1373379370753365e-7,
+          0.0000015862465074806831,
+          0.0000013781548486435681,
+          0.0000015018280082523226,
+          0.0000047611614093764015,
+          0.000017898383151733564,
+          0.0008473656122361159,
+          0.993052197444596,
+          0.005813357157894957,
+          0.0001192467358477859,
+          0.00013096691801183579,
+          0.000002255611969592674,
+          0.0000015128681058013368,
+          0.000001955885817794847,
+          4.3397339880911266e-7,
+          4.7465244834715e-7,
+          7.92471141611324e-7,
+          7.447304208260103e-7
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9997129202147271,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7514407869894058,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "1bebe2c8e21b45db5c2463055aafa35ea0eb6b50d00dd6f581e5f53fd1a13d5d"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "5bdc10d049d4ce4ae3f450afd0ecaa124e027fa5f8e8df16f01ef51d62ab1082"
+      },
+      "waveform_sha256": "35f560f4e504511142b9d778834f452dbc3d5a478aeb5bf32d4aef1e4c88dbf8"
+    },
+    {
+      "case_id": "A04",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "26589d051b26f1255fb84e50de5a5cb3d605ec64e8181e9c9b177ad5cad43539",
+      "prediction": {
+        "logits": [
+          -0.3544921875,
+          -0.5068359375,
+          -1.1533203125,
+          -0.53369140625,
+          0.77099609375,
+          2.568359375,
+          1.306640625,
+          4.2890625,
+          5.04296875,
+          7.1171875,
+          14.203125,
+          7.33984375,
+          2.998046875,
+          2.623046875,
+          0.544921875,
+          1.03125,
+          1.9384765625,
+          -1.0107421875,
+          -1.6552734375,
+          0.451171875,
+          0.449462890625
+        ],
+        "probabilities": [
+          4.7511950209328334e-7,
+          4.079818163931463e-7,
+          2.1373527803335338e-7,
+          3.9717108680931766e-7,
+          0.0000014641858555809222,
+          0.000008834483463513849,
+          0.0000025016334268614548,
+          0.0000493711262410009,
+          0.00010492774960040938,
+          0.0008350492993660989,
+          0.9979198727702477,
+          0.0010433030973443272,
+          0.000013576632810205768,
+          0.000009331074172536173,
+          0.000001167920876355422,
+          0.0000018994289042222013,
+          0.000004705724878622318,
+          2.464887505548742e-7,
+          1.2938404902744435e-7,
+          0.0000010634040591936614,
+          0.0000010615882702915559
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9997982251669582,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7773070930270478,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "a8cfd2efa664e365d767a407ad01b07d134d1921e4b2f734058b3cf1e74d483a"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "945fb1a2a5cfa51426c21be2bbf888300ec6578413ab67a0962c5cb036eb56ff"
+      },
+      "waveform_sha256": "e012d9c983652ce21ddbbe944f131b21ebbec838c0449c18e0613e6ae5a6ee97"
+    },
+    {
+      "case_id": "A05",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "prediction": {
+        "logits": [
+          -1.09375,
+          -0.207763671875,
+          -1.0263671875,
+          -0.339111328125,
+          0.6240234375,
+          1.2880859375,
+          3.04296875,
+          5.640625,
+          6.78125,
+          9.953125,
+          13.4765625,
+          5.8203125,
+          3.62890625,
+          3.390625,
+          2.365234375,
+          1.9130859375,
+          2.271484375,
+          1.2919921875,
+          -0.52587890625,
+          1.0986328125,
+          2.103515625
+        ],
+        "probabilities": [
+          4.556163032971065e-7,
+          0.0000011050405866662154,
+          4.873749904300197e-7,
+          9.690242981261814e-7,
+          0.0000025387432463561713,
+          0.00000493193632031489,
+          0.00002852025356214475,
+          0.000383090301746379,
+          0.0011985835171588405,
+          0.028588812135008048,
+          0.9691825237954975,
+          0.0004584990575488729,
+          0.000051241614554606687,
+          0.000040377420741238965,
+          0.000014481617857186401,
+          0.000009214070092741443,
+          0.000013185663108514343,
+          0.000004951239373296379,
+          8.039379655427052e-7,
+          0.000004080740833147561,
+          0.000011146899206800086
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9982298349880544,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.755430040997453,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "e1b822ac460280a80703aa35721e061f8af1211cc707071e3d73aff76f7a1af5"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "daccbbd29152a87bb2246bd06039e44382beb24de719ef0f64247f028ad9b2fe"
+      },
+      "waveform_sha256": "8faf1ba77e1433ea11e690157ddf7067c188fe711058475fcd8a127565367c24"
+    },
+    {
+      "case_id": "A06",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "7909a3b21a77d8a32424391dc11a22eb94001afef69a208ceb72f6504deee654",
+      "prediction": {
+        "logits": [
+          -1.1884765625,
+          2.833984375,
+          -0.11761474609375,
+          -1.455078125,
+          0.345703125,
+          1.84375,
+          1.2353515625,
+          3.427734375,
+          3.70703125,
+          8.234375,
+          13.4296875,
+          6.6640625,
+          5.3984375,
+          2.41796875,
+          0.2015380859375,
+          1.326171875,
+          -0.1639404296875,
+          -1.291015625,
+          -0.1318359375,
+          2.0546875,
+          1.513671875
+        ],
+        "probabilities": [
+          4.4492849851894003e-7,
+          0.000024844073925705426,
+          0.0000012982537979742945,
+          3.408055326996462e-7,
+          0.0000020633647009019125,
+          0.000009229315406511782,
+          0.000005022794427989511,
+          0.00004498680615789329,
+          0.00005948154671998454,
+          0.005502786477995664,
+          0.9928375905182646,
+          0.0011444705133627575,
+          0.0003228127311256357,
+          0.00001638888932884714,
+          0.0000017863473728635885,
+          0.000005500322628738063,
+          0.0000012394831095823948,
+          4.0156705444613254e-7,
+          0.0000012799217430093563,
+          0.000011396683309293433,
+          0.000006634655536358578
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.999484847509623,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7540092659764923,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "53366836ebb9871d94b45a0866bad77b674ef4cd5a89957a28efcc3edc0c7a39"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "bc138a392ec139c131621a16fed3314eb2e414bfd5a568f065845511aea7546c"
+      },
+      "waveform_sha256": "34ba0b0ca5bff184f1d40026f1da0d77eb0a45da289184a2ed0a68b5a88f2fd3"
+    },
+    {
+      "case_id": "A07",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "7b1acc15d6a42d5c0f39afd4dfc47a10523c78769f4f9b51d1c05df5f9612bc0",
+      "prediction": {
+        "logits": [
+          -1.5283203125,
+          -1.248046875,
+          -1.1845703125,
+          -1.486328125,
+          1.728515625,
+          2.109375,
+          0.61767578125,
+          3.09375,
+          2.640625,
+          6.57421875,
+          13.703125,
+          6.75,
+          3.5859375,
+          3.185546875,
+          -0.576171875,
+          2.072265625,
+          2.578125,
+          -0.59765625,
+          0.01053619384765625,
+          -0.375244140625,
+          -0.2449951171875
+        ],
+        "probabilities": [
+          2.4223562096813227e-7,
+          3.205968229226654e-7,
+          3.4160697927565655e-7,
+          2.526242180300149e-7,
+          0.000006290191726185557,
+          0.00000920595839784252,
+          0.0000020712487942216566,
+          0.000024636422228531804,
+          0.000015659862753162627,
+          0.0008000663617046412,
+          0.9980921905804658,
+          0.0009538209079965879,
+          0.00004030249696080369,
+          0.000027005020721310003,
+          6.276981074980501e-7,
+          0.000008870592136941171,
+          0.00001471107963218717,
+          6.143562400011952e-7,
+          0.0000011286385916167293,
+          7.673837979801516e-7,
+          8.741361033190274e-7
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9998460778501671,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7822356480173767,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "6c4af0d68b1ab243ee80f28a874ddf83f5e7783809bebf82f6705fd37d1ace94"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "079217da2e2089a5f14fedf2e54dbf976330a961086709ddaaf94ab1a71dcd68"
+      },
+      "waveform_sha256": "8e65506375c0d231dc3df371cd65ecb8ad06f8ec27d3c81073971d59eeea710e"
+    },
+    {
+      "case_id": "A08",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "932acaacee0ea454f7199838b260cddafb90309e03e59d2f85069901fc8e03ca",
+      "prediction": {
+        "logits": [
+          -1.1767578125,
+          -0.65576171875,
+          -1.0625,
+          -1.3056640625,
+          1.3271484375,
+          1.1240234375,
+          0.439453125,
+          3.580078125,
+          3.2734375,
+          8.9921875,
+          13.59375,
+          6.70703125,
+          5.87109375,
+          3.705078125,
+          -0.44580078125,
+          1.5703125,
+          0.74072265625,
+          -0.347412109375,
+          0.734375,
+          0.1807861328125,
+          -0.12322998046875
+        ],
+        "probabilities": [
+          3.80379362170143e-7,
+          6.404462314125381e-7,
+          4.264209008824733e-7,
+          3.343749025561298e-7,
+          0.000004652106125382677,
+          0.0000037969383599928636,
+          0.0000019148221279605927,
+          0.000044267454017111174,
+          0.000032577084434621116,
+          0.009920505034780484,
+          0.9884779449866323,
+          0.0010094923500322105,
+          0.00043758254388877766,
+          0.00005016159704069639,
+          7.900736014227858e-7,
+          0.0000059327278148620935,
+          0.000002588023005762095,
+          8.717605428326353e-7,
+          0.0000025716471544774265,
+          0.0000014783960388607546,
+          0.0000010908330051502981
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.999407942371445,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7450068410253152,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "0ff93a71d95bf4baaecc0dfb1a32da7e8be51e9e73a781cb5f71231c3bc0248c"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "f54eadfcba521ac3270548891b914059f4143bd2cf767a0459d2aa161cdf15a3"
+      },
+      "waveform_sha256": "e1aeea4da523a51a9785439b983905e20327db911d58046e693614d76cd2de5b"
+    },
+    {
+      "case_id": "A09",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "prediction": {
+        "logits": [
+          1.4892578125,
+          0.77001953125,
+          0.465576171875,
+          0.72021484375,
+          0.87548828125,
+          1.78515625,
+          1.55859375,
+          3.185546875,
+          4.14453125,
+          8.4921875,
+          14.25,
+          9.25,
+          5.49609375,
+          3.4921875,
+          1.2822265625,
+          1.671875,
+          0.99609375,
+          0.1077880859375,
+          0.1942138671875,
+          0.9658203125,
+          2.556640625
+        ],
+        "probabilities": [
+          0.00000284241454370056,
+          0.0000013846059702656743,
+          0.0000010211937047286102,
+          0.00000131733520716418,
+          0.0000015386176003249238,
+          0.000003821153421748249,
+          0.000003046489121584937,
+          0.00001550159535734449,
+          0.00004044436475313029,
+          0.0031262315167802715,
+          0.9899364913573214,
+          0.00667013961122626,
+          0.00015625508309712215,
+          0.00002106438226693604,
+          0.000002310866661727467,
+          0.000003411905967529454,
+          0.0000017358371772086937,
+          7.14040322495689e-7,
+          7.784970610158729e-7,
+          0.0000016840748834004475,
+          0.000008265057554651579
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.999732862485328,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7227535049896687,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "35701d0e29cd472732815725561fb526e4dcc3ad6f8c670ac2644c3277aa711f"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "5eb671e9e9eef030edb564e4c2405700c5db33e778f0d0f72daea4283594dcae"
+      },
+      "waveform_sha256": "85a05f8a7a1a659b7e93b604d385b8cd9b09e66520a5f7185b192217c4a6b36f"
+    },
+    {
+      "case_id": "A10",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "d51549ac49b5581d5b3a72ecea61dc9dd984cbce3cdbd4f9c26452c6b510c3b6",
+      "prediction": {
+        "logits": [
+          0.08160400390625,
+          -0.1573486328125,
+          -0.5595703125,
+          -0.59716796875,
+          -0.2113037109375,
+          2.541015625,
+          1.7177734375,
+          3.8359375,
+          4.7734375,
+          8.046875,
+          14.140625,
+          8.3125,
+          5.6328125,
+          3.9296875,
+          0.43310546875,
+          2.001953125,
+          1.5126953125,
+          -0.0027332305908203125,
+          0.498046875,
+          0.07257080078125,
+          1.7431640625
+        ],
+        "probabilities": [
+          7.795132849858557e-7,
+          6.138294338927172e-7,
+          4.105490519383739e-7,
+          3.9539993986676463e-7,
+          5.815878390151832e-7,
+          0.00000911868927054346,
+          0.000004003159346236773,
+          0.000033289696957029876,
+          0.00008500821921158099,
+          0.002244381920410783,
+          0.9944404025406898,
+          0.0029272258610988323,
+          0.000200762566459088,
+          0.00003656157949325656,
+          0.000001107844147324991,
+          0.00000531888435376222,
+          0.0000032609082501702545,
+          7.164672205491411e-7,
+          0.0000011821766092389974,
+          7.725034912550672e-7,
+          0.0000041061034409918435
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9996120103221994,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.8346009019878693,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "dc91c472e69128f857be21e068df41d1c85e48d3942242262caf4e15e9fc7acb"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "988a6bdcd680f42a0a5198f053cfe6c9a23c89f91360d5dbada25c7dcfbaae1a"
+      },
+      "waveform_sha256": "5704ff2615359029be877a617d3eb2cb220ccc5b45fad217f90e0017101b16e5"
+    },
+    {
+      "case_id": "A11",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "e1ce095ceeb89393224f0bceff8b6d50a3bc9adf5fc98941869ee6dc9491bc76",
+      "prediction": {
+        "logits": [
+          -0.75390625,
+          -0.82861328125,
+          -1.0205078125,
+          -0.794921875,
+          1.0400390625,
+          2.005859375,
+          3.400390625,
+          6.5859375,
+          4.6015625,
+          8.71875,
+          13.8828125,
+          6.82421875,
+          4.31640625,
+          1.806640625,
+          -0.05731201171875,
+          1.1728515625,
+          0.58642578125,
+          -0.2880859375,
+          -0.9638671875,
+          0.012969970703125,
+          0.208740234375
+        ],
+        "probabilities": [
+          4.3663689777540593e-7,
+          4.052057330310926e-7,
+          3.3445434724459127e-7,
+          4.190902653583189e-7,
+          0.0000026255541688032347,
+          0.000006897177694793382,
+          0.000027816894395636477,
+          0.0006726266515506941,
+          0.00009246363417728397,
+          0.005676005022738378,
+          0.9925825115864427,
+          0.0008536076595579694,
+          0.00006952310707329524,
+          0.000005651344877151572,
+          8.762892149070466e-7,
+          0.0000029984769777889337,
+          0.0000016680890744141014,
+          6.957025961764898e-7,
+          3.539448162453887e-7,
+          9.400924042938095e-7,
+          0.0000011433849960776692
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9991121242687391,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7826222139992751,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "15f7133c679ea49f6c70fe38bb3e345408a89924964c36d629e09a5e5f44dd6e"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "0371a3966dc128bc4da10972f0befca75b29d548e622a44b996b7f78a218536c"
+      },
+      "waveform_sha256": "16b8daf1e2cd2e22e3ade466fa2a47e28c5c75ccc931fc9a339c84261fe8a727"
+    },
+    {
+      "case_id": "A12",
+      "condition": null,
+      "repeat": null,
+      "source_sha256": "e7da469f7661037604d1cb355f2054aaebbb2ddc4396bd9075f85a999898acd5",
+      "prediction": {
+        "logits": [
+          1.59765625,
+          0.84228515625,
+          0.4658203125,
+          0.6484375,
+          0.1990966796875,
+          1.4970703125,
+          1.7978515625,
+          1.9462890625,
+          3.81640625,
+          8.0234375,
+          14.171875,
+          9.671875,
+          5.71484375,
+          3.724609375,
+          1.49609375,
+          2.17578125,
+          1.037109375,
+          0.576171875,
+          0.68310546875,
+          1.771484375,
+          2.765625
+        ],
+        "probabilities": [
+          0.0000034137595101004866,
+          0.000001603907895237853,
+          0.0000011007351140754008,
+          0.0000013212726879358089,
+          8.430361910128817e-7,
+          0.0000030870879702701568,
+          0.000004170389731037895,
+          0.000004837736722895409,
+          0.000031392348335134175,
+          0.0021082119067318958,
+          0.9866127882365006,
+          0.010960278049104875,
+          0.00020955823657763602,
+          0.00002863893926654968,
+          0.0000030840747074833823,
+          0.000006085684316104287,
+          0.0000019489042754591046,
+          0.0000012291585193176064,
+          0.0000013678817814180022,
+          0.000004061865312267482,
+          0.000010976788748777585
+        ],
+        "modal_class": 10,
+        "raw_modal_offset_seconds": 0,
+        "raw_near_zero_mass": 0.9996812781923373,
+        "assessable": true,
+        "reported_offset_seconds": 0,
+        "abstention": null
+      },
+      "wall_seconds": 0.7931136509869248,
+      "peak_allocated_bytes": 2168985088,
+      "max_timestamp_error_seconds": 0.020000000000000018,
+      "video_tensor": {
+        "shape": [
+          1,
+          14,
+          16,
+          3,
+          224,
+          224
+        ],
+        "dtype": "torch.float16",
+        "finite": true,
+        "sha256": "fa65acc84c132badf1b2c2bd7474eadb5276cea4cf74d8d131d2d5b0d0a8a923"
+      },
+      "audio_tensor": {
+        "shape": [
+          1,
+          14,
+          1,
+          128,
+          66
+        ],
+        "dtype": "torch.float32",
+        "finite": true,
+        "sha256": "bb6c45d756bd7e8410b5737021bc5516a78d67293fb1a4c7d63f1923c0b23803"
+      },
+      "waveform_sha256": "e6224e9f1e611bae20751485072cf844f7ca9fc8fa21d49f65e8274501576eb8"
+    }
+  ],
+  "schema_version": 1,
+  "checked_at_utc": "2026-09-09 07:54:36 UTC",
+  "status": "gross_delay_controls_pass_natural_merge_ranking_not_admitted",
+  "previous_goal_turn": "progress: rejected Qwen2.5 quality judge after failed frozen delay control",
+  "current_goal_turn": "progress: installed an isolated dedicated synchronization evaluator, verified nine controls and twelve rated cases, independently reconstructed all inputs, and found natural-clip ranking inadequacy",
+  "new_gpu_inferences": 21,
+  "new_human_labels": 0,
+  "heldout_clips_evaluated": 0,
+  "scope": "Two controlled sources followed by all twelve unique previously rated seed03 originals. Fourteen R1 entries kept separate; no independent-population claim.",
+  "tests": {
+    "passed": 91,
+    "seconds": 0.22,
+    "command": ".h3-study-artifacts/20260909/synchformer/venv/bin/python -m pytest -q tests/test_h3_synchformer.py tests/test_h3_synchformer_calibration.py tests/test_h3_local_av_evaluator.py tests/test_h3_local_av_routes.py tests/test_h3_local_av_control_audit.py",
+    "full_merger_suite_rerun": false
+  },
+  "safety": {
+    "all_install_download_inference_and_audit_sessions_terminal": true,
+    "comfy_queue_running": 0,
+    "comfy_queue_pending": 0,
+    "gpu_used_mib": 2745,
+    "gpu_free_mib": 29399,
+    "gpu_utilization_percent": 0,
+    "unrelated_processes_stopped": false,
+    "clip_uploads": false,
+    "comfy_conda_modified": false,
+    "qwen_environment_modified": false
+  },
+  "production": {
+    "optimizer_sha256": "44695e780a8bb8e67d206827ce4a561fd66b0a710fe89ed63026b521753c7461",
+    "experimental_merge_sha256": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4",
+    "changed_this_turn": false,
+    "installed_nodes_changed": false,
+    "defaults_changed": false,
+    "committed": false,
+    "pushed": false,
+    "version_bumped": false
+  },
+  "disposition": "Keep only as gross imposed-delay diagnostic on these tested sources. No natural synchronization ranking, full audiovisual reward, NP/CT bonus, held-out qualification or human-label substitution.",
+  "next_methodological_gate": "Investigate event-level coverage and contact/impact timing under a separately frozen diagnostic. Do not tune crops, thresholds or model variants against the completed calibration to make it appear successful. General audio-content and audiovisual preference validation remain open.",
+  "goal_complete": false,
+  "goal_status": "active"
+}

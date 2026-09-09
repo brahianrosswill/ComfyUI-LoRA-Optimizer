@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-08",
+  "purpose": "User-authorized acquisition of H3 character LoRAs for a later identity-retention merge benchmark",
+  "artifacts": ".h3-study-artifacts/20260908/identity-acquisition",
+  "download_service": "Existing LoRA Manager at http://192.168.1.12:8188",
+  "remote_directory": "/models/loras/MiniMax H3/character/h3-identity-study-20260908",
+  "local_directory": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908",
+  "local_comfyui_url": "http://127.0.0.1:8189",
+  "both_visible_in_live_local_lora_loader": true,
+  "credentials_read_or_exposed": false,
+  "new_renders": 0,
+  "production_code_changed": false,
+  "base_checkpoint": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+  "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+  "validation": {
+    "type": "Real ComfyUI CPU loader and optimizer key normalization against checkpoint header shapes",
+    "compatibility_record_sha256": "dd0c2ea0b87860fa8d8171396d9f274e8bbdc577a7ecb7d2b816edac4809d48e",
+    "all_weights_finite": true,
+    "all_keys_consumed": true,
+    "all_target_shapes_match": true,
+    "sha256_matches_civitai": true,
+    "gpu_used": false,
+    "int8_forward_tested": false,
+    "identity_or_merge_quality_tested": false
+  },
+  "adapters": [
+    {
+      "name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+      "model_id": 2886539,
+      "version_id": 3263006,
+      "file_id": 3146560,
+      "filename": "h3sully_000002500.safetensors",
+      "bytes": 155110336,
+      "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+      "source_url": "https://civitai.com/models/2886539?modelVersionId=3263006",
+      "format": "AI-Toolkit native H3 BF16",
+      "rank": 16,
+      "raw_tensors": 416,
+      "native_patch_targets": 208,
+      "normalized_patch_targets": 312,
+      "token_refiner": true,
+      "adaln_or_dora": false,
+      "example_url": "https://civitai.com/images/140718260",
+      "example_sha256": "34786badbe615b71fd23db8e9651d8d89b78ee1a32a37e58f5ccff65d8cc5269",
+      "example_duration_seconds": 6.583333,
+      "example_prompt_file": "sully-reference-prompts.json",
+      "example_settings": {
+        "identity_strength": 1.0,
+        "sampler": "res_multistep",
+        "scheduler": "simple",
+        "steps": 20,
+        "turbo_enabled": false,
+        "seed": 757358688076805
+      },
+      "trigger_evidence": "h3sully in safetensors tag frequency and original prompt; API trainedWords absent",
+      "caveats": [
+        "Original prompt explicitly requests green/purple fur and also contains ltxsully; preserve original and label any corrections separately.",
+        "Only three sparse reference frames viewed; no audio listening or motion-quality judgment."
+      ]
+    },
+    {
+      "name": "AI Girl: Fictional Women Series30",
+      "model_id": 2845077,
+      "version_id": 3212165,
+      "file_id": 3093888,
+      "filename": "MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+      "bytes": 298260352,
+      "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+      "source_url": "https://civitai.com/models/2845077?modelVersionId=3212165",
+      "format": "Musubi-style flattened H3 FP32",
+      "rank": 16,
+      "raw_tensors": 600,
+      "native_patch_targets": 200,
+      "normalized_patch_targets": 300,
+      "token_refiner": false,
+      "adaln_or_dora": false,
+      "training_mode_from_metadata": "experimental_image_only",
+      "training_base_from_metadata": "pruned_int8_convrot",
+      "trigger": "ai30",
+      "example_url": "https://civitai.com/images/139185912",
+      "example_sha256": "65bf11aaa71df4c999f0a44c24458653e384818623ebfbae18abdf6fc305ccf7",
+      "example_duration_seconds": 5.152,
+      "example_prompt_file": "series30-reference-prompts.json",
+      "example_settings": {
+        "identity_strength": 0.8,
+        "steps": 8,
+        "turbo": "minimax_h3_turbo_v4_step600.safetensors",
+        "turbo_strength": 0.7,
+        "sampler": "MiniMaxH3TurboSampler",
+        "scheduler": "simple",
+        "seed": 627569702109094
+      },
+      "caveats": [
+        "Creator identifies this as fictional; inspected reference shows a clothed adult woman in a cafe.",
+        "Embedded videoai metadata records enhancement, sharpening, interpolation toward 60 fps and resizing; not an unprocessed H3 reference.",
+        "Embedded graph also uses SageAttention and fp16 accumulation; no exact reproduction claim.",
+        "Only three sparse reference frames viewed; no audio listening or motion-quality judgment."
+      ]
+    }
+  ],
+  "next_step": "Qualify character-only local baselines across matched prompts/seeds before any merge ranking. Measure unintended identity loss separately from intended style/action effects; reserve held-out prompts and characters."
+}

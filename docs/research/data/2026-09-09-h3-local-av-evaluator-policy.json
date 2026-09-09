@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "stage": "prospective_calibration_only",
+  "created_at_utc": "2026-09-09 06:49:02 UTC",
+  "authorization": "User approved downloading and setting up a local audio/video evaluator in an isolated environment, testing already-rated clips first.",
+  "supersedes": null,
+  "prior_policy": "docs/research/data/2026-09-08-h3-av2-heldout-policy.json",
+  "prior_policy_sha256": "3bad46cae92671a9b751fee03a46e9a3aeb36ee57388024620ece022fb60bf79",
+  "human_ratings_sha256": "bfce769c991340b9f081ff61148c0025354968c2c6b934e73c527af07f46e0aa",
+  "model": "Qwen/Qwen2.5-Omni-7B",
+  "model_revision": "ae9e1690543ffd5c0221dc27f79834d0294cba00",
+  "loading": "Official safetensors, native Transformers class, thinker only, BF16, no remote code, no speech generation.",
+  "sources": [
+    "https://huggingface.co/Qwen/Qwen2.5-Omni-7B",
+    "https://huggingface.co/docs/transformers/v4.57.1/en/model_doc/qwen2_5_omni",
+    "https://huggingface.co/Qwen/Qwen3-Omni-30B-A3B-Instruct",
+    "https://pytorch.org/get-started/previous-versions/"
+  ],
+  "selection_reason": "Feasible initial native audio/video baseline on a 32 GB GPU with short, bounded-resolution inputs. Qwen3-Omni official BF16 memory requirements exceed available VRAM. Not a claim that this is the best or a validated judge.",
+  "isolation_root": ".h3-study-artifacts/20260909/audio-evaluator",
+  "privacy": "Public package/model downloads only. Inference uses local files offline; no media, prompts or ratings uploaded. No credentials required or inspected.",
+  "calibration_scope": "The 12 unique previously rated seed2026090803 boxing clips; preserve the 14 human comparison entries and their repeated-control disagreement.",
+  "model_blinding": "Do not send merge names, file paths, internal scores, human scores or human notes to the model. Send only media and a fixed evaluation instruction. Map identifiers after model output is saved.",
+  "input_profile": {
+    "video_fps": 4.0,
+    "max_pixels_per_frame": 200704,
+    "whole_clip_audio": true,
+    "audio_in_video": true,
+    "generation": "greedy; single sample; bounded output; no best-of selection",
+    "max_new_tokens": 768,
+    "batch_size": 1,
+    "cpu_threads": 4,
+    "limitations": "Sampled video cannot support frame-accurate contact timing. Stereo decoding/downmix/resampling must be recorded; not an assessment of stereo spatial fidelity."
+  },
+  "first_smoke": "One already-rated clip verifies model loading, actual audio/video tensors, text output, runtime and memory. No held-out access.",
+  "control_sources": [
+    "av2-boxing-2026090803-combat-cinema-base",
+    "av2-boxing-2026090803-combat-cinema-combat"
+  ],
+  "controls": [
+    "Unmodified local source, preserving original video/audio.",
+    "Exact video with audio samples set to zero; retain an audio stream.",
+    "Exact video with audio delayed by 750 ms, zero-filled at start and trimmed to original duration; no circular wrap."
+  ],
+  "technical_gate": "Verified official model hashes; pinned environment and prompts; model receives nonempty video and audio inputs; valid structured output or explicit retained failure; no OOM or interference with existing jobs.",
+  "audio_sensitivity_gate": "Both muted controls must be identified as silent/no audible impacts without hallucinated speech/music/impacts. Missing or invalid responses fail the gate.",
+  "sync_sensitivity_gate": "For the previously best-rated Combat-only source, the 750 ms delay must reduce the model's synchronization rating relative to the original and be described as misalignment. The base source already has poor human sync ratings and is descriptive, not a required monotonic gate.",
+  "repeatability_gate": "Re-evaluate one original and its muted control with the same greedy settings in fresh conversations; retain all outputs and compare categorical observations and ordinal scores.",
+  "human_comparison": "Report all six original dimensions separately, coverage, differences and tied pairwise agreement against every R1 entry. Treat duplicate/shared physical clips as correlated; no population significance, learned calibration mapping or single composite fitted to R1.",
+  "admission": "A working installation does not qualify an evaluator. If audio/sync sensitivity or repeatability fails, do not apply automatic AV quality ranking to held-out clips. Preserve failures and investigate only on calibration controls. Passing these small controls is necessary, not proof of perceptual validity.",
+  "heldout_gate": "Do not inspect or evaluate AV2 seeds04/11/12 under this setup-only record. A subsequent frozen acceptance/amendment record must justify any machine-only held-out evaluation separately from human labels.",
+  "production_policy": "No autotuner defaults, ranking weights, LoRA exports, installed node pack, F08 release, commit, push or version bump changes."
+}

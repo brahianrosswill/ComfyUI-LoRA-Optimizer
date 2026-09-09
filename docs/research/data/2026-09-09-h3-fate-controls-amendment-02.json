@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "parent_policy_sha256": "5f8694b1a90cc39baf70c875c272fe6f3853f19b76213ed69c9d6538b69f1f0d",
+  "reason": "The first control attempt rejected A05 during source metadata validation. Actual native H3 audio is 32000 Hz stereo, not the initially specified 48000 Hz. No model forward pass or control score occurred. The failed attempt and its runner snapshots remain preserved in runs/controls-01.",
+  "previous_completed_cases": 0,
+  "previous_model_forward_passes": 0,
+  "amendment_frozen_before_model_forward": true,
+  "audio": "Require original 32 kHz stereo, zero aligned start and at least five seconds of finite native PCM. Arithmetic mono downmix in FP32, then torchaudio.functional.resample from 32000 to 48000 with explicitly specified lowpass_filter_width=6, rolloff=0.99, resampling_method=sinc_interp_hann and beta=null. Preserve native and resampled sample counts/hashes. No gain normalization. Apply all frozen conditions to the entire resampled waveform before selecting fixed windows; no wrap or invented input on decode failure.",
+  "execution": "Validate and decode both allowed sources before loading the model on CUDA. All source identities, windows, conditions, gates, precision, output artifacts, abstention, held-out restrictions and stop rules otherwise unchanged.",
+  "quality_claim": false,
+  "production_changed": false
+}

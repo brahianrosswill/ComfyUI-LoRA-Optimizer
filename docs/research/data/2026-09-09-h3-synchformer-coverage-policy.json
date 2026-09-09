@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "stage": "prospective_calibration_diagnostic_only",
+  "previous_goal_turn": "progress: nine imposed-delay controls and twelve rated originals established gross-delay sensitivity without natural merge-ranking admission",
+  "prior_checkpoint_sha256": "3cf7098325d460ec61e0e2af24c2eab5da3acca9211117ea67f8f7d3f517b705",
+  "prior_event_observations_sha256": "c9a7f77f53e7bc8fde622332ae83711822df0d0752d045d082755c1d79f3ab6c",
+  "question": "Do the actual fixed input crop and time window exclude previously flagged contact sequences? Does the class/aggregation scale plausibly limit sensitivity to brief or nonuniform discrepancies?",
+  "selection": "Use exactly the three already-rated sources and five ranges anchored by the existing September 8 event diagnostic. Selection and inspection are unblinded; no unbiased model or merge comparison is claimed.",
+  "cases": [
+    {"case_id": "A09", "prior_diagnostic_directory": "av2-sync-seed03-base", "frame_ranges_inclusive": [[6, 12]]},
+    {"case_id": "A11", "prior_diagnostic_directory": "av2-sync-seed03-repair-additive", "frame_ranges_inclusive": [[12, 18], [32, 38]]},
+    {"case_id": "A07", "prior_diagnostic_directory": "av2-sync-seed03-repair-ct", "frame_ranges_inclusive": [[12, 18], [32, 38]]}
+  ],
+  "procedure": "Rehash the prior observation records, selected model results, helper and source media. Reconstruct the already-used mapped/resized RGB and draw the unchanged model crop boundary beside the exact crop. Enumerate actual source-frame coverage and exclusions from recorded segment ranges; record all selected frames. Reuse the prior stereo envelopes and anonymous energy maxima, not a new peak detector.",
+  "visual_review": "Inspect all generated selected-range panels. Record whether the hand/bag contact region is visible in the fixed crop and whether any selected frames are temporally excluded. Do not refine contact times using the waveform or invent a second independent reviewer.",
+  "time_scale_check": "Use the pinned official class-grid and nearest-class quantizer. Any arithmetic comparison of the prior contact-frame/energy windows remains illustrative, not an identified sound onset, measured perceptual latency, tolerance rule or new synchronization score.",
+  "stop_rule": "No model inference, new decoder/threshold/crop selection, shift correction, rerender, new human label, held-out access, ranker fitting or production change in this diagnostic. Preserve all findings including exclusion not being the explanation.",
+  "goal_complete": false
+}

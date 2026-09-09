@@ -1,0 +1,18 @@
+{
+  "version": 6,
+  "stage": "calibration_only_final_flat_control_attempt",
+  "parent_policy_sha256": "01c605ecc59713d90d856f4e1d5619402e6d4ce83d91bc8821f6ba31ccca241b",
+  "reason": "Of the three prospectively declared prompt compatibility variants, helpful-system plus a joint see/hear question recognized impacts in the original and silence in the muted clip. The official-system variant hallucinated sound in silence. This small positive is insufficient for admission; test one flat rating format against the original two-source control battery.",
+  "system": "You are a helpful assistant.",
+  "instruction": "Briefly describe what you see and hear in this clip, using only actual evidence. Then assess it. The intended scene is two straight punches into the heavy bag, return to guard after each, then one step back and stop. Intended sound is plausible impacts and gym ambience, without speech or music. The intended scene is NOT evidence that these events happened. Do not infer audible sounds from visible actions.\n\nReturn one flat JSON object, no prose outside it. Use exactly these keys:\n\"observed_video\": a brief description of actual action and appearance;\n\"observed_audio\": a brief description of actual sound, or silence;\n\"audible_sound\": true, false, or null;\n\"speech_present\": true, false, or null;\n\"music_present\": true, false, or null;\n\"action_score\": integer 0..4 or null;\n\"temporal_score\": integer 0..4 or null;\n\"appearance_score\": integer 0..4 or null;\n\"audio_score\": integer 0..4 or null;\n\"synchronization_score\": integer 0..4 or null;\n\"overall_score\": integer 0..4 or null;\n\"sync_evidence\": a short explanation of whether audible events match visible contacts, with uncertainty when timing cannot be resolved;\n\"uncertainty\": a short explanation of any limitations.\n\nScale: 0 fails badly, 1 major faults, 2 mixed, 3 good with minor faults, 4 convincing. Action measures intended order/contact/ending; temporal measures stable anatomy and motion; appearance measures coherent subjects/texture/lighting; audio measures plausible sounds without unwanted speech/music; synchronization measures audiovisual contact timing; overall is a preference, not a calculated average. Video is sparsely sampled. Use null when a dimension cannot be assessed. Do not assign a perfect synchronization score to silence. Keep every text field to one short sentence.",
+  "generation": {
+    "do_sample": false,
+    "max_new_tokens": 768,
+    "repetition_penalty": 1.1
+  },
+  "scope": "Eight cases: original/muted/+750 ms delayed audio on each of the two frozen calibration control sources, plus fresh-conversation original/muted repeats of Combat-only. No new source or held-out output.",
+  "gates": "Retain original silence, synchronization-direction, repeatability and full six-dimensional calibration requirements. Invalid or unassessable sync cannot pass a directional gate. A plausible JSON object does not prove audio perception.",
+  "failure_policy": "No further wording search under this model configuration if this frozen control battery fails. Preserve every raw response and failure; prefer a separately justified model/metric change to prompt fishing.",
+  "production_changed": false,
+  "heldout_access": false
+}

@@ -1,0 +1,1305 @@
+{
+  "recipe_sha256": "5b8b8ffc6e2cf390e33feba12ee7a6b56cb40f11acc31981886ced15abfeea81",
+  "seed": 2026090832,
+  "stage": "calibration",
+  "model_sha256": "fe0e601c625e69eed8e73500d39e9b6164403fe03db8048e87913c3cefbbb3fe",
+  "results": [
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-ties",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "ties",
+        "asset_keys": [
+          "series30_cinema:ties"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "130138a489b20951847d10746b677ebf98566803b03be9fb94d30253d90896c9",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8786253333091736,
+          "global_cosine": 0.9485098719596863
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8457848429679871,
+          "global_cosine": 0.9343515634536743
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8376181721687317,
+          "global_cosine": 0.9305112957954407
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8427395224571228,
+          "global_cosine": 0.9320423603057861
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8772695064544678,
+          "global_cosine": 0.9512358903884888
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8742268085479736,
+          "global_cosine": 0.9407393932342529
+        }
+      ],
+      "median_head_maxcos": 0.8600058257579803,
+      "min_head_maxcos": 0.8376181721687317,
+      "median_global_cosine": 0.9375454783439636
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-np-lora",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "np_lora",
+        "asset_keys": [
+          "series30_cinema:np_lora"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "32ec1c81f41c28e6c5f38121e6067cdde9b7ce685917ef46a41f9a0f0adcda34",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8845704197883606,
+          "global_cosine": 0.9511039853096008
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8401410579681396,
+          "global_cosine": 0.9336353540420532
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8273218274116516,
+          "global_cosine": 0.9276570081710815
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8193689584732056,
+          "global_cosine": 0.9233277440071106
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8718972206115723,
+          "global_cosine": 0.9511463642120361
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8799195289611816,
+          "global_cosine": 0.9491328001022339
+        }
+      ],
+      "median_head_maxcos": 0.856019139289856,
+      "min_head_maxcos": 0.8193689584732056,
+      "median_global_cosine": 0.9413840770721436
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-effect-only",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "effect_only",
+        "asset_keys": [
+          "combat"
+        ],
+        "loras": [
+          [
+            "MiniMax H3/concept/H3_Combat_V2.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "video_sha256": "a0281d51d27239dc24e177dcd54b61f750e455baf8992ce71566874189d13602",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6091899275779724,
+          "global_cosine": 0.6584473252296448
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6161631941795349,
+          "global_cosine": 0.6720439195632935
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6182775497436523,
+          "global_cosine": 0.7016984820365906
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6221392154693604,
+          "global_cosine": 0.6520312428474426
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6167941689491272,
+          "global_cosine": 0.673733115196228
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6131471395492554,
+          "global_cosine": 0.6461797952651978
+        }
+      ],
+      "median_head_maxcos": 0.616478681564331,
+      "min_head_maxcos": 0.6091899275779724,
+      "median_global_cosine": 0.6652456223964691
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-character-only",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "character_only",
+        "asset_keys": [
+          "series30"
+        ],
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "video_sha256": "e1195588d9ffea3c6820b3a478fe78b84f86a384af5332e54b3cc0c07af8be52",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8741117119789124,
+          "global_cosine": 0.9510881900787354
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8433595299720764,
+          "global_cosine": 0.9340371489524841
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8497905135154724,
+          "global_cosine": 0.9336729645729065
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8733330368995667,
+          "global_cosine": 0.938781201839447
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8790023326873779,
+          "global_cosine": 0.9427089691162109
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8807908892631531,
+          "global_cosine": 0.9420710802078247
+        }
+      ],
+      "median_head_maxcos": 0.8737223744392395,
+      "min_head_maxcos": 0.8433595299720764,
+      "median_global_cosine": 0.9404261410236359
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-ct-merge",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "ct_merge",
+        "asset_keys": [
+          "series30_cinema:ct_merge"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "14981c599b3a09cffd7f0c36f8175a7a5177301122d5e3f3e640da2dcd444c5e",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8758623600006104,
+          "global_cosine": 0.9564593434333801
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8202905654907227,
+          "global_cosine": 0.9280949831008911
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8001776933670044,
+          "global_cosine": 0.9197823405265808
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.7922638654708862,
+          "global_cosine": 0.9055447578430176
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8685223460197449,
+          "global_cosine": 0.9485509395599365
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8767762184143066,
+          "global_cosine": 0.9438639879226685
+        }
+      ],
+      "median_head_maxcos": 0.8444064557552338,
+      "min_head_maxcos": 0.7922638654708862,
+      "median_global_cosine": 0.9359794855117798
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-additive",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "additive",
+        "asset_keys": [
+          "sully_combat:additive"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "885d509d4d0c869d8d08e7d7e1f3d8a183dbc5f9afd5c155504bb6863cfa5eba",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6330670714378357,
+          "global_cosine": 0.6996135711669922
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6366888284683228,
+          "global_cosine": 0.696392297744751
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6312615871429443,
+          "global_cosine": 0.7006850838661194
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6388275027275085,
+          "global_cosine": 0.7048880457878113
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6492820382118225,
+          "global_cosine": 0.7210228443145752
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6422014832496643,
+          "global_cosine": 0.721710741519928
+        }
+      ],
+      "median_head_maxcos": 0.6377581655979156,
+      "min_head_maxcos": 0.6312615871429443,
+      "median_global_cosine": 0.7027865648269653
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-slerp",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "slerp",
+        "asset_keys": [
+          "sully_combat:slerp"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "0af05425a34e851b953682656b84fbbb3a45f1d5374c01bb1d52b66ba2316b81",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6236268877983093,
+          "global_cosine": 0.7033325433731079
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6221914291381836,
+          "global_cosine": 0.6814858317375183
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6198107004165649,
+          "global_cosine": 0.6814035773277283
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6282566785812378,
+          "global_cosine": 0.6808301210403442
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6283894181251526,
+          "global_cosine": 0.6833353042602539
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6248539090156555,
+          "global_cosine": 0.7124167680740356
+        }
+      ],
+      "median_head_maxcos": 0.6242403984069824,
+      "min_head_maxcos": 0.6198107004165649,
+      "median_global_cosine": 0.6824105679988861
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-effect-only",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "effect_only",
+        "asset_keys": [
+          "cinema"
+        ],
+        "loras": [
+          [
+            "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "video_sha256": "465ea2092c6ae5fefe496717868f77b21434b1ade99aec38765a7818c3acbebc",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8475402593612671,
+          "global_cosine": 0.939274787902832
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8232589960098267,
+          "global_cosine": 0.9114031791687012
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.7976425290107727,
+          "global_cosine": 0.911831796169281
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8107389807701111,
+          "global_cosine": 0.9131152033805847
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8325453400611877,
+          "global_cosine": 0.9315531253814697
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8520793318748474,
+          "global_cosine": 0.9345759153366089
+        }
+      ],
+      "median_head_maxcos": 0.8279021680355072,
+      "min_head_maxcos": 0.7976425290107727,
+      "median_global_cosine": 0.9223341643810272
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-ties",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "ties",
+        "asset_keys": [
+          "sully_combat:ties"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "24783bb5ab1c7c269c5b9f29542f76811418364fb65152ff6a0c9e4e7cf093b9",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.628048300743103,
+          "global_cosine": 0.6938202381134033
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.622464656829834,
+          "global_cosine": 0.6811588406562805
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6334129571914673,
+          "global_cosine": 0.6856269240379333
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6258683800697327,
+          "global_cosine": 0.6821918487548828
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6270312666893005,
+          "global_cosine": 0.6850708723068237
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6298355460166931,
+          "global_cosine": 0.7108794450759888
+        }
+      ],
+      "median_head_maxcos": 0.6275397837162018,
+      "min_head_maxcos": 0.622464656829834,
+      "median_global_cosine": 0.6853488981723785
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-stable-tuner-winner",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "stable_tuner_winner",
+        "asset_keys": [
+          "series30_cinema:stable_tuner_winner"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "301619ddf4e986b816df343e5ffba810c1b9e74d43eded0a1a641ce08bdcec53",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.881592333316803,
+          "global_cosine": 0.9511972069740295
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8449956774711609,
+          "global_cosine": 0.938742458820343
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.835953950881958,
+          "global_cosine": 0.9311927556991577
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8356065154075623,
+          "global_cosine": 0.9317592978477478
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.869441032409668,
+          "global_cosine": 0.9516428709030151
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8764849901199341,
+          "global_cosine": 0.9420534372329712
+        }
+      ],
+      "median_head_maxcos": 0.8572183549404144,
+      "min_head_maxcos": 0.8356065154075623,
+      "median_global_cosine": 0.9403979480266571
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-stable-tuner-winner",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "stable_tuner_winner",
+        "asset_keys": [
+          "sully_combat:stable_tuner_winner"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "a362affd30f9c6de8aeff5be5216d6c1e2a344194c0bae7fefbf306a54242faf",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6233636140823364,
+          "global_cosine": 0.7110247611999512
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6261975765228271,
+          "global_cosine": 0.6970987915992737
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6261823773384094,
+          "global_cosine": 0.7346326112747192
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6293326616287231,
+          "global_cosine": 0.7034416794776917
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.632928729057312,
+          "global_cosine": 0.7210490703582764
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6230599880218506,
+          "global_cosine": 0.7132580280303955
+        }
+      ],
+      "median_head_maxcos": 0.6261899769306183,
+      "min_head_maxcos": 0.6230599880218506,
+      "median_global_cosine": 0.7121413946151733
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-slerp",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "slerp",
+        "asset_keys": [
+          "series30_cinema:slerp"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "9b1decb9d88824c370d02531f165be9330c9edb9cf2a0204edcaa69171ee26d2",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8749487400054932,
+          "global_cosine": 0.9281775951385498
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8298546671867371,
+          "global_cosine": 0.9181376695632935
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8085561990737915,
+          "global_cosine": 0.8839128613471985
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.824396014213562,
+          "global_cosine": 0.9041192531585693
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8770909309387207,
+          "global_cosine": 0.9396122694015503
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8763466477394104,
+          "global_cosine": 0.9353784918785095
+        }
+      ],
+      "median_head_maxcos": 0.8524017035961151,
+      "min_head_maxcos": 0.8085561990737915,
+      "median_global_cosine": 0.9231576323509216
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-additive",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "additive",
+        "asset_keys": [
+          "series30_cinema:additive"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "105d93715e4fb6b245c50803e42564ab6aebfc0bf157ff0d49c71efb14181e35",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8809094429016113,
+          "global_cosine": 0.9506349563598633
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8433244824409485,
+          "global_cosine": 0.9339921474456787
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8461500406265259,
+          "global_cosine": 0.9353156685829163
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8382490873336792,
+          "global_cosine": 0.9323728084564209
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8626768589019775,
+          "global_cosine": 0.9429138898849487
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8767030239105225,
+          "global_cosine": 0.9475722312927246
+        }
+      ],
+      "median_head_maxcos": 0.8544134497642517,
+      "min_head_maxcos": 0.8382490873336792,
+      "median_global_cosine": 0.9391147792339325
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-character-only",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "character_only",
+        "asset_keys": [
+          "sully"
+        ],
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "bc8f5df90581432703970fb56efb53a8a6cb1b4326dc133797f0e2d90ff19bc4",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6247658729553223,
+          "global_cosine": 0.7017945051193237
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6246575713157654,
+          "global_cosine": 0.7116582989692688
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6333708167076111,
+          "global_cosine": 0.7110711932182312
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6292813420295715,
+          "global_cosine": 0.6885958313941956
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6328713893890381,
+          "global_cosine": 0.7330412268638611
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6271100640296936,
+          "global_cosine": 0.699590265750885
+        }
+      ],
+      "median_head_maxcos": 0.6281957030296326,
+      "min_head_maxcos": 0.6246575713157654,
+      "median_global_cosine": 0.7064328491687775
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-np-lora",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "np_lora",
+        "asset_keys": [
+          "sully_combat:np_lora"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "c9daa076e7f3a740656c97906f1816af5a40f3d3e2686ba9e235ed5336dc5317",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6297608613967896,
+          "global_cosine": 0.7003399133682251
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6265144348144531,
+          "global_cosine": 0.686892032623291
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.630401611328125,
+          "global_cosine": 0.6985380053520203
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6346117258071899,
+          "global_cosine": 0.6983491778373718
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6354599595069885,
+          "global_cosine": 0.7050175070762634
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6280522346496582,
+          "global_cosine": 0.7066786885261536
+        }
+      ],
+      "median_head_maxcos": 0.6300812363624573,
+      "min_head_maxcos": 0.6265144348144531,
+      "median_global_cosine": 0.6994389593601227
+    },
+    {
+      "job": {
+        "id": "idm-series30-cinema-2026090832-base",
+        "pair": "series30_cinema",
+        "character": "series30",
+        "effect": "cinema",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "series30_cinema_calibration",
+        "variant": "base",
+        "asset_keys": [],
+        "loras": []
+      },
+      "video_sha256": "eddcb0df59bde2918550b28a4a363c11834bf4d3950d15d732c0527995033c30",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8692724108695984,
+          "global_cosine": 0.940946102142334
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8495690226554871,
+          "global_cosine": 0.9346145987510681
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8275885581970215,
+          "global_cosine": 0.9260660409927368
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8094151020050049,
+          "global_cosine": 0.9151960611343384
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8667823672294617,
+          "global_cosine": 0.944550096988678
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.869498074054718,
+          "global_cosine": 0.9306334257125854
+        }
+      ],
+      "median_head_maxcos": 0.8581756949424744,
+      "min_head_maxcos": 0.8094151020050049,
+      "median_global_cosine": 0.9326240122318268
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-base",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "base",
+        "asset_keys": [],
+        "loras": []
+      },
+      "video_sha256": "a26104a9fb447d11d6f0f1de3af98be116bacb5a417ea355437e70812fb9a10e",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6098073720932007,
+          "global_cosine": 0.6750065684318542
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6052964329719543,
+          "global_cosine": 0.6699397563934326
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6207050681114197,
+          "global_cosine": 0.6769968271255493
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6057047247886658,
+          "global_cosine": 0.668239951133728
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6094522476196289,
+          "global_cosine": 0.6734473705291748
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6095044016838074,
+          "global_cosine": 0.6710669994354248
+        }
+      ],
+      "median_head_maxcos": 0.6094783246517181,
+      "min_head_maxcos": 0.6052964329719543,
+      "median_global_cosine": 0.6722571849822998
+    },
+    {
+      "job": {
+        "id": "idm-sully-combat-2026090832-ct-merge",
+        "pair": "sully_combat",
+        "character": "sully",
+        "effect": "combat",
+        "stage": "calibration",
+        "seed": 2026090832,
+        "prompt": "sully_combat_calibration",
+        "variant": "ct_merge",
+        "asset_keys": [
+          "sully_combat:ct_merge"
+        ],
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "7be20fa79438d0180f9f18a20d1996469c0dd51d3880313b3ed74ead0f612980",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6363745331764221,
+          "global_cosine": 0.6961821913719177
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6320594549179077,
+          "global_cosine": 0.6895031332969666
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6190586686134338,
+          "global_cosine": 0.6896497011184692
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6423822045326233,
+          "global_cosine": 0.690553605556488
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6354503035545349,
+          "global_cosine": 0.6847531795501709
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6181601881980896,
+          "global_cosine": 0.6790902018547058
+        }
+      ],
+      "median_head_maxcos": 0.6337548792362213,
+      "min_head_maxcos": 0.6181601881980896,
+      "median_global_cosine": 0.6895764172077179
+    }
+  ],
+  "matched": [
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "base",
+      "median_head_maxcos": 0.8581756949424744,
+      "delta_to_character_only": -0.015546679496765137,
+      "delta_to_additive": 0.0037622451782226562,
+      "median_global_cosine": 0.9326240122318268
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "character_only",
+      "median_head_maxcos": 0.8737223744392395,
+      "delta_to_character_only": 0.0,
+      "delta_to_additive": 0.019308924674987793,
+      "median_global_cosine": 0.9404261410236359
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "effect_only",
+      "median_head_maxcos": 0.8279021680355072,
+      "delta_to_character_only": -0.0458202064037323,
+      "delta_to_additive": -0.026511281728744507,
+      "median_global_cosine": 0.9223341643810272
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "additive",
+      "median_head_maxcos": 0.8544134497642517,
+      "delta_to_character_only": -0.019308924674987793,
+      "delta_to_additive": 0.0,
+      "median_global_cosine": 0.9391147792339325
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "slerp",
+      "median_head_maxcos": 0.8524017035961151,
+      "delta_to_character_only": -0.02132067084312439,
+      "delta_to_additive": -0.0020117461681365967,
+      "median_global_cosine": 0.9231576323509216
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "ties",
+      "median_head_maxcos": 0.8600058257579803,
+      "delta_to_character_only": -0.013716548681259155,
+      "delta_to_additive": 0.005592375993728638,
+      "median_global_cosine": 0.9375454783439636
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "stable_tuner_winner",
+      "median_head_maxcos": 0.8572183549404144,
+      "delta_to_character_only": -0.016504019498825073,
+      "delta_to_additive": 0.0028049051761627197,
+      "median_global_cosine": 0.9403979480266571
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "np_lora",
+      "median_head_maxcos": 0.856019139289856,
+      "delta_to_character_only": -0.017703235149383545,
+      "delta_to_additive": 0.001605689525604248,
+      "median_global_cosine": 0.9413840770721436
+    },
+    {
+      "pair": "series30_cinema",
+      "seed": 2026090832,
+      "variant": "ct_merge",
+      "median_head_maxcos": 0.8444064557552338,
+      "delta_to_character_only": -0.029315918684005737,
+      "delta_to_additive": -0.010006994009017944,
+      "median_global_cosine": 0.9359794855117798
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "base",
+      "median_head_maxcos": 0.6094783246517181,
+      "delta_to_character_only": -0.01871737837791443,
+      "delta_to_additive": -0.02827984094619751,
+      "median_global_cosine": 0.6722571849822998
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "character_only",
+      "median_head_maxcos": 0.6281957030296326,
+      "delta_to_character_only": 0.0,
+      "delta_to_additive": -0.009562462568283081,
+      "median_global_cosine": 0.7064328491687775
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "effect_only",
+      "median_head_maxcos": 0.616478681564331,
+      "delta_to_character_only": -0.011717021465301514,
+      "delta_to_additive": -0.021279484033584595,
+      "median_global_cosine": 0.6652456223964691
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "additive",
+      "median_head_maxcos": 0.6377581655979156,
+      "delta_to_character_only": 0.009562462568283081,
+      "delta_to_additive": 0.0,
+      "median_global_cosine": 0.7027865648269653
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "slerp",
+      "median_head_maxcos": 0.6242403984069824,
+      "delta_to_character_only": -0.0039553046226501465,
+      "delta_to_additive": -0.013517767190933228,
+      "median_global_cosine": 0.6824105679988861
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "ties",
+      "median_head_maxcos": 0.6275397837162018,
+      "delta_to_character_only": -0.0006559193134307861,
+      "delta_to_additive": -0.010218381881713867,
+      "median_global_cosine": 0.6853488981723785
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "stable_tuner_winner",
+      "median_head_maxcos": 0.6261899769306183,
+      "delta_to_character_only": -0.0020057260990142822,
+      "delta_to_additive": -0.011568188667297363,
+      "median_global_cosine": 0.7121413946151733
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "np_lora",
+      "median_head_maxcos": 0.6300812363624573,
+      "delta_to_character_only": 0.001885533332824707,
+      "delta_to_additive": -0.007676929235458374,
+      "median_global_cosine": 0.6994389593601227
+    },
+    {
+      "pair": "sully_combat",
+      "seed": 2026090832,
+      "variant": "ct_merge",
+      "median_head_maxcos": 0.6337548792362213,
+      "delta_to_character_only": 0.005559176206588745,
+      "delta_to_additive": -0.004003286361694336,
+      "median_global_cosine": 0.6895764172077179
+    }
+  ],
+  "torch_version": "2.11.0+cu130",
+  "transformers_version": "5.16.1",
+  "device": "cpu",
+  "threads": 4,
+  "elapsed_scoring_seconds": 117.43629869201686,
+  "source_frame_count": 2,
+  "output_frame_count": 108,
+  "quality_labels": [],
+  "ranking_used": false,
+  "not_masc": true,
+  "visibility_judged": false,
+  "audio_listened": false,
+  "limitations": "Not MaSC, not face recognition, not an identity probability. Similarity may reflect species, hair, pose or lighting; visibility and effect must be separately reviewed. Do not discard low-scoring frames."
+}

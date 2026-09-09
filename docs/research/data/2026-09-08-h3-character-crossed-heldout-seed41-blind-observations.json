@@ -1,0 +1,182 @@
+{
+  "review_id": "8a2cfbe0a20999f6cfed",
+  "plan_sha256": "110d58a4adeab1dce4c3ef288bc3036c0a1b3ff79a50d862c49818103b9c40c2",
+  "public_manifest_sha256": "72bc7cf8fc9795228a23314eba94a83bc2c297296d11e2a721b302856a8a086b",
+  "review_directory": ".h3-study-artifacts/20260908/character-crossed-heldout-review-seed41",
+  "heldout_policy_sha256": "40da10ebc71044f09ded4f7761388a367ac145116f45a34ed7088291b99bb760",
+  "observer": "Assistant visual inspection; not human ratings",
+  "stage": "heldout",
+  "seed": 2026090841,
+  "method_key_read_before_record": false,
+  "exposure": "Creator references, qualification/calibration depictions and results, and the now-unblinded diagonal seed-41 block are known. Method-named technical receipts may be known; this crossed block's private public-ID mapping has not been read. All eighteen anonymous sparse grids and both creator references were inspected before saving this record. Prior depictions can be recognizable: this is method-blinded, not independent double-blind human review. No held-out numerical similarity scores were computed.",
+  "sampling": "21 chronological 4-fps samples per Cxx-frames.jpg, 320-pixel-wide cells in a 5x5 grid; 378 candidate samples total with four black padding cells per grid. All-124-frame and unchanged-waveform inspection required for every candidate before method unblinding.",
+  "full_video_reviewed": false,
+  "audio_listened": false,
+  "human_ratings": [],
+  "quality_scores": null,
+  "observations": [
+    {
+      "blind_id": "C01",
+      "pair": "series30_combat",
+      "visibility": "Head and shoulders remain visible; hair, raised gloves and bag-edge overlap obscure facial/contact detail during motion.",
+      "identity": "Long black hair and broadly creator-like face presentation; small shadowed face and changed expression/pose preclude a fine identity rank.",
+      "effect": "Navy jacket and red gloves present. Early extension/recovery and later multi-extension episode with bag motion. Late gloves move below face guard, but a fully lowered settled ending and exact punch count/order require all frames.",
+      "anonymous_media_sha256": "e555b93eb09b1ebf46dcddf50c7e132d211f421d698bac6758f93144f7dda384",
+      "grid_sha256": "509dfc8e2219f387e2fed51818009bbfad1915db0dbf1ca22196ba11b87dc362"
+    },
+    {
+      "blind_id": "C02",
+      "pair": "series30_combat",
+      "visibility": "Head remains in frame; face is small and sometimes hair/glove-occluded during punches.",
+      "identity": "Long-haired depiction broadly similar to C04; no reliable fine identity ordering against the creator close-up.",
+      "effect": "Navy jacket/red gloves. Separated early and later extension episodes; bag moves. Both gloves lower to the sides for several final samples. Sparse bursts do not certify exactly two punches or anatomical ordering.",
+      "anonymous_media_sha256": "3153b4e9fc1d7bc5853d9265324e7024be0e5f2bf8269bd11afbbaa846e0a998",
+      "grid_sha256": "33de64462795a229946ec999f2163b248e8f6d2d94df793322dd5ce78409226e"
+    },
+    {
+      "blind_id": "C03",
+      "pair": "sully_cinema",
+      "visibility": "Full head/horns and both hands visible at the table; eyes briefly closed/downward initially.",
+      "identity": "Reference-like green/purple fur, short curved horns and broad soft muzzle; no gross sampled feature switch.",
+      "effect": "No navy vest. Closed blue book and bookshelves present. Both hands already touch/rest near the book; gaze lifts and closed-mouth smile develops. Distinct later flat-hand placement is not resolved from sparse images.",
+      "anonymous_media_sha256": "d4230146157877668dc46cba685e95881959eea1ca861c7b3e02805a8db828d7",
+      "grid_sha256": "a9c5a1d1cb47422ba574b4e5479e409678df96ce80a094dc42933c9bcda69ce3"
+    },
+    {
+      "blind_id": "C04",
+      "pair": "series30_combat",
+      "visibility": "Head remains visible with shadow, moving hair and partial glove/bag overlap.",
+      "identity": "Long black hair and broadly reference-like adult-woman depiction, close to C02 at this scale.",
+      "effect": "Navy jacket/red gloves. Early and later extensions separated by guard; later episode may contain multiple punches. Ends with gloves still in front of torso rather than clearly down at sides. Exact count/order and ending require all frames.",
+      "anonymous_media_sha256": "3a0137f806594041029a40873250b87b9927137bbe4644dee0f057d19e12a483",
+      "grid_sha256": "325907d698736783e497cfa5847d98c52a3e73a9f0548d2733aa395df6effc0f"
+    },
+    {
+      "blind_id": "C05",
+      "pair": "sully_cinema",
+      "visibility": "Full head/horns and both hands visible; eyes initially closed/downward.",
+      "identity": "Reference-like green/purple fur, short horns and broad soft muzzle, very close to C03.",
+      "effect": "No navy vest. Closed blue book/bookshelves present; hands already on/at book. Gaze lifts and small closed-mouth smile develops. Minor finger repositioning is visible but distinct post-smile flat-hand placement remains uncertain.",
+      "anonymous_media_sha256": "ecd4392e7dc52a113c6f4e6e07cbbd059ff2a1f1f8962699699f8c761f7d1f09",
+      "grid_sha256": "92b93c41259f30d246a4c0d6024596c7ca7b6528ddfab97052540d78f5a129a3"
+    },
+    {
+      "blind_id": "C06",
+      "pair": "sully_cinema",
+      "visibility": "Frontal full head/horns and hands visible; book briefly tilted at start.",
+      "identity": "Green/purple broad-muzzled short-horned depiction, broadly creator-like; frontal pose differs from C03/C05.",
+      "effect": "No navy vest. Closed blue book settles flat very early; both hands already at it. Gaze is near-forward in initial sample rather than an unmistakable prolonged downward stage; small closed-mouth smile later. Exact gaze/hand order needs all frames.",
+      "anonymous_media_sha256": "fabca135e54257d16a1ef1a81d873d3c972bd878ebf0fa99c2ffe4299f08c2ea",
+      "grid_sha256": "eb5055a5b61f37a7edb7ef9aa1d5c214b98c5d38fbe8bcd8b2236dfa8d1420a3"
+    },
+    {
+      "blind_id": "C07",
+      "pair": "series30_combat",
+      "visibility": "Head stays in frame; hair/gloves and bag partly obscure moving face/arm detail.",
+      "identity": "Long-haired face depiction similar to C02 at this scale, but no fine identity rank against creator.",
+      "effect": "Navy jacket/red gloves. Early and later extension episodes with guard between; later episode appears to involve more than one reach. Both gloves lower at sides for several final samples. Exact punch count/ordering/contact pending.",
+      "anonymous_media_sha256": "f5c14df508beb45dcb1f6eab62efb6cfa0e8ed038ca3de38d3ef6067dfe7c3f6",
+      "grid_sha256": "0769f9945e9d4e5066c1ea63b5482804f262561c669b4c8c7fb189ec745e43d2"
+    },
+    {
+      "blind_id": "C08",
+      "pair": "sully_cinema",
+      "visibility": "Head/horns and both hands visible; larger body fills frame.",
+      "identity": "Green/purple fur but more angular/elongated muzzle, prominent nose, toothy grin and different horn presentation than the creator's softer depiction.",
+      "effect": "Navy vest present. Library/lamp/window and closed blue book visible. Hands already around book, gaze lifts with a toothy smile rather than a clear closed-mouth ending. One hand shifts toward the table late; exact placement/order unresolved.",
+      "anonymous_media_sha256": "773243f5ecc0927df98d7d0bb7e9e661f48f625eb3cd6bdf71f61945550dbeb3",
+      "grid_sha256": "85466e3f89cac9929c8c1777870ba27004fdb87c5318df06881d0fe40033b36a"
+    },
+    {
+      "blind_id": "C09",
+      "pair": "sully_cinema",
+      "visibility": "Full head/horns and hands visible; book initially tilted/raised.",
+      "identity": "Reference-like green/purple broad soft muzzle and short curved horns, close to C03/C05.",
+      "effect": "No navy vest. Book appears closed and is lowered/settled very early while gaze lifts. Both hands already on/at book; small closed-mouth smile develops. Later distinct placement not obvious in sparse samples.",
+      "anonymous_media_sha256": "531c670f27b75d88f18ea957d45cf8173710cd74c4c548a0e56ed57f0e38b185",
+      "grid_sha256": "7ccb731ac889bbaabd9025eda74e988b6363894d576d3d85e76dd21c5c21922d"
+    },
+    {
+      "blind_id": "C10",
+      "pair": "sully_cinema",
+      "visibility": "Frontal head/horns and both hands visible; initial book cover is raised/angled.",
+      "identity": "Reference-like broad soft muzzle, green/purple fur and short curved horns, close to C06.",
+      "effect": "No navy vest. Library/bookshelves and blue book. Cover/book settles flat very early; gaze lifts and closed-mouth smile develops. Hands already contact book; exact initial book state and any later placement need full frames.",
+      "anonymous_media_sha256": "832db9b11818eeb801d669f9b2bbefdcf1e4d0a2df5017643eb96fb2d05975e2",
+      "grid_sha256": "0d082b81bab9cf2a4ae5cf5f64f309af0f094fb3cebc0b8307a227f3ffa400be"
+    },
+    {
+      "blind_id": "C11",
+      "pair": "series30_combat",
+      "visibility": "Head remains visible but face is small, shadowed and intermittently hair/glove-occluded.",
+      "identity": "Long black hair with broadly reference-like face presentation; no fine ranking.",
+      "effect": "Navy jacket/red gloves. Several early/later reaches with guard and bag motion. Gloves descend toward torso very late, not a clear sustained arms-down ending in sparse samples. Exact count/hand order pending.",
+      "anonymous_media_sha256": "b26ffbb0c24b84a5e021e5baf5ef55c0506b3a3d61281aa29d0439e6ae987077",
+      "grid_sha256": "cc5755996fc845d9f57d429caf50745809d6d79398e7fbff604c760bf0d46d8b"
+    },
+    {
+      "blind_id": "C12",
+      "pair": "series30_combat",
+      "visibility": "Head stays in frame; motion, hair and bag/glove overlap limit fine facial/contact observation.",
+      "identity": "Long-haired depiction close to C02/C07 in coarse appearance; no fine identity rank.",
+      "effect": "Navy jacket/red gloves. Early extension and later multi-reach episode separated by guard. Both gloves lower fully for final samples. Sparse inspection cannot certify individual count or left-right ordering.",
+      "anonymous_media_sha256": "3a62cf7d3a02a4ce2f7f4460f8493460d292ed07d0c03e782c4bdba35f029975",
+      "grid_sha256": "178278e261b94cca0f802dae2a773c3a8cbdf62910b34a74cd42df15c7401202"
+    },
+    {
+      "blind_id": "C13",
+      "pair": "sully_cinema",
+      "visibility": "Full head/horns and hands visible; warm shadowed face.",
+      "identity": "Long pointed horns, prominent purple brow/ears, angular muzzle and beard-like chin substantially differ from the creator; olive/yellow-green facial coloring also differs.",
+      "effect": "Navy vest present, blue closed book/library/lamp/window visible. Starts with hands at book, gaze lifts into toothy grin. Later hand/finger shift onto book occurs but precise placement/flatness requires all frames; smile is not clearly closed-mouth.",
+      "anonymous_media_sha256": "a24d36e09cd98790d7dfdf3cb5ca433bc66f84daa79eb3195834d94f1695c2e9",
+      "grid_sha256": "ab9a2981fd2537559a3cedc85baabbd96f712b7e4c109866ba2e4422e41d3230"
+    },
+    {
+      "blind_id": "C14",
+      "pair": "series30_combat",
+      "visibility": "Head remains visible with hair/hand blur and some bag overlap during extensions.",
+      "identity": "Broadly reference-like long-haired face; expression/pose changes across actions not enough for identity ranking.",
+      "effect": "Navy jacket/red gloves. Both early and later episodes visibly contain changing arm positions, potentially multiple punches. Returns to guard then lowers gloves at sides for final samples. Exact action count and ordering require detailed inspection.",
+      "anonymous_media_sha256": "14b421ea27ba15fbf20609c944ca520f1cd1e9929683057d68c836884a3b581f",
+      "grid_sha256": "6d815e6b47c2626869dd8acf955b2464f6fbdcee7b4d05c79e761d42b85c8ca8"
+    },
+    {
+      "blind_id": "C15",
+      "pair": "sully_cinema",
+      "visibility": "Head/horns sit close to the upper border; hands/book visible. Warm shadowed face limits some detail.",
+      "identity": "Long upright horns, pointed ears, olive-green/angular face and long chin differ substantially from creator; related to C13 but not identical.",
+      "effect": "Navy vest, library/lamp and closed blue book present. Hand initially on table at book edge; gaze lifts, mouth appears to close into a small smile after an initial toothy expression. Later finger/hand placement on cover visible; full flatness/order needs all frames.",
+      "anonymous_media_sha256": "ad4a353ea4581ac473d6c408533d4c52bd28cf1f48fad474d269aa7c3b571837",
+      "grid_sha256": "768f042391b87f358cb43dc6d5483f463b9a0ba78bb1bae7506b35e789ce4dbe"
+    },
+    {
+      "blind_id": "C16",
+      "pair": "sully_cinema",
+      "visibility": "Frontal full head/horns and both hands visible; book cover raised/angled initially.",
+      "identity": "Reference-like green/purple fur, short curved horns and broad muzzle, close to C06/C10.",
+      "effect": "No navy vest. Cover settles down almost immediately with hands already on/at book; gaze is near-forward in early samples and small closed-mouth smile develops. Distinct post-smile placement and initial book state need all frames.",
+      "anonymous_media_sha256": "95e3e54e43784c1e0f0541ed492c853170b7143a544a962e08f6b3d11c0a7631",
+      "grid_sha256": "a85cbba7ff99fe78641f331e585118e8175bd3ac18f1420bc0aa2709d778b3f0"
+    },
+    {
+      "blind_id": "C17",
+      "pair": "series30_combat",
+      "visibility": "Small shadowed face with hair/glove occlusion; red bag overlaps near arm and sometimes head edge.",
+      "identity": "Long black hair and broad reference-like depiction, but darker lighting and action pose preclude fine identity rank.",
+      "effect": "Navy jacket/red gloves and red bag. Early and later extension episodes with recoveries. Gloves remain near guard/torso in final samples, not clearly fully lowered. Individual count and anatomical ordering pending.",
+      "anonymous_media_sha256": "595d5ce39da3fef0d51d5707610bfd6b06b24538249b88a6b526e9cb473675b0",
+      "grid_sha256": "600db25f934ce7344c64bcecffcecea998aa7506c696f0ce921110cb78d439be"
+    },
+    {
+      "blind_id": "C18",
+      "pair": "series30_combat",
+      "visibility": "Head remains visible but dim, hair-covered and intermittently overlapped by gloves/red bag.",
+      "identity": "Long-haired depiction close to C17 at sparse scale; no fine identity preference assigned.",
+      "effect": "Navy jacket/red gloves. Early and later reaches, with later episode showing changing arm positions and bag movement. Gloves move down toward abdomen only in final sample; fully lowered ending and exact punch count/order unverified.",
+      "anonymous_media_sha256": "679b47be7a59b573fc535690be0cdc12c5f4db6954746f0b6e4c166c47b87b74",
+      "grid_sha256": "f420231c59c51fa6249d3eb4edb8e40e4a450e30f799aa66d2e4eb71edd1448c"
+    }
+  ],
+  "inference_before_unblinding": "Sully C08/C13/C15 keep the vest but differ in head design; six others omit it and retain more creator-like coarse features. Initial book/hand contact and gaze timing vary, with some raised-cover/tilted-book starts. Boxing clips have separate action episodes that may contain multiple punches; C02/C07/C12/C14 visibly lower gloves to sides, while other endings need full-frame checking. No exact punch counts, sound judgments, method attribution or overall winner assigned."
+}

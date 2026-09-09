@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "stage": "calibration_only_format_repair",
+  "parent_policy_sha256": "01c605ecc59713d90d856f4e1d5619402e6d4ce83d91bc8821f6ba31ccca241b",
+  "reason": "The first smoke inference completed but repeated zero-timestamp event objects until 768 tokens, leaving invalid JSON and no usable scores. Preserve that outcome. The cause of repetition is not yet established.",
+  "observed_run": ".h3-study-artifacts/20260909/audio-evaluator/runs/smoke-01",
+  "changes": [
+    "Request bounded short evidence and at most three sound-event summaries, not a detailed event timeline.",
+    "Put the six-score object and concise evidence before the sound-event list in the requested response structure.",
+    "Explicitly request null times when timing cannot be determined and an empty event list when silent.",
+    "Keep greedy decoding, adding repetition_penalty=1.1 to discourage the observed runaway repetition."
+  ],
+  "generation": {"do_sample": false, "max_new_tokens": 768, "repetition_penalty": 1.1},
+  "unchanged": ["model/revision/precision", "audio/video input policy", "control sources", "silence/delay/repeat gates", "no held-out access", "no model access to human scores or methods", "no ranking/default/release changes"],
+  "interpretation": "Calibration-only protocol repair, not evidence of better model quality or a successful control. All original failures remain saved."
+}

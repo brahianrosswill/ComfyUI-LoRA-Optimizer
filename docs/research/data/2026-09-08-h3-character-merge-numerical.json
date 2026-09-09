@@ -1,0 +1,1518 @@
+{
+  "study": "H3 autotuner correctness and native-factor follow-up",
+  "scope": "Numerical/performance evidence only; no new audiovisual preference labels.",
+  "merge_runs": [
+    {
+      "pair": "series30_cinema",
+      "action": "merge",
+      "mode": "additive",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-additive-01/merged.safetensors",
+      "export_size": 608382120,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "additive",
+        "merge_strategy_override": "",
+        "_experimental_config": null,
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 13.766869479004527,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-series30-cinema-additive-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-series30-cinema-additive-01",
+      "manifest_sha256": "20437691fc348e18743a3df67e4f5e088a14cf185afb43a56515138968f73163",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+          "model_name": "AI Girl: Fictional Women Series30 / \u67b6\u7a7a\u306e\u5973\u6027\u30b7\u30ea\u30fc\u30ba30 MiniMax H3",
+          "civitai_version_id": 3212165,
+          "tensor_count": 600
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "371d48fc60681b750cd013d225fca487d47546d5eefadd3653146b37148d3f45",
+      "precision": {
+        "mode": "weighted_sum",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "20437691fc348e18743a3df67e4f5e088a14cf185afb43a56515138968f73163",
+        "export_sha256": "371d48fc60681b750cd013d225fca487d47546d5eefadd3653146b37148d3f45",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 2.654509647982195,
+        "all_finite": true,
+        "max_relative_export_error": 1.3716615822785794e-07,
+        "max_error_to_method_change": 0,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.49.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 19.382959365844727,
+            "relative_export_error": 1.3716615822785794e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.49.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 25.039844512939453,
+            "relative_export_error": 1.343555304875811e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.48.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 14.880083084106445,
+            "relative_export_error": 1.3209982276528404e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          }
+        ],
+        "source_sha256": "a2f21f656a97673fadc735f9fc2426cae01d1ebf47726e420b0624584e928182"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (additive strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (0.5s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "c2ffca4706af7f7894c4c35eb0ba8bbf0b149a0493c2e7ef775e8de432d8ce69"
+    },
+    {
+      "pair": "series30_cinema",
+      "action": "merge",
+      "mode": "np_lora",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-np-01/merged.safetensors",
+      "export_size": 608382416,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "np_lora",
+        "_experimental_config": {
+          "version": 1,
+          "subject_slot": 1,
+          "style_slot": 2,
+          "strength": 0.5,
+          "rank": 0,
+          "energy": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 14.687557199998992,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-series30-cinema-np-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-series30-cinema-np-01",
+      "manifest_sha256": "46060dc484b3470a0d958ebc2c57c8f6958b7c0a063a82847f166a8bf550a8ef",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+          "model_name": "AI Girl: Fictional Women Series30 / \u67b6\u7a7a\u306e\u5973\u6027\u30b7\u30ea\u30fc\u30ba30 MiniMax H3",
+          "civitai_version_id": 3212165,
+          "tensor_count": 600
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "91c38fec9a154204b343b0a1d7ab4ece903833b4aae6ee3a87b77c847c03e442",
+      "precision": {
+        "mode": "np_lora",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "46060dc484b3470a0d958ebc2c57c8f6958b7c0a063a82847f166a8bf550a8ef",
+        "export_sha256": "91c38fec9a154204b343b0a1d7ab4ece903833b4aae6ee3a87b77c847c03e442",
+        "checker_sha256": "d1f05d901e9316a8f4c224d403057a3724f01dba0f733779e068c2c4219e1141",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 4.308698096021544,
+        "all_finite": true,
+        "max_relative_export_error": 2.2492406262322632e-07,
+        "max_error_to_method_change": 1.6331185299706606e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.12.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 10.381989479064941,
+            "relative_export_error": 2.2492406262322632e-07,
+            "relative_method_change": 0.09502943790803135,
+            "error_to_method_change": 2.3165062112087982e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.13.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 14.06506633758545,
+            "relative_export_error": 2.0924545361025192e-07,
+            "relative_method_change": 0.11827695854406531,
+            "error_to_method_change": 1.7067278049515756e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.9.attn.qkv_proj.weight",
+            "component": 2,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 4.412505149841309,
+            "relative_export_error": 1.8389978153922345e-07,
+            "relative_method_change": 0.07487301111751928,
+            "error_to_method_change": 2.4306187634349273e-06,
+            "finite": true
+          }
+        ],
+        "source_sha256": "bce420df8b770ff7c52209432cd4aad349c0e058bd3fa8050b18994f67661b6f"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (1.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "08a19e275284c04c89666e95b6319b1d0eb31738c585abc92bf6e43ffd1fbcd3"
+    },
+    {
+      "pair": "series30_cinema",
+      "action": "merge",
+      "mode": "ct_merge",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-ct-01/merged.safetensors",
+      "export_size": 1068503784,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "ct_merge",
+        "_experimental_config": {
+          "version": 1,
+          "common_rank": 4,
+          "residual_rank": 16,
+          "scale": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 17.591381138016004,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3120562176,
+      "run": "idm-series30-cinema-ct-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-series30-cinema-ct-01",
+      "manifest_sha256": "c10bf7b0d0e0ec66cae291c4cb79a587a5617ebc3b1ddcad4bdd71518f74efda",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+          "model_name": "AI Girl: Fictional Women Series30 / \u67b6\u7a7a\u306e\u5973\u6027\u30b7\u30ea\u30fc\u30ba30 MiniMax H3",
+          "civitai_version_id": 3212165,
+          "tensor_count": 600
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "3bdfe2cd9c6aac7303a24a3e1d9198b7c4cca7033e5067b9cb33e504497dafd7",
+      "precision": {
+        "mode": "ct_merge",
+        "export_metadata_mode": "ct_merge",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "c10bf7b0d0e0ec66cae291c4cb79a587a5617ebc3b1ddcad4bdd71518f74efda",
+        "export_sha256": "3bdfe2cd9c6aac7303a24a3e1d9198b7c4cca7033e5067b9cb33e504497dafd7",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 6.48173605001648,
+        "all_finite": true,
+        "max_relative_export_error": 5.908691147598074e-05,
+        "max_error_to_method_change": 4.7178861054249794e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.31.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 18.266244888305664,
+            "relative_export_error": 5.908691147598074e-05,
+            "relative_method_change": 1.1555185775045616,
+            "error_to_method_change": 4.7178861054249794e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.48.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 21.19762420654297,
+            "relative_export_error": 5.4179579261158114e-05,
+            "relative_method_change": 1.1398981604208738,
+            "error_to_method_change": 4.294612025712339e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.43.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 14.467815399169922,
+            "relative_export_error": 4.743207601935295e-05,
+            "relative_method_change": 1.1851065618190593,
+            "error_to_method_change": 3.7117459162184054e-05,
+            "finite": true
+          }
+        ],
+        "source_sha256": "eae09d013dda9483fda33a7c2a7fd615405c49a1d8483e16a81bc8ebd863a936"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (3.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "e1c2e982b795f827b2343816696548f9aa1c67c977b04177e274ccc622f904c3"
+    },
+    {
+      "pair": "sully_combat",
+      "action": "merge",
+      "mode": "additive",
+      "strengths": [
+        1.0,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-additive-01/merged.safetensors",
+      "export_size": 620309632,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "additive",
+        "merge_strategy_override": "",
+        "_experimental_config": null,
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 10.558376813016366,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-sully-combat-additive-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-sully-combat-additive-01",
+      "manifest_sha256": "b9d849f4aa010421474f735cc1b1b056f9bc88358b10383aa75d2e3958f63956",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+          "model_name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+          "civitai_version_id": 3263006,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE \uff5cFight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "ad2af6b434a6c2c310eade2192c59a8a499fb2e8ce614d2a8770c8f795053314",
+      "precision": {
+        "mode": "weighted_sum",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "b9d849f4aa010421474f735cc1b1b056f9bc88358b10383aa75d2e3958f63956",
+        "export_sha256": "ad2af6b434a6c2c310eade2192c59a8a499fb2e8ce614d2a8770c8f795053314",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 2.665294181992067,
+        "all_finite": true,
+        "max_relative_export_error": 9.332550212590386e-08,
+        "max_error_to_method_change": 0,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.40.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 4.44379997253418,
+            "relative_export_error": 9.332550212590386e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.41.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 3.8959579467773438,
+            "relative_export_error": 9.328790009911771e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.3.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 8.028475761413574,
+            "relative_export_error": 9.322167584203446e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          }
+        ],
+        "source_sha256": "6f81b30d5e65c5fae0979ce7a54bee46ae5c12752f6545a4ee397a143146956a"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (additive strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (0.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "162c1c962267ff29c0d322b07b92b7a737d3a34f8b29b5605aa0e7448d5fb9d5"
+    },
+    {
+      "pair": "sully_combat",
+      "action": "merge",
+      "mode": "np_lora",
+      "strengths": [
+        1.0,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-np-01/merged.safetensors",
+      "export_size": 620309888,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "np_lora",
+        "_experimental_config": {
+          "version": 1,
+          "subject_slot": 1,
+          "style_slot": 2,
+          "strength": 0.5,
+          "rank": 0,
+          "energy": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 11.641031756997108,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-sully-combat-np-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-sully-combat-np-01",
+      "manifest_sha256": "39d481dac9fa4db2105cfa0a98881eb4950f699d539286daa7d689499cab8763",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+          "model_name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+          "civitai_version_id": 3263006,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE \uff5cFight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "0a118b1d88521e03f5ea05f2c715519b2b1f6c881acc5b6c6c3740709033dbcf",
+      "precision": {
+        "mode": "np_lora",
+        "export_metadata_mode": "np_lora",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "39d481dac9fa4db2105cfa0a98881eb4950f699d539286daa7d689499cab8763",
+        "export_sha256": "0a118b1d88521e03f5ea05f2c715519b2b1f6c881acc5b6c6c3740709033dbcf",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 4.328444157988997,
+        "all_finite": true,
+        "max_relative_export_error": 5.353157534193888e-07,
+        "max_error_to_method_change": 1.1854758563014068e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.30.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 11.503067016601562,
+            "relative_export_error": 5.353157534193888e-07,
+            "relative_method_change": 0.18258865671894758,
+            "error_to_method_change": 2.67572969635709e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.40.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 11.078265190124512,
+            "relative_export_error": 5.202775030381817e-07,
+            "relative_method_change": 0.1901087300511225,
+            "error_to_method_change": 2.474402115006361e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.29.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 12.030560493469238,
+            "relative_export_error": 5.015918382544127e-07,
+            "relative_method_change": 0.20634623400457958,
+            "error_to_method_change": 2.1569027512328345e-06,
+            "finite": true
+          }
+        ],
+        "source_sha256": "a29e14e8e39d5a354d7e03ba07a32471cf25892becbac1874f71056b29d19624"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (1.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "78d216b7a308df2acceebee16c28530c368c9bf387fac0069e7d9036d956eaf7"
+    },
+    {
+      "pair": "sully_combat",
+      "action": "merge",
+      "mode": "ct_merge",
+      "strengths": [
+        1.0,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-ct-01/merged.safetensors",
+      "export_size": 1098351264,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "ct_merge",
+        "_experimental_config": {
+          "version": 1,
+          "common_rank": 4,
+          "residual_rank": 16,
+          "scale": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 14.732981659995858,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3120562176,
+      "run": "idm-sully-combat-ct-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-sully-combat-ct-01",
+      "manifest_sha256": "ad79fb2630b07045f39eacd64f59646e17661c0a89832c2a3a306e129b32a209",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+          "model_name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+          "civitai_version_id": 3263006,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE \uff5cFight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "aef3762116c469de37fe1e457e1159de2dbad5ba3136dae7483cac26e52e1ad5",
+      "precision": {
+        "mode": "ct_merge",
+        "export_metadata_mode": "ct_merge",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "ad79fb2630b07045f39eacd64f59646e17661c0a89832c2a3a306e129b32a209",
+        "export_sha256": "aef3762116c469de37fe1e457e1159de2dbad5ba3136dae7483cac26e52e1ad5",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 6.615274745010538,
+        "all_finite": true,
+        "max_relative_export_error": 7.985942602731646e-05,
+        "max_error_to_method_change": 6.19284746291843e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.32.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 13.338160514831543,
+            "relative_export_error": 7.985942602731646e-05,
+            "relative_method_change": 1.1620143939030796,
+            "error_to_method_change": 6.19284746291843e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.29.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 12.336353302001953,
+            "relative_export_error": 7.978034562652138e-05,
+            "relative_method_change": 1.1825817726589745,
+            "error_to_method_change": 6.138218168217046e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.1.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 7.568124294281006,
+            "relative_export_error": 6.049998220794542e-05,
+            "relative_method_change": 1.1965109195300452,
+            "error_to_method_change": 4.617486921464163e-05,
+            "finite": true
+          }
+        ],
+        "source_sha256": "a4b9e070a2df3d4667817956ea06beb35ff828be43ea60cbe37df6bad2b2096b"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (3.5s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "75ee0a47f383e142c71195b11dfda363f84c2d636c26d99e874ac4523d84720b"
+    },
+    {
+      "pair": "sully_cinema",
+      "action": "merge",
+      "mode": "additive",
+      "strengths": [
+        1.0,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-cinema-additive-01/merged.safetensors",
+      "export_size": 620309640,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "additive",
+        "merge_strategy_override": "",
+        "_experimental_config": null,
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 10.64137071298319,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-sully-cinema-additive-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-sully-cinema-additive-01",
+      "manifest_sha256": "1d6aa7d0504dd843b99452ca3a52974d2d611345b982adfe1e4ccffc0cdec97a",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+          "model_name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+          "civitai_version_id": 3263006,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "f505dd6d712cbb839219e6d18074e849d69bfe98504d7e7b4f2ce37cd8a82fb5",
+      "precision": {
+        "mode": "weighted_sum",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "1d6aa7d0504dd843b99452ca3a52974d2d611345b982adfe1e4ccffc0cdec97a",
+        "export_sha256": "f505dd6d712cbb839219e6d18074e849d69bfe98504d7e7b4f2ce37cd8a82fb5",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 2.671984052984044,
+        "all_finite": true,
+        "max_relative_export_error": 9.069725254912465e-08,
+        "max_error_to_method_change": 0,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.4.attn.qkv_proj.weight",
+            "component": 2,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 7.000194549560547,
+            "relative_export_error": 9.069725254912465e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.4.attn.qkv_proj.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 6.882667541503906,
+            "relative_export_error": 9.060821094489153e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.4.attn.qkv_proj.weight",
+            "component": 1,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 6.666006088256836,
+            "relative_export_error": 9.016000107369145e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          }
+        ],
+        "source_sha256": "114b82157b95f3054916d57b18a4946a23ff524b3ee7ec65145e42783c4b2579"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (additive strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (0.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "08efd360ff0a6f8f6e4db6006433c241d47b8e35ee7fe96aced81343e18a456f"
+    },
+    {
+      "pair": "sully_cinema",
+      "action": "merge",
+      "mode": "np_lora",
+      "strengths": [
+        1.0,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-cinema-np-01/merged.safetensors",
+      "export_size": 620309912,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "np_lora",
+        "_experimental_config": {
+          "version": 1,
+          "subject_slot": 1,
+          "style_slot": 2,
+          "strength": 0.5,
+          "rank": 0,
+          "energy": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 11.665909629984526,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-sully-cinema-np-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-sully-cinema-np-01",
+      "manifest_sha256": "6122b85717b29662677c1a97655237431c992822e7ddaec61d8e61cd203e5e72",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+          "model_name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+          "civitai_version_id": 3263006,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "b4a2047e21cfcdf3e2daf58773d60dcb9b7cda36939a8253d2652cdd9270842c",
+      "precision": {
+        "mode": "np_lora",
+        "export_metadata_mode": "np_lora",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "6122b85717b29662677c1a97655237431c992822e7ddaec61d8e61cd203e5e72",
+        "export_sha256": "b4a2047e21cfcdf3e2daf58773d60dcb9b7cda36939a8253d2652cdd9270842c",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 4.361141841014614,
+        "all_finite": true,
+        "max_relative_export_error": 2.2483428835817887e-07,
+        "max_error_to_method_change": 2.457483226239042e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.31.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 21.131105422973633,
+            "relative_export_error": 2.2483428835817887e-07,
+            "relative_method_change": 0.11038280859054496,
+            "error_to_method_change": 1.9734747663611714e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.41.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 15.722715377807617,
+            "relative_export_error": 2.2319138211736958e-07,
+            "relative_method_change": 0.06423307656839923,
+            "error_to_method_change": 3.426744229258342e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.37.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 13.664567947387695,
+            "relative_export_error": 2.1828998965223058e-07,
+            "relative_method_change": 0.0829475623195789,
+            "error_to_method_change": 2.5791684491217818e-06,
+            "finite": true
+          }
+        ],
+        "source_sha256": "03835cc99e7e4df8ac15f66850b092564d7bb71cfaf8ecc2675b7bd1dda7e176"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (1.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "f6506ceb70c4a6da2bd6106d71ed384faeb79a4aab0d00f38ea88817740180fd"
+    },
+    {
+      "pair": "sully_cinema",
+      "action": "merge",
+      "mode": "ct_merge",
+      "strengths": [
+        1.0,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-cinema-ct-01/merged.safetensors",
+      "export_size": 1098215096,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "ct_merge",
+        "_experimental_config": {
+          "version": 1,
+          "common_rank": 4,
+          "residual_rank": 16,
+          "scale": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 14.545846461987821,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3120562176,
+      "run": "idm-sully-cinema-ct-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-sully-cinema-ct-01",
+      "manifest_sha256": "9748b20d7e954be34480b719fd2da3788ab90225053f824653467e90978ed03e",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+          "model_name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+          "civitai_version_id": 3263006,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "33fcdb6b21c9d274ca899842c4b7e4b8757e99e3f11a32bb50b2d6949d8183f2",
+      "precision": {
+        "mode": "ct_merge",
+        "export_metadata_mode": "ct_merge",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "9748b20d7e954be34480b719fd2da3788ab90225053f824653467e90978ed03e",
+        "export_sha256": "33fcdb6b21c9d274ca899842c4b7e4b8757e99e3f11a32bb50b2d6949d8183f2",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 6.6250868210045155,
+        "all_finite": true,
+        "max_relative_export_error": 5.1844420074458e-05,
+        "max_error_to_method_change": 4.136470072459907e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.31.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 20.07845115661621,
+            "relative_export_error": 5.1844420074458e-05,
+            "relative_method_change": 1.1616708140140755,
+            "error_to_method_change": 4.1086335501176685e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.33.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 16.137033462524414,
+            "relative_export_error": 5.021835061517244e-05,
+            "relative_method_change": 1.124811930281122,
+            "error_to_method_change": 4.136470072459907e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.28.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 17.655994415283203,
+            "relative_export_error": 4.886632922921893e-05,
+            "relative_method_change": 1.1851413965685351,
+            "error_to_method_change": 3.825208032130716e-05,
+            "finite": true
+          }
+        ],
+        "source_sha256": "9f9f4c886b76a04a53cb5a8b08309e61cdf3d1b0bf34fcea8466ef792f0aab5c"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (3.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "7c5bac61b61bfa0ee13441547103129db4918222d93ec487157726597d61e555"
+    },
+    {
+      "pair": "series30_combat",
+      "action": "merge",
+      "mode": "additive",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-combat-additive-01/merged.safetensors",
+      "export_size": 608382112,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "additive",
+        "merge_strategy_override": "",
+        "_experimental_config": null,
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 13.413189432001673,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-series30-combat-additive-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-series30-combat-additive-01",
+      "manifest_sha256": "8870bd5a459e6b790796f5a5913d1e06141ed07e4bcd41206868565159c3101e",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+          "model_name": "AI Girl: Fictional Women Series30 / \u67b6\u7a7a\u306e\u5973\u6027\u30b7\u30ea\u30fc\u30ba30 MiniMax H3",
+          "civitai_version_id": 3212165,
+          "tensor_count": 600
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE \uff5cFight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "bfbd310ab5f5c3eb87e274f54c0923618f5e9a9f6c9801b2c1fe3d4e19fdfeaa",
+      "precision": {
+        "mode": "weighted_sum",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "8870bd5a459e6b790796f5a5913d1e06141ed07e4bcd41206868565159c3101e",
+        "export_sha256": "bfbd310ab5f5c3eb87e274f54c0923618f5e9a9f6c9801b2c1fe3d4e19fdfeaa",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 2.6518100130197126,
+        "all_finite": true,
+        "max_relative_export_error": 1.404458617698246e-07,
+        "max_error_to_method_change": 0,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.49.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 19.256080627441406,
+            "relative_export_error": 1.404458617698246e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.23.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 2.1817822456359863,
+            "relative_export_error": 1.3913790555076172e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.20.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 2.1571078300476074,
+            "relative_export_error": 1.3764962982084094e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          }
+        ],
+        "source_sha256": "b2fa7eb85ec1c5c74a823dabb4cf4aa2d8bdc6065f7afc7dde9a16a5cd196a13"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (additive strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (0.4s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "686d6b0f64627f17c34646c491d37aed73588dc0321df4bde446349bfc557534"
+    },
+    {
+      "pair": "series30_combat",
+      "action": "merge",
+      "mode": "np_lora",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-combat-np-01/merged.safetensors",
+      "export_size": 608382392,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "np_lora",
+        "_experimental_config": {
+          "version": 1,
+          "subject_slot": 1,
+          "style_slot": 2,
+          "strength": 0.5,
+          "rank": 0,
+          "energy": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 14.310864925006172,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "idm-series30-combat-np-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-series30-combat-np-01",
+      "manifest_sha256": "3b71b279f2e4e62349b6f0dd8f57fb14e5f94f8673c49987cca35da4b780dce7",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+          "model_name": "AI Girl: Fictional Women Series30 / \u67b6\u7a7a\u306e\u5973\u6027\u30b7\u30ea\u30fc\u30ba30 MiniMax H3",
+          "civitai_version_id": 3212165,
+          "tensor_count": 600
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE \uff5cFight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "504835b32112dad65c3694e60bad5218fb21cc90fe36a6e5420bc3aa9b62cb4d",
+      "precision": {
+        "mode": "np_lora",
+        "export_metadata_mode": "np_lora",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "3b71b279f2e4e62349b6f0dd8f57fb14e5f94f8673c49987cca35da4b780dce7",
+        "export_sha256": "504835b32112dad65c3694e60bad5218fb21cc90fe36a6e5420bc3aa9b62cb4d",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 4.279550781997386,
+        "all_finite": true,
+        "max_relative_export_error": 4.285956659890272e-07,
+        "max_error_to_method_change": 1.5562066695429627e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.30.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 7.786430835723877,
+            "relative_export_error": 4.285956659890272e-07,
+            "relative_method_change": 0.14790762776427122,
+            "error_to_method_change": 2.735104453964856e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.33.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 11.841958999633789,
+            "relative_export_error": 4.2813002305245425e-07,
+            "relative_method_change": 0.1439492070056296,
+            "error_to_method_change": 2.8147160492899656e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.29.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 8.217233657836914,
+            "relative_export_error": 3.9716120740698507e-07,
+            "relative_method_change": 0.16310388672990656,
+            "error_to_method_change": 2.2664011422643147e-06,
+            "finite": true
+          }
+        ],
+        "source_sha256": "3da4ca645e8a29ab085b7dc4cdebfb4f63fc170df51c0bef789bb0b4f6a3b5f6"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (1.3s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "de424685a411d3aa3e70aa1ea085f02408a1833d1f9f6ad36aaa3ffc9bd43d52"
+    },
+    {
+      "pair": "series30_combat",
+      "action": "merge",
+      "mode": "ct_merge",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-combat-ct-01/merged.safetensors",
+      "export_size": 1068639952,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "ct_merge",
+        "_experimental_config": {
+          "version": 1,
+          "common_rank": 4,
+          "residual_rank": 16,
+          "scale": 1.0
+        },
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 17.24494401999982,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3120562176,
+      "run": "idm-series30-combat-ct-01",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-series30-combat-ct-01",
+      "manifest_sha256": "9c58b131cd3c74dacb8d70fafdba709219ae2f9adf2a0357af42c7285f8e035f",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+          "model_name": "AI Girl: Fictional Women Series30 / \u67b6\u7a7a\u306e\u5973\u6027\u30b7\u30ea\u30fc\u30ba30 MiniMax H3",
+          "civitai_version_id": 3212165,
+          "tensor_count": 600
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE \uff5cFight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "6db3e62d96a9a1e71c24e909020401a6bbae93c4abaec737d6c3a2d3eb1a342f",
+      "precision": {
+        "mode": "ct_merge",
+        "export_metadata_mode": "ct_merge",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "9c58b131cd3c74dacb8d70fafdba709219ae2f9adf2a0357af42c7285f8e035f",
+        "export_sha256": "6db3e62d96a9a1e71c24e909020401a6bbae93c4abaec737d6c3a2d3eb1a342f",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 6.4543653699802235,
+        "all_finite": true,
+        "max_relative_export_error": 7.60790200423133e-05,
+        "max_error_to_method_change": 5.899992360019728e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.33.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 11.382741928100586,
+            "relative_export_error": 7.60790200423133e-05,
+            "relative_method_change": 1.1730188173632887,
+            "error_to_method_change": 5.899992360019728e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.31.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 9.64745807647705,
+            "relative_export_error": 5.057792880058938e-05,
+            "relative_method_change": 1.1543490734766748,
+            "error_to_method_change": 3.935770202053801e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.34.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 11.696361541748047,
+            "relative_export_error": 4.7588950272664986e-05,
+            "relative_method_change": 1.1862603461429184,
+            "error_to_method_change": 3.680656191130544e-05,
+            "finite": true
+          }
+        ],
+        "source_sha256": "1a65915044c87d448ca79de5a6d3937aa7c7d4ba378a6865139107d631ee1938"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (3.3s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 312 (full-rank: 0) \u2014 ~312/312 keys use minimal RAM"
+      ],
+      "log_sha256": "41a3cd5667a04fb641977f4556ee04570c0be35fb9881927f7db0ff43e892de0"
+    }
+  ],
+  "render_runs": []
+}

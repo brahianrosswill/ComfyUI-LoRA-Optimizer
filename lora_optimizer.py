@@ -6538,6 +6538,15 @@ class LoRAOptimizer(_LoRAMergeBase):
         self._merge_cache = {}  # single-entry: {cache_key: (model_patches, clip_patches, report, clip_strength_out, lora_data)}
         self._detected_arch = None
 
+    def _new_patch_store(self, is_clip=False):
+        """Ordinary nodes retain ordinary dictionaries.
+
+        Offline research subclasses may supply bounded, file-backed storage;
+        they own its lifetime and must disable model application/refusion.
+        No UI option or default execution behavior is changed by this hook.
+        """
+        return {}
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -9192,8 +9201,8 @@ class LoRAOptimizer(_LoRAMergeBase):
                      f"({optimization_mode} strategy, "
                      f"{'sequential' if use_gpu else 'threaded'})...")
         t_pass2 = time.time()
-        model_patches = {}
-        clip_patches = {}
+        model_patches = self._new_patch_store(is_clip=False)
+        clip_patches = self._new_patch_store(is_clip=True)
         processed_keys = 0
         compressed_count = 0
 

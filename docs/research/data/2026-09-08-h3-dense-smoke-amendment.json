@@ -1,0 +1,12 @@
+{
+  "original_plan": "2026-09-08-h3-dense-smoke-plan.json",
+  "original_plan_sha256": "3bdb76f51211fed09c874217cd558a4d1336b2dff112b8db3fecf704d7d4dc4b",
+  "reason": "Initial preflight rejected the unchanged preparation CLI's string-valued LoRA strength before any network call or submission intent. Normalize the numeric input without modifying the prepared manifest or graph.",
+  "superseded_runner_sha256": "803fa2558c6239e7fb4c700bc14aaeba8b862aacd082f4d62208d808f2f11ede",
+  "runner_sha256": "bde5e206e8d01a969ce542d1ed1b5a458303288ee5cd8a9128eb4b51a184b7f7",
+  "unchanged_graph_sha256": "00cd9bfeae6515043b86bf9a2395a205a7657d661603462bf4dc926779533814",
+  "unchanged_manifest_sha256": "cd680426371478348f5c8059cae543733d67e1aafe3d3237e71e6b34fee75f0c",
+  "validation_before_submission": "Four smoke-runner tests passed, including string/numeric strengths, unrelated queue protection, changed graph rejection, and timeout intent preservation.",
+  "all_other_plan_fields_unchanged": true,
+  "renders_submitted_before_amendment": 0
+}

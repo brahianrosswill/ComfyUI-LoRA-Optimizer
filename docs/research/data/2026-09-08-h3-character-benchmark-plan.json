@@ -1,0 +1,3111 @@
+{
+  "version": 1,
+  "created_at": 1788880583.9205265,
+  "base": "http://127.0.0.1:8189",
+  "root": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908",
+  "pairs": [
+    "series30_cinema",
+    "sully_combat"
+  ],
+  "deferred_pairs": [
+    "sully_cinema",
+    "series30_combat"
+  ],
+  "variants": [
+    "base",
+    "character_only",
+    "effect_only",
+    "additive",
+    "slerp",
+    "ties",
+    "stable_tuner_winner",
+    "np_lora",
+    "ct_merge"
+  ],
+  "profile": {
+    "server": "http://127.0.0.1:8189",
+    "diffusion": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "width": 640,
+    "height": 384,
+    "frames": 124,
+    "fps": 24,
+    "steps": 20,
+    "sampler": "res_multistep",
+    "scheduler": "simple",
+    "turbo": false
+  },
+  "protocol_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-character-merge-protocol.json",
+  "protocol_sha256": "b54c938768bc311b065479c6568700aa0b7ce303eadc37e0c8d9b3da535b9ecf",
+  "evidence_records": {
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-character-merge-numerical.json": "eb613921d8951769c080b5b3dbcdfe257f93dad3859866929512cce2d279a92b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-character-ties-mapped-numerical.json": "20f143be5c4b907d640098f47330834947565983577e7f483c5001acfb775eec",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-character-stable-numerical.json": "a558cb753b49a51f7c276f284a28d71dd5716f0c5ac287b4b647836e2ef53706"
+  },
+  "assets": {
+    "sully": {
+      "local_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+      "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+      "identity": {
+        "device": 84,
+        "inode": 7953714150768556829,
+        "size": 155110336,
+        "mtime_ns": 1788870854349200400
+      },
+      "api_name": "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors"
+    },
+    "series30": {
+      "local_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+      "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+      "identity": {
+        "device": 84,
+        "inode": 9823280768345838532,
+        "size": 298260352,
+        "mtime_ns": 1788870895363477300
+      },
+      "api_name": "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+      "strength": 0.8,
+      "installed_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors"
+    },
+    "cinema": {
+      "local_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+      "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+      "identity": {
+        "device": 84,
+        "inode": 11279566120962832148,
+        "size": 155110288,
+        "mtime_ns": 1788189728763180900
+      },
+      "api_name": "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+      "strength": 0.8,
+      "installed_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors"
+    },
+    "combat": {
+      "local_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+      "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+      "identity": {
+        "device": 84,
+        "inode": 3253380116339204305,
+        "size": 155110280,
+        "mtime_ns": 1787588783951286900
+      },
+      "api_name": "MiniMax H3/concept/H3_Combat_V2.safetensors",
+      "strength": 0.8,
+      "installed_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors"
+    },
+    "series30_cinema:additive": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-additive-01/merged.safetensors",
+      "sha256": "371d48fc60681b750cd013d225fca487d47546d5eefadd3653146b37148d3f45",
+      "identity": {
+        "device": 66305,
+        "inode": 36702919,
+        "size": 608382120,
+        "mtime_ns": 1788873424703436672
+      },
+      "api_name": "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors"
+    },
+    "series30_cinema:slerp": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-slerp-01/merged.safetensors",
+      "sha256": "614f1ef1d721eeb71a31d6986ad9a2a9cd3946e11db777bfbb7e1a3a2faf9d2e",
+      "identity": {
+        "device": 66305,
+        "inode": 36703068,
+        "size": 1892888568,
+        "mtime_ns": 1788879108361103714
+      },
+      "api_name": "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors"
+    },
+    "series30_cinema:ties": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-ties-01-mapped/merged.safetensors",
+      "sha256": "898e8b1fee5324a3dd6898b87ebec84eabf0a1c698e72a4cbe88febedae21d23",
+      "identity": {
+        "device": 66305,
+        "inode": 36703022,
+        "size": 77082394664,
+        "mtime_ns": 1788877424062700107
+      },
+      "api_name": "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors"
+    },
+    "series30_cinema:stable_tuner_winner": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-winner-01/merged.safetensors",
+      "sha256": "c93a87a7f772e9cc58a7398300f5e82e417d1e1f65a002335d2f89b850d9cfcc",
+      "identity": {
+        "device": 66305,
+        "inode": 36703098,
+        "size": 876981472,
+        "mtime_ns": 1788879452079332948
+      },
+      "api_name": "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors"
+    },
+    "series30_cinema:np_lora": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-np-01/merged.safetensors",
+      "sha256": "91c38fec9a154204b343b0a1d7ab4ece903833b4aae6ee3a87b77c847c03e442",
+      "identity": {
+        "device": 66305,
+        "inode": 36702906,
+        "size": 608382416,
+        "mtime_ns": 1788873205239279508
+      },
+      "api_name": "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/series30-cinema-np-01.safetensors"
+    },
+    "series30_cinema:ct_merge": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-ct-01/merged.safetensors",
+      "sha256": "3bdfe2cd9c6aac7303a24a3e1d9198b7c4cca7033e5067b9cb33e504497dafd7",
+      "identity": {
+        "device": 66305,
+        "inode": 36702928,
+        "size": 1068503784,
+        "mtime_ns": 1788873624561961729
+      },
+      "api_name": "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors"
+    },
+    "sully_combat:additive": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-additive-01/merged.safetensors",
+      "sha256": "ad2af6b434a6c2c310eade2192c59a8a499fb2e8ce614d2a8770c8f795053314",
+      "identity": {
+        "device": 66305,
+        "inode": 36702935,
+        "size": 620309632,
+        "mtime_ns": 1788873657062023288
+      },
+      "api_name": "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/sully-combat-additive-01.safetensors"
+    },
+    "sully_combat:slerp": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-slerp-01/merged.safetensors",
+      "sha256": "a8c5d4a8b86ee5e06b7ee0ecc3560f601d81eff8c409f61d411e26c749fcc084",
+      "identity": {
+        "device": 66305,
+        "inode": 36703077,
+        "size": 1514877256,
+        "mtime_ns": 1788879267305291698
+      },
+      "api_name": "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors"
+    },
+    "sully_combat:ties": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-ties-01-mapped/merged.safetensors",
+      "sha256": "289f13fb277912637e3305c9d5c5a983e62c73d22f91db546b7153e0d3467828",
+      "identity": {
+        "device": 66305,
+        "inode": 36703033,
+        "size": 80153280520,
+        "mtime_ns": 1788877872584446434
+      },
+      "api_name": "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors"
+    },
+    "sully_combat:stable_tuner_winner": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-winner-01/merged.safetensors",
+      "sha256": "aa56d5058e76d3d00bdc6b327acb2c39f0f8f6517198ed7ec38c9debf2bf96b4",
+      "identity": {
+        "device": 66305,
+        "inode": 36703120,
+        "size": 647834760,
+        "mtime_ns": 1788879803360837640
+      },
+      "api_name": "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/sully-combat-winner-01.safetensors"
+    },
+    "sully_combat:np_lora": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-np-01/merged.safetensors",
+      "sha256": "0a118b1d88521e03f5ea05f2c715519b2b1f6c881acc5b6c6c3740709033dbcf",
+      "identity": {
+        "device": 66305,
+        "inode": 36702944,
+        "size": 620309888,
+        "mtime_ns": 1788873684500919620
+      },
+      "api_name": "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/sully-combat-np-01.safetensors"
+    },
+    "sully_combat:ct_merge": {
+      "local_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-sully-combat-ct-01/merged.safetensors",
+      "sha256": "aef3762116c469de37fe1e457e1159de2dbad5ba3136dae7483cac26e52e1ad5",
+      "identity": {
+        "device": 66305,
+        "inode": 36702954,
+        "size": 1098351264,
+        "mtime_ns": 1788873716540966353
+      },
+      "api_name": "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+      "strength": 1.0,
+      "installed_path": "/media/p5/model_temps/h3-autotuner-study-20260908/sully-combat-ct-01.safetensors"
+    }
+  },
+  "merge_evidence": {
+    "series30_cinema:additive": {
+      "run": "idm-series30-cinema-additive-01",
+      "manifest_sha256": "20437691fc348e18743a3df67e4f5e088a14cf185afb43a56515138968f73163",
+      "production_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "weighted_sum",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "20437691fc348e18743a3df67e4f5e088a14cf185afb43a56515138968f73163",
+        "export_sha256": "371d48fc60681b750cd013d225fca487d47546d5eefadd3653146b37148d3f45",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 2.654509647982195,
+        "all_finite": true,
+        "max_relative_export_error": 1.3716615822785794e-07,
+        "max_error_to_method_change": 0,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.49.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 19.382959365844727,
+            "relative_export_error": 1.3716615822785794e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.49.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 25.039844512939453,
+            "relative_export_error": 1.343555304875811e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.48.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 14.880083084106445,
+            "relative_export_error": 1.3209982276528404e-07,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          }
+        ],
+        "source_sha256": "a2f21f656a97673fadc735f9fc2426cae01d1ebf47726e420b0624584e928182"
+      }
+    },
+    "series30_cinema:slerp": {
+      "run": "idm-series30-cinema-slerp-01",
+      "manifest_sha256": "65284fd25c256470f90c9cfa46115db62798f053b5a2dddce64307eedd2292e2",
+      "production_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "slerp",
+        "export_metadata_mode": "slerp",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "65284fd25c256470f90c9cfa46115db62798f053b5a2dddce64307eedd2292e2",
+        "export_sha256": "614f1ef1d721eeb71a31d6986ad9a2a9cd3946e11db777bfbb7e1a3a2faf9d2e",
+        "checker_sha256": "852bb9d73a55d92489e5b13a81138f8525267e80014652ee580a0aac3c6ac68b",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 5.444358406995889,
+        "reference": "Pinned ordinary SLERP; FP32 discrepancy includes normal rounding/compression, reported separately",
+        "all_finite": true,
+        "max_relative_export_error": 1.9820491734134727e-05,
+        "max_error_to_method_change": 7.299279289045813e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.14.attn.qkv_proj.weight",
+            "component": 1,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 4.681275367736816,
+            "relative_export_error": 1.9820491734134727e-05,
+            "relative_normal_storage_rounding_error": 0.0,
+            "relative_error_after_storage_rounding": 1.9820491734134727e-05,
+            "relative_method_change": 0.21355231435137537,
+            "error_to_method_change": 7.299279289045813e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.13.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 12.459763526916504,
+            "relative_export_error": 4.858653199421471e-06,
+            "relative_normal_storage_rounding_error": 0.0,
+            "relative_error_after_storage_rounding": 4.858653199421471e-06,
+            "relative_method_change": 0.14537350034070567,
+            "error_to_method_change": 2.856321244535352e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.22.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 10.218405723571777,
+            "relative_export_error": 3.384789123031741e-06,
+            "relative_normal_storage_rounding_error": 0.0,
+            "relative_error_after_storage_rounding": 3.384789123031741e-06,
+            "relative_method_change": 0.15649809631442946,
+            "error_to_method_change": 1.8243519055335908e-05,
+            "finite": true
+          }
+        ],
+        "source_sha256": "5adf01b45110b3d09b7d162171c0a109698fa47bcceba2cab61233fa32a7997d",
+        "max_relative_normal_storage_rounding_error": 0.0,
+        "max_relative_error_after_storage_rounding": 1.9820491734134727e-05
+      }
+    },
+    "series30_cinema:ties": {
+      "run": "idm-series30-cinema-ties-01-mapped",
+      "manifest_sha256": "3e671e113ecaf5d6254543e29ef07cd21262774c72dbe37c207ac087192f2be8",
+      "production_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "ties",
+        "ties_density": 0.5,
+        "ties_sign_method": "frequency",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization; per-component safetensors reader",
+        "reference": "Pinned ordinary TIES formula; normal storage rounding separately measured",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "3e671e113ecaf5d6254543e29ef07cd21262774c72dbe37c207ac087192f2be8",
+        "export_sha256": "898e8b1fee5324a3dd6898b87ebec84eabf0a1c698e72a4cbe88febedae21d23",
+        "checker_sha256": "d222be4486142ebb089980e6d560c8a113ac41d3d818586afd88ff1b04e9cf4a",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "max_rss_bytes": 2560704512,
+        "peak_cuda_allocated": 7113679360,
+        "elapsed_seconds": 147.16969609897933,
+        "all_finite": true,
+        "exact_stored_components": 300,
+        "max_relative_export_error": 7.199355041386165e-08,
+        "max_relative_storage_rounding_error": 0.0,
+        "max_relative_fp32_reference_error": 7.199355041386165e-08,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.0.attn.qkv_proj.weight",
+            "component": 2,
+            "source_indices": [
+              1
+            ],
+            "representation": "lora",
+            "normal_storage_dtype": "native FP32 factors",
+            "relative_export_error": 7.199355041386165e-08,
+            "relative_storage_rounding_error": 0.0,
+            "relative_fp32_reference_error": 7.199355041386165e-08,
+            "relative_method_change": 0.0,
+            "exact_stored_values": false,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.1.attn.out_proj.weight",
+            "component": 0,
+            "source_indices": [
+              1
+            ],
+            "representation": "lora",
+            "normal_storage_dtype": "native FP32 factors",
+            "relative_export_error": 7.120896733530487e-08,
+            "relative_storage_rounding_error": 0.0,
+            "relative_fp32_reference_error": 7.120896733530487e-08,
+            "relative_method_change": 0.0,
+            "exact_stored_values": false,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.1.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              1
+            ],
+            "representation": "lora",
+            "normal_storage_dtype": "native FP32 factors",
+            "relative_export_error": 7.088970076577432e-08,
+            "relative_storage_rounding_error": 0.0,
+            "relative_fp32_reference_error": 7.088970076577432e-08,
+            "relative_method_change": 0.0,
+            "exact_stored_values": false,
+            "finite": true
+          }
+        ],
+        "source_sha256": "161e67d446eac783483c92d42979c440fc1bd32bf0c75b4738bcd5446187a75d"
+      }
+    },
+    "series30_cinema:stable_tuner_winner": {
+      "run": "idm-series30-cinema-winner-01",
+      "manifest_sha256": "1880c07cead20a4659c1ba578e2261fcef268e3a2a399a3a69689b9f163aad27",
+      "production_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "per_prefix",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "1880c07cead20a4659c1ba578e2261fcef268e3a2a399a3a69689b9f163aad27",
+        "export_sha256": "c93a87a7f772e9cc58a7398300f5e82e417d1e1f65a002335d2f89b850d9cfcc",
+        "checker_sha256": "689ff5d20a34f710d87834e12619c3d0898444b656c07b935ac9c81ffde6263a",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 4.330371304997243,
+        "reference": "Pinned ordinary stable formulas and captured replay policy; FP32 discrepancy includes normal rounding/compression, reported separately",
+        "all_finite": true,
+        "max_relative_export_error": 1.4597074594367112e-06,
+        "max_error_to_method_change": 8.206895712717219e-06,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.6.mlp.fc1.weight",
+            "component": 0,
+            "local_mode": "slerp",
+            "model_scale": 1.0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 7.139650821685791,
+            "relative_export_error": 1.4597074594367112e-06,
+            "relative_normal_storage_rounding_error": 0.0,
+            "relative_error_after_storage_rounding": 1.4597074594367112e-06,
+            "relative_method_change": 0.151005209663467,
+            "error_to_method_change": 8.206895712717219e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.7.attn.qkv_proj.weight",
+            "component": 1,
+            "local_mode": "slerp",
+            "model_scale": 1.0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 3.4167726039886475,
+            "relative_export_error": 1.2587354010646215e-06,
+            "relative_normal_storage_rounding_error": 0.0,
+            "relative_error_after_storage_rounding": 1.2587354010646215e-06,
+            "relative_method_change": 0.1626841530403291,
+            "error_to_method_change": 6.478560658193551e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.24.mlp.fc2.weight",
+            "component": 0,
+            "local_mode": "slerp",
+            "model_scale": 1.0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 4.332350254058838,
+            "relative_export_error": 1.1939003753365938e-06,
+            "relative_normal_storage_rounding_error": 0.0,
+            "relative_error_after_storage_rounding": 1.1939003753365938e-06,
+            "relative_method_change": 0.13991488036799565,
+            "error_to_method_change": 7.339146913353002e-06,
+            "finite": true
+          }
+        ],
+        "source_sha256": "c6a62505791cfc47a84287d26825ee056e7bc16ea228b48ac7a25c44fcb3dba3",
+        "max_relative_normal_storage_rounding_error": 0.0,
+        "max_relative_error_after_storage_rounding": 1.4597074594367112e-06
+      }
+    },
+    "series30_cinema:np_lora": {
+      "run": "idm-series30-cinema-np-01",
+      "manifest_sha256": "46060dc484b3470a0d958ebc2c57c8f6958b7c0a063a82847f166a8bf550a8ef",
+      "production_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "np_lora",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "46060dc484b3470a0d958ebc2c57c8f6958b7c0a063a82847f166a8bf550a8ef",
+        "export_sha256": "91c38fec9a154204b343b0a1d7ab4ece903833b4aae6ee3a87b77c847c03e442",
+        "checker_sha256": "d1f05d901e9316a8f4c224d403057a3724f01dba0f733779e068c2c4219e1141",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 4.308698096021544,
+        "all_finite": true,
+        "max_relative_export_error": 2.2492406262322632e-07,
+        "max_error_to_method_change": 1.6331185299706606e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.12.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 10.381989479064941,
+            "relative_export_error": 2.2492406262322632e-07,
+            "relative_method_change": 0.09502943790803135,
+            "error_to_method_change": 2.3165062112087982e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.13.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 14.06506633758545,
+            "relative_export_error": 2.0924545361025192e-07,
+            "relative_method_change": 0.11827695854406531,
+            "error_to_method_change": 1.7067278049515756e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.9.attn.qkv_proj.weight",
+            "component": 2,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 4.412505149841309,
+            "relative_export_error": 1.8389978153922345e-07,
+            "relative_method_change": 0.07487301111751928,
+            "error_to_method_change": 2.4306187634349273e-06,
+            "finite": true
+          }
+        ],
+        "source_sha256": "bce420df8b770ff7c52209432cd4aad349c0e058bd3fa8050b18994f67661b6f"
+      }
+    },
+    "series30_cinema:ct_merge": {
+      "run": "idm-series30-cinema-ct-01",
+      "manifest_sha256": "c10bf7b0d0e0ec66cae291c4cb79a587a5617ebc3b1ddcad4bdd71518f74efda",
+      "production_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "ct_merge",
+        "export_metadata_mode": "ct_merge",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "c10bf7b0d0e0ec66cae291c4cb79a587a5617ebc3b1ddcad4bdd71518f74efda",
+        "export_sha256": "3bdfe2cd9c6aac7303a24a3e1d9198b7c4cca7033e5067b9cb33e504497dafd7",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 6.48173605001648,
+        "all_finite": true,
+        "max_relative_export_error": 5.908691147598074e-05,
+        "max_error_to_method_change": 4.7178861054249794e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.31.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 18.266244888305664,
+            "relative_export_error": 5.908691147598074e-05,
+            "relative_method_change": 1.1555185775045616,
+            "error_to_method_change": 4.7178861054249794e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.48.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 21.19762420654297,
+            "relative_export_error": 5.4179579261158114e-05,
+            "relative_method_change": 1.1398981604208738,
+            "error_to_method_change": 4.294612025712339e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.43.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 14.467815399169922,
+            "relative_export_error": 4.743207601935295e-05,
+            "relative_method_change": 1.1851065618190593,
+            "error_to_method_change": 3.7117459162184054e-05,
+            "finite": true
+          }
+        ],
+        "source_sha256": "eae09d013dda9483fda33a7c2a7fd615405c49a1d8483e16a81bc8ebd863a936"
+      }
+    },
+    "sully_combat:additive": {
+      "run": "idm-sully-combat-additive-01",
+      "manifest_sha256": "b9d849f4aa010421474f735cc1b1b056f9bc88358b10383aa75d2e3958f63956",
+      "production_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "weighted_sum",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "b9d849f4aa010421474f735cc1b1b056f9bc88358b10383aa75d2e3958f63956",
+        "export_sha256": "ad2af6b434a6c2c310eade2192c59a8a499fb2e8ce614d2a8770c8f795053314",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 2.665294181992067,
+        "all_finite": true,
+        "max_relative_export_error": 9.332550212590386e-08,
+        "max_error_to_method_change": 0,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.40.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 4.44379997253418,
+            "relative_export_error": 9.332550212590386e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.41.mlp.fc2.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 3.8959579467773438,
+            "relative_export_error": 9.328790009911771e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.3.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 8.028475761413574,
+            "relative_export_error": 9.322167584203446e-08,
+            "relative_method_change": 0.0,
+            "error_to_method_change": null,
+            "finite": true
+          }
+        ],
+        "source_sha256": "6f81b30d5e65c5fae0979ce7a54bee46ae5c12752f6545a4ee397a143146956a"
+      }
+    },
+    "sully_combat:slerp": {
+      "run": "idm-sully-combat-slerp-01",
+      "manifest_sha256": "d942acd6290c9fb9aaebafd10f132850c0134c5ea819191b7a07510d12d6bcd1",
+      "production_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "slerp",
+        "export_metadata_mode": "slerp",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "d942acd6290c9fb9aaebafd10f132850c0134c5ea819191b7a07510d12d6bcd1",
+        "export_sha256": "a8c5d4a8b86ee5e06b7ee0ecc3560f601d81eff8c409f61d411e26c749fcc084",
+        "checker_sha256": "852bb9d73a55d92489e5b13a81138f8525267e80014652ee580a0aac3c6ac68b",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 5.430474355001934,
+        "reference": "Pinned ordinary SLERP; FP32 discrepancy includes normal rounding/compression, reported separately",
+        "all_finite": true,
+        "max_relative_export_error": 0.00244413884808433,
+        "max_error_to_method_change": 0.0067998712051175,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.0.attn.qkv_proj.weight",
+            "component": 2,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 0.8688126802444458,
+            "relative_export_error": 0.00244413884808433,
+            "relative_normal_storage_rounding_error": 0.0016593987440912475,
+            "relative_error_after_storage_rounding": 0.002857076621290724,
+            "relative_method_change": 0.3454874270226255,
+            "error_to_method_change": 0.004630926215505422,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.37.attn.qkv_proj.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 1.9310028553009033,
+            "relative_export_error": 0.0024423252122613643,
+            "relative_normal_storage_rounding_error": 0.0016585108716735812,
+            "relative_error_after_storage_rounding": 0.0028663577651493756,
+            "relative_method_change": 0.30658464293990867,
+            "error_to_method_change": 0.005525571555505864,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.1.attn.qkv_proj.weight",
+            "component": 1,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 0.8449179530143738,
+            "relative_export_error": 0.002440355551364405,
+            "relative_normal_storage_rounding_error": 0.001658603800828211,
+            "relative_error_after_storage_rounding": 0.002848949079092886,
+            "relative_method_change": 0.3364796774899707,
+            "error_to_method_change": 0.00481302661040399,
+            "finite": true
+          }
+        ],
+        "source_sha256": "820d2a1ca83163ff3cfcc6dffef13328c25d08923da0545c83a9666117938efc",
+        "max_relative_normal_storage_rounding_error": 0.0016597704127759715,
+        "max_relative_error_after_storage_rounding": 0.002872833660020594
+      }
+    },
+    "sully_combat:ties": {
+      "run": "idm-sully-combat-ties-01-mapped",
+      "manifest_sha256": "05eea517f20afd1822ae140624769f7cbb62c35364675bb2207dac862a9df4ce",
+      "production_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "ties",
+        "ties_density": 0.5,
+        "ties_sign_method": "frequency",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization; per-component safetensors reader",
+        "reference": "Pinned ordinary TIES formula; normal storage rounding separately measured",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "05eea517f20afd1822ae140624769f7cbb62c35364675bb2207dac862a9df4ce",
+        "export_sha256": "289f13fb277912637e3305c9d5c5a983e62c73d22f91db546b7153e0d3467828",
+        "checker_sha256": "d222be4486142ebb089980e6d560c8a113ac41d3d818586afd88ff1b04e9cf4a",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "max_rss_bytes": 2414854144,
+        "peak_cuda_allocated": 7113679360,
+        "elapsed_seconds": 321.4193579819985,
+        "all_finite": true,
+        "exact_stored_components": 312,
+        "max_relative_export_error": 0.0,
+        "max_relative_storage_rounding_error": 0.0016654341304242258,
+        "max_relative_fp32_reference_error": 0.0016654341304242258,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.0.attn.out_proj.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "representation": "diff",
+            "normal_storage_dtype": "torch.bfloat16",
+            "relative_export_error": 0.0,
+            "relative_storage_rounding_error": 0.001657105579919753,
+            "relative_fp32_reference_error": 0.001657105579919753,
+            "relative_method_change": 0.5004696206366612,
+            "exact_stored_values": true,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.0.attn.qkv_proj.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "representation": "diff",
+            "normal_storage_dtype": "torch.bfloat16",
+            "relative_export_error": 0.0,
+            "relative_storage_rounding_error": 0.0016584552647602062,
+            "relative_fp32_reference_error": 0.0016584552647602062,
+            "relative_method_change": 0.4941231146638808,
+            "exact_stored_values": true,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.0.attn.qkv_proj.weight",
+            "component": 1,
+            "source_indices": [
+              0,
+              1
+            ],
+            "representation": "diff",
+            "normal_storage_dtype": "torch.bfloat16",
+            "relative_export_error": 0.0,
+            "relative_storage_rounding_error": 0.0016578195518212892,
+            "relative_fp32_reference_error": 0.0016578195518212892,
+            "relative_method_change": 0.4936923704057876,
+            "exact_stored_values": true,
+            "finite": true
+          }
+        ],
+        "source_sha256": "7df6e37e23e270b3e32af1a7c746fdcb5a40bb110359f069ef07147d01b9146e"
+      }
+    },
+    "sully_combat:stable_tuner_winner": {
+      "run": "idm-sully-combat-winner-01",
+      "manifest_sha256": "be7546595041ca80ae69607c283741591aab530aa4be8a3e31a22ca28e3a813b",
+      "production_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "per_prefix",
+        "export_metadata_mode": "weighted_average",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "be7546595041ca80ae69607c283741591aab530aa4be8a3e31a22ca28e3a813b",
+        "export_sha256": "aa56d5058e76d3d00bdc6b327acb2c39f0f8f6517198ed7ec38c9debf2bf96b4",
+        "checker_sha256": "689ff5d20a34f710d87834e12619c3d0898444b656c07b935ac9c81ffde6263a",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 5.025072607008042,
+        "reference": "Pinned ordinary stable formulas and captured replay policy; FP32 discrepancy includes normal rounding/compression, reported separately",
+        "all_finite": true,
+        "max_relative_export_error": 0.002422868331662967,
+        "max_error_to_method_change": 0.0067999285888051654,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.34.attn.qkv_proj.weight",
+            "component": 2,
+            "local_mode": "slerp",
+            "model_scale": 1.0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 1.5145299434661865,
+            "relative_export_error": 0.002422868331662967,
+            "relative_normal_storage_rounding_error": 0.001658634879023657,
+            "relative_error_after_storage_rounding": 0.00286874968466578,
+            "relative_method_change": 0.2628289978274958,
+            "error_to_method_change": 0.0067999285888051654,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.49.mlp.fc1.weight",
+            "component": 0,
+            "local_mode": "slerp",
+            "model_scale": 1.0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 2.6341800689697266,
+            "relative_export_error": 0.002409751401982359,
+            "relative_normal_storage_rounding_error": 0.0016586341684751993,
+            "relative_error_after_storage_rounding": 0.0028556625637313694,
+            "relative_method_change": 0.2815021785205319,
+            "error_to_method_change": 0.006153471161465424,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.34.attn.qkv_proj.weight",
+            "component": 1,
+            "local_mode": "slerp",
+            "model_scale": 1.0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 1.7977503538131714,
+            "relative_export_error": 0.002401300361977751,
+            "relative_normal_storage_rounding_error": 0.0016589320292420943,
+            "relative_error_after_storage_rounding": 0.0028456434788004343,
+            "relative_method_change": 0.27808945632488413,
+            "error_to_method_change": 0.006236814938129763,
+            "finite": true
+          }
+        ],
+        "source_sha256": "a2a73897cc2e2f590931b7bb5917a2bb7ed0b4278548577618fd1f6ed0d69f21",
+        "max_relative_normal_storage_rounding_error": 0.0016591974432560636,
+        "max_relative_error_after_storage_rounding": 0.00286874968466578
+      }
+    },
+    "sully_combat:np_lora": {
+      "run": "idm-sully-combat-np-01",
+      "manifest_sha256": "39d481dac9fa4db2105cfa0a98881eb4950f699d539286daa7d689499cab8763",
+      "production_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "np_lora",
+        "export_metadata_mode": "np_lora",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "39d481dac9fa4db2105cfa0a98881eb4950f699d539286daa7d689499cab8763",
+        "export_sha256": "0a118b1d88521e03f5ea05f2c715519b2b1f6c881acc5b6c6c3740709033dbcf",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 4.328444157988997,
+        "all_finite": true,
+        "max_relative_export_error": 5.353157534193888e-07,
+        "max_error_to_method_change": 1.1854758563014068e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.30.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 11.503067016601562,
+            "relative_export_error": 5.353157534193888e-07,
+            "relative_method_change": 0.18258865671894758,
+            "error_to_method_change": 2.67572969635709e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.40.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 11.078265190124512,
+            "relative_export_error": 5.202775030381817e-07,
+            "relative_method_change": 0.1901087300511225,
+            "error_to_method_change": 2.474402115006361e-06,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.29.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 12.030560493469238,
+            "relative_export_error": 5.015918382544127e-07,
+            "relative_method_change": 0.20634623400457958,
+            "error_to_method_change": 2.1569027512328345e-06,
+            "finite": true
+          }
+        ],
+        "source_sha256": "a29e14e8e39d5a354d7e03ba07a32471cf25892becbac1874f71056b29d19624"
+      }
+    },
+    "sully_combat:ct_merge": {
+      "run": "idm-sully-combat-ct-01",
+      "manifest_sha256": "ad79fb2630b07045f39eacd64f59646e17661c0a89832c2a3a306e129b32a209",
+      "production_sha256": {
+        "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "numerical": {
+        "mode": "ct_merge",
+        "export_metadata_mode": "ct_merge",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "ad79fb2630b07045f39eacd64f59646e17661c0a89832c2a3a306e129b32a209",
+        "export_sha256": "aef3762116c469de37fe1e457e1159de2dbad5ba3136dae7483cac26e52e1ad5",
+        "checker_sha256": "60415e7f0175662473f463820816df5aaeb1eb37e47ac15db4fc95876bbcb6db",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "elapsed_seconds": 6.615274745010538,
+        "all_finite": true,
+        "max_relative_export_error": 7.985942602731646e-05,
+        "max_error_to_method_change": 6.19284746291843e-05,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.32.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 13.338160514831543,
+            "relative_export_error": 7.985942602731646e-05,
+            "relative_method_change": 1.1620143939030796,
+            "error_to_method_change": 6.19284746291843e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.29.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 12.336353302001953,
+            "relative_export_error": 7.978034562652138e-05,
+            "relative_method_change": 1.1825817726589745,
+            "error_to_method_change": 6.138218168217046e-05,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.1.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "norm": 7.568124294281006,
+            "relative_export_error": 6.049998220794542e-05,
+            "relative_method_change": 1.1965109195300452,
+            "error_to_method_change": 4.617486921464163e-05,
+            "finite": true
+          }
+        ],
+        "source_sha256": "a4b9e070a2df3d4667817956ea06beb35ff828be43ea60cbe37df6bad2b2096b"
+      }
+    }
+  },
+  "prompt_text": {
+    "series30_cinema_calibration": "integrated_multimodal_description: [Shot 1] ASTROCINEMAV01K2T. Live-action, a medium close-up of ai30, a fictional adult Japanese woman in her thirties with long straight black hair, wearing an opaque white collared blouse, seated beside a rain-streaked cafe window. The full head and both shoulders remain visible. The subject begins facing the camera, slowly turns the head toward the window into a three-quarter view, then faces the camera again with a small closed-mouth smile. One continuous static shot at normal speed. Warm light from a shaded table lamp and cool window fill reveal face and clothing texture. No speech, text or subtitles.\n\noverall_soundscape: Steady gentle rain against the window, quiet cafe ambience and faint clothing movement. No voices or impacts.\n\nnon_diegetic_music: N/A",
+    "series30_cinema_heldout": "integrated_multimodal_description: [Shot 1] ASTROCINEMAV01K2T. Live-action, a medium close-up of ai30, a fictional adult Japanese woman in her thirties with long straight black hair, wearing an opaque white collared blouse, seated at a wooden table in a quiet library. The full head and both shoulders remain visible. The subject begins looking down at a closed blue book, slowly lifts the gaze toward the camera and gives a small closed-mouth smile, then rests one hand flat on the book. One continuous static shot at normal speed. A warm shaded reading lamp and cool window fill reveal face, clothing and paper texture. No speech, text or subtitles.\n\noverall_soundscape: Low steady room ambience, faint clothing rustle and a soft hand contact with the book. No voices or other impacts.\n\nnon_diegetic_music: N/A",
+    "sully_combat_calibration": "integrated_multimodal_description: [Shot 1] 3D CG, a waist-up three-quarter view of h3sully, an adult male monster with thick green and purple fur, two short curved horns, a broad nose and expressive eyes, wearing a loose opaque navy training vest and red boxing gloves, beside a suspended heavy punching bag in an empty gym. The head remains in frame and the bag does not hide the face. At normal real-time speed the subject throws two distinct straight punches into the bag, returns both gloves to guard after each punch, then lowers the gloves and becomes still. The bag swings away from each impact and back. No injuries or blood. One continuous stationary shot with warm overhead lamps and cool window fill. No speech, text or subtitles.\n\noverall_soundscape: Two distinct dull impacts at glove contact, light chain rattling, clothing movement and quiet gym ambience. No voices.\n\nnon_diegetic_music: N/A",
+    "sully_combat_heldout": "integrated_multimodal_description: [Shot 1] 3D CG, a waist-up three-quarter view of h3sully, an adult male monster with thick green and purple fur, two short curved horns, a broad nose and expressive eyes, wearing a loose opaque navy training vest and red boxing gloves, beside a suspended heavy punching bag in a plain training room lit by a broad side window. The head remains in frame and the bag does not hide the face. At normal real-time speed the subject delivers one left jab to the bag, returns the left glove to guard, then delivers one right straight punch, returns the right glove to guard and lowers both gloves. The bag swings away from each contact and gradually settles. No injuries or blood. One continuous stationary shot. No speech, text or subtitles.\n\noverall_soundscape: One short padded thump at each of the two glove contacts, light chain rattling, clothing movement and low room ambience. No voices.\n\nnon_diegetic_music: N/A"
+  },
+  "jobs": [
+    {
+      "id": "idm-sully-combat-2026090831-character-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "sully"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-ties",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "series30_cinema:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-np-lora",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "sully_combat:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-ct-merge",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "sully_combat:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-base",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-base",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-sully-combat-2026090831-stable-tuner-winner",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "sully_combat:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-ties",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "sully_combat:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-additive",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "series30_cinema:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-stable-tuner-winner",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "series30_cinema:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-effect-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "combat"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-slerp",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "sully_combat:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-additive",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "sully_combat:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-np-lora",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "series30_cinema:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-character-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "series30"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-ct-merge",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "series30_cinema:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-effect-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "cinema"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-slerp",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "series30_cinema:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-ties",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "series30_cinema:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-np-lora",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "series30_cinema:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-effect-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "combat"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-character-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "series30"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-ct-merge",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "series30_cinema:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-additive",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "sully_combat:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-slerp",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "sully_combat:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-effect-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "cinema"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-ties",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "sully_combat:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-stable-tuner-winner",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "series30_cinema:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-stable-tuner-winner",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "sully_combat:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-slerp",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "series30_cinema:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-additive",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "series30_cinema:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-character-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "sully"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-np-lora",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "sully_combat:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-base",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-sully-combat-2026090832-base",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-sully-combat-2026090832-ct-merge",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "sully_combat:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-slerp",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "slerp",
+      "asset_keys": [
+        "sully_combat:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-ties",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "ties",
+      "asset_keys": [
+        "sully_combat:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-effect-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "effect_only",
+      "asset_keys": [
+        "combat"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-character-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "character_only",
+      "asset_keys": [
+        "series30"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-stable-tuner-winner",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "sully_combat:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-np-lora",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "np_lora",
+      "asset_keys": [
+        "series30_cinema:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-character-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "character_only",
+      "asset_keys": [
+        "sully"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-additive",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "additive",
+      "asset_keys": [
+        "series30_cinema:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-np-lora",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "np_lora",
+      "asset_keys": [
+        "sully_combat:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-ties",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "ties",
+      "asset_keys": [
+        "series30_cinema:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-ct-merge",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "series30_cinema:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-additive",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "additive",
+      "asset_keys": [
+        "sully_combat:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-stable-tuner-winner",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "series30_cinema:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-slerp",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "slerp",
+      "asset_keys": [
+        "series30_cinema:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-ct-merge",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "sully_combat:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-base",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-series30-cinema-2026090841-effect-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "series30_cinema_heldout",
+      "variant": "effect_only",
+      "asset_keys": [
+        "cinema"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090841-base",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090841,
+      "prompt": "sully_combat_heldout",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-sully-combat-2026090842-np-lora",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "np_lora",
+      "asset_keys": [
+        "sully_combat:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-ties",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "ties",
+      "asset_keys": [
+        "sully_combat:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-ct-merge",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "sully_combat:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-stable-tuner-winner",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "sully_combat:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-effect-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "effect_only",
+      "asset_keys": [
+        "combat"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-np-lora",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "np_lora",
+      "asset_keys": [
+        "series30_cinema:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-character-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "character_only",
+      "asset_keys": [
+        "sully"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-character-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "character_only",
+      "asset_keys": [
+        "series30"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-additive",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "additive",
+      "asset_keys": [
+        "sully_combat:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-stable-tuner-winner",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "series30_cinema:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-base",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-effect-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "effect_only",
+      "asset_keys": [
+        "cinema"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-base",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-ties",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "ties",
+      "asset_keys": [
+        "series30_cinema:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090842-slerp",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "sully_combat_heldout",
+      "variant": "slerp",
+      "asset_keys": [
+        "sully_combat:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-additive",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "additive",
+      "asset_keys": [
+        "series30_cinema:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-ct-merge",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "series30_cinema:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090842-slerp",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "heldout",
+      "seed": 2026090842,
+      "prompt": "series30_cinema_heldout",
+      "variant": "slerp",
+      "asset_keys": [
+        "series30_cinema:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "pair": "sully_combat",
+      "variant": "character_only",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-character-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ties",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-ties"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "np_lora",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-np-lora"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ct_merge",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-ct-merge"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-base"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-base"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "stable_tuner_winner",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-stable-tuner-winner"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ties",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-ties"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-additive"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "stable_tuner_winner",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-stable-tuner-winner"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "effect_only",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-effect-only"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "slerp",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-slerp"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-sully-combat-2026090831-additive"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "np_lora",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-np-lora"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "character_only",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-character-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ct_merge",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-ct-merge"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "effect_only",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-effect-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "slerp",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090831,
+      "job_id": "idm-series30-cinema-2026090831-slerp"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ties",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-ties"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "np_lora",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-np-lora"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "effect_only",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-effect-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "character_only",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-character-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ct_merge",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-ct-merge"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-additive"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "slerp",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-slerp"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "effect_only",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-effect-only"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ties",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-ties"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "stable_tuner_winner",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-stable-tuner-winner"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "stable_tuner_winner",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-stable-tuner-winner"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "slerp",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-slerp"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-additive"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "character_only",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-character-only"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "np_lora",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-np-lora"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "series30_cinema_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-series30-cinema-2026090832-base"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-base"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ct_merge",
+      "stage": "calibration",
+      "prompt": "sully_combat_calibration",
+      "seed": 2026090832,
+      "job_id": "idm-sully-combat-2026090832-ct-merge"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "slerp",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-slerp"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ties",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-ties"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "effect_only",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-effect-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "character_only",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-character-only"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "stable_tuner_winner",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-stable-tuner-winner"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "np_lora",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-np-lora"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "character_only",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-character-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-additive"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "np_lora",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-np-lora"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ties",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-ties"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ct_merge",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-ct-merge"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-additive"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "stable_tuner_winner",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-stable-tuner-winner"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "slerp",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-slerp"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ct_merge",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-ct-merge"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-base"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "effect_only",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-series30-cinema-2026090841-effect-only"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090841,
+      "job_id": "idm-sully-combat-2026090841-base"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "np_lora",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-np-lora"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ties",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-ties"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "ct_merge",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-ct-merge"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "stable_tuner_winner",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-stable-tuner-winner"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "effect_only",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-effect-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "np_lora",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-np-lora"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "character_only",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-character-only"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "character_only",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-character-only"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-additive"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "stable_tuner_winner",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-stable-tuner-winner"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-base"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "effect_only",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-effect-only"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-base"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ties",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-ties"
+    },
+    {
+      "pair": "sully_combat",
+      "variant": "slerp",
+      "stage": "heldout",
+      "prompt": "sully_combat_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-sully-combat-2026090842-slerp"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-additive"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "ct_merge",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-ct-merge"
+    },
+    {
+      "pair": "series30_cinema",
+      "variant": "slerp",
+      "stage": "heldout",
+      "prompt": "series30_cinema_heldout",
+      "seed": 2026090842,
+      "job_id": "idm-series30-cinema-2026090842-slerp"
+    }
+  ],
+  "harness_sha256": {
+    "h3_character_benchmark.py": "69f75f3de7a3ae679e103a85bdcce4d78f7a40507d8e62fba433ab589111d26f",
+    "h3_render_study.py": "63706885f6a69675cd3fba72653b78402a0a52072b069efef7aa3af1479f400b",
+    "h3_identity_study.py": "41882e86d6650a8efe463e6baf4ee927a922de6d2ffa553f2a35c030429178e4",
+    "h3_benchmark.py": "013e8104e295c2bf2eb9593dee8e14fb4a19d33754bd02794ef708aa77ae3578"
+  },
+  "scope": "72 executable jobs for two diagonal pairs; first batch is only 18 calibration seed-31 clips. Other two pairs remain required by the full protocol.",
+  "numerical_review": "Normal SLERP is an implementation baseline, not a lossless FP32 oracle; retain its documented BF16 rounding/compression. TIES preserves normal storage rounding. No tolerance is a perceptual quality threshold.",
+  "evaluation_policy": {
+    "identity": "Use creator references as qualitative identity anchors and matched character-only clips to isolate merge-induced change. Inspect foreground/face details across multiple visible poses, not whole-frame pixel similarity.",
+    "effect": "Score intended style or exact action success separately. Identity-only preservation cannot win by discarding the effect adapter.",
+    "visibility": "Report occluded, absent, out-of-frame and low-resolution subjects, with evaluable coverage. Do not silently drop missing subjects or mirror opposite turns to raise similarity.",
+    "temporal_audio": "Keep temporal consistency, sound plausibility and event timing separate. Waveform energy is not a sound label; sparse frames are not full-motion review.",
+    "metrics": "No validated automatic identity/AV score is implemented yet. Any future evaluator needs calibration against the available controls and must be frozen before held-out inspection.",
+    "split_limits": "Both characters were already visually qualified. Held-out here means unseen prompt/seed outputs, not unseen identities. Do not fit ranking to held-out outputs.",
+    "reporting": "Keep missing labels, failures, ties and per-dimension tradeoffs explicit; do not fabricate human preferences or turn tensor statistics into AV quality labels."
+  },
+  "quality_labels": []
+}

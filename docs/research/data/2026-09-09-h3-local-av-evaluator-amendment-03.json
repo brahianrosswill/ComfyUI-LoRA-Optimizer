@@ -1,0 +1,11 @@
+{
+  "version": 3,
+  "stage": "calibration_only_loader_and_modality_diagnostic",
+  "parent_policy_sha256": "01c605ecc59713d90d856f4e1d5619402e6d4ce83d91bc8821f6ba31ccca241b",
+  "evidence": "The official generation_config.json has no EOS token. In installed Transformers 4.57.6, from_pretrained replaces the thinker-config-derived generation settings with that file. Local checks: file EOS null; thinker config and tokenizer EOS 151645; tokenizer pad 151643. Smoke02 continued beyond a JSON fence into invented Human/Assistant dialogue and reached the token cap.",
+  "correction": "Pass the tokenizer's verified EOS and pad IDs explicitly; record the resolved generation token IDs and generated token IDs. This addresses missing stopping, not proof of perceptual understanding or a complete explanation of all repetition.",
+  "diagnostic": "On the previously rated Combat-only calibration source, request a short unstructured description of audible sounds. Compare audio-only and audiovisual input, each with original and exactly zero audio, then repeat the audiovisual original and muted cases in fresh conversations.",
+  "prompt_exclusions": "No target boxing/sound description, expected answer, human scores, merge names or file names sent to the model.",
+  "diagnostic_generation": {"do_sample": false, "max_new_tokens": 192, "repetition_penalty": 1.1},
+  "interpretation": "A modality-path diagnostic only; no six-dimensional rating, AV quality ranking or held-out acceptance. Preserve both failed structured smoke runs and their exact runner sources."
+}

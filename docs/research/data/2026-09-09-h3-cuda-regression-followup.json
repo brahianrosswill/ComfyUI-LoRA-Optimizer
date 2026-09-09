@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "scope": "Exactly the three CUDA-only regressions skipped by the earlier sandboxed full suite; synthetic inputs, not a whole-model H3 quality test.",
+  "environment": "/media/p5/miniforge3/envs/13_env_py313",
+  "torch_version": "2.11.0+cu130",
+  "device": "NVIDIA GeForce RTX 5090",
+  "command": "/media/p5/miniforge3/envs/13_env_py313/bin/python -m pytest tests/test_inline_optimizer.py tests/test_lora_optimizer.py -k 'test_gpu_expand_on_device_matches_cpu or test_zimage_qkv_deferral_mechanics or test_zimage_qkv_deferral_end_to_end' -q -rs",
+  "result": {
+    "chunk_id": "21b46c",
+    "wall_time_seconds": 0.00000186,
+    "exit_code": 0,
+    "original_token_count": 208,
+    "output": "{\"device\": \"NVIDIA GeForce RTX 5090\", \"torch\": \"2.11.0+cu130\", \"queue\": {\"queue_running\": [], \"queue_pending\": []}}\n...                                                                      [100%]\n=============================== warnings summary ===============================\n../miniforge3/envs/13_env_py313/lib/python3.13/site-packages/torch/cuda/__init__.py:61\n  /media/p5/miniforge3/envs/13_env_py313/lib/python3.13/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.\n    import pynvml  # type: ignore[import]\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n3 passed, 550 deselected, 1 warning in 3.78s\n"
+  },
+  "passed": 3,
+  "skipped": 0,
+  "deselected": 550,
+  "source_sha256": {
+    "lora_optimizer.py": "44695e780a8bb8e67d206827ce4a561fd66b0a710fe89ed63026b521753c7461",
+    "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4",
+    "tests/test_inline_optimizer.py": "86e619004689b35cb5a27932421f66a2edbe3a3ef1873f0760c816f202801b5a",
+    "tests/test_lora_optimizer.py": "c6355b09e0a390d91ac29b2aa868067a21ef13c6ba4e3f792f39f27dd019e309"
+  },
+  "checked_at_utc": "2026-09-09 08:54:37 UTC",
+  "queue_before": {
+    "queue_running": [],
+    "queue_pending": []
+  },
+  "queue_after": {
+    "queue_running": [],
+    "queue_pending": []
+  },
+  "production_changed": false,
+  "comfyui_mutated": false,
+  "release_actions": false
+}

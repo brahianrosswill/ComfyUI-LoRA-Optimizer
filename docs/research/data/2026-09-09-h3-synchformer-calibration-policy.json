@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "stage": "prospective_rated_calibration_only",
+  "parent_policy": "docs/research/data/2026-09-09-h3-synchformer-policy.json",
+  "parent_policy_sha256": "f727d974d1f10f0cf58fcb8a6cbe60e21066e7920e3ff091fd10244a9fe3098b",
+  "control_audit_sha256": "29c5f0370f2b1b079c0d63fdde97d507f1e39f459562bde13a45aa62004139ee",
+  "justification": "Nine frozen cases passed delay direction, near-zero probability reduction and repeats. Independent CPU reconstruction reproduced all nine actual AV tensors. This allows wider already-rated calibration only, not held-out evaluation.",
+  "known_limitation_before_this_run": "Both original controls have modal offset zero and near-zero mass over 0.998, despite R1 synchronization ratings of 4 for Combat-only versus 1 and 2 for the repeated base. Detecting a gross imposed shift does not establish preference-ranking validity.",
+  "scope": "All 12 unique already-rated seed2026090803 clips in the existing calibration manifest; one original-only inference per clip, in A01..A12 order. Retain all 14 R1 entries and shared-control disagreement separately. No seed04/11/12 clips.",
+  "manifest_sha256": "a51212a23027089f5958b69a80418d510f029d4f5f2328064fcc95905dcfc967",
+  "human_ratings_sha256": "bfce769c991340b9f081ff61148c0025354968c2c6b934e73c527af07f46e0aa",
+  "profile": "Exactly the parent checkpoint, decode mapping, fixed center crop, first-five-second deterministic segments, precision and silence guard. No spatial/temporal search, offset shifting, augmentations, new thresholds, or model selection.",
+  "measurement": "Primary: probability mass in the three classes [-0.2,0,+0.2] seconds. Secondary: negative absolute modal offset. Do not map either to a 0..4 human score or a general AV preference.",
+  "comparison": "Within each original seven-entry pairing, enumerate all 21 unordered comparisons, keeping all human ties, model ties, discordances and missing values. Compare only synchronization ratings. On human-untied pairs, report concordant/discordant/model-tied counts and optional (concordant + 0.5 * model-tied) / eligible as a descriptive fraction, never significance or a population estimate. Do not pool shared clips as independent observations.",
+  "admission": "Report whether natural merge differences agree with R1, including contrary evidence. No automatic quality qualification, ranker fitting, weight/default change or held-out admission from this run alone. Do not assume a passing synthetic-delay test proves natural synchronization ranking.",
+  "stop_rule": "One complete twelve-clip original-only sweep. Do not rerun or tune to resolve disagreement. Preserve integration failures; only justified mechanical fixes may resume with new recorded run IDs.",
+  "privacy": "Local/offline inference only. Model sees no human labels, notes, merge names or paths. Existing ComfyUI queue guard and 20 GiB free-memory guard remain in force.",
+  "goal_complete": false
+}

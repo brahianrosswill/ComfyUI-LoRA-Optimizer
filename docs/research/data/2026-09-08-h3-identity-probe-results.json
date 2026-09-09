@@ -1,0 +1,908 @@
+{
+  "plan_sha256": "91403be30759ae3f446245e454208f323f806e70b455335d937116105b9ea30d",
+  "runner_sha256": "7a3e9e5f4523a333b2ec77d8ba302f3cf513e576b99f8d4408abc083a2bc1653",
+  "model_sha256": "fe0e601c625e69eed8e73500d39e9b6164403fe03db8048e87913c3cefbbb3fe",
+  "torch_version": "2.11.0+cu130",
+  "transformers_version": "5.16.1",
+  "device": "cpu",
+  "threads": 4,
+  "elapsed_scoring_seconds": 106.98201083400636,
+  "source_frame_count": 2,
+  "output_frame_count": 96,
+  "results": [
+    {
+      "job": {
+        "id": "idq-sully-source-2026090821-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "73352532dac5eaf10409e8b8534119841afd8d262979108d1fe6636202a90fe0",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6728558540344238,
+          "global_cosine": 0.8306633234024048
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6536352038383484,
+          "global_cosine": 0.7615125775337219
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.652206301689148,
+          "global_cosine": 0.7556563019752502
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6509877443313599,
+          "global_cosine": 0.7682142853736877
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6424990296363831,
+          "global_cosine": 0.7357017397880554
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6370524764060974,
+          "global_cosine": 0.7277096509933472
+        }
+      ],
+      "median_head_maxcos": 0.6515970230102539,
+      "min_head_maxcos": 0.6370524764060974,
+      "median_global_cosine": 0.7585844397544861
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090821-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "3b430253722266fa8163b9464229209e34f0730f851550db5ce9e9d670d607d7",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.7543147206306458,
+          "global_cosine": 0.8368806838989258
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.7602469325065613,
+          "global_cosine": 0.8469680547714233
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.7667943835258484,
+          "global_cosine": 0.8421107530593872
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.7489200234413147,
+          "global_cosine": 0.8358896970748901
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.7569395899772644,
+          "global_cosine": 0.8483537435531616
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.7567978501319885,
+          "global_cosine": 0.8331698179244995
+        }
+      ],
+      "median_head_maxcos": 0.7568687200546265,
+      "min_head_maxcos": 0.7489200234413147,
+      "median_global_cosine": 0.8394957184791565
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090821-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "video_sha256": "78285ffa6e1013403d0b9def1f024d80ecd3d5675a07053cac683903c4aef6de",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8568538427352905,
+          "global_cosine": 0.9307795763015747
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8665832281112671,
+          "global_cosine": 0.9257012009620667
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8605421781539917,
+          "global_cosine": 0.9175916910171509
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8541458249092102,
+          "global_cosine": 0.9154921174049377
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.861395537853241,
+          "global_cosine": 0.9267100691795349
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8586860299110413,
+          "global_cosine": 0.9230950474739075
+        }
+      ],
+      "median_head_maxcos": 0.8596141040325165,
+      "min_head_maxcos": 0.8541458249092102,
+      "median_global_cosine": 0.9243981242179871
+    },
+    {
+      "job": {
+        "id": "idq-sully-source-2026090821-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "87b1fc001c733fe36b80aae5110d4b9e9af5bf650810ef0969717635f8452d20",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.7343630790710449,
+          "global_cosine": 0.8495506644248962
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.7226739525794983,
+          "global_cosine": 0.8274259567260742
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.7173615097999573,
+          "global_cosine": 0.8115911483764648
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.7182722687721252,
+          "global_cosine": 0.815639853477478
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.7016923427581787,
+          "global_cosine": 0.8018791675567627
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.7015513777732849,
+          "global_cosine": 0.7743239998817444
+        }
+      ],
+      "median_head_maxcos": 0.7178168892860413,
+      "min_head_maxcos": 0.7015513777732849,
+      "median_global_cosine": 0.8136155009269714
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090821-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "d55111de65783486fc61f020e17e4987ee51b2e6f6cd1eb6f72877b96b45ab59",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.675007700920105,
+          "global_cosine": 0.7914794683456421
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6768230199813843,
+          "global_cosine": 0.7755879163742065
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.681607186794281,
+          "global_cosine": 0.7708474397659302
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6811415553092957,
+          "global_cosine": 0.7841513752937317
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6787062883377075,
+          "global_cosine": 0.7881352305412292
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6797625422477722,
+          "global_cosine": 0.7670260667800903
+        }
+      ],
+      "median_head_maxcos": 0.6792344152927399,
+      "min_head_maxcos": 0.675007700920105,
+      "median_global_cosine": 0.7798696458339691
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090821-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "7b56b58c333299643e7cf18580fad27a4dec710db9d4903d2b305ec6329efefa",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8402724862098694,
+          "global_cosine": 0.9229454398155212
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8281053304672241,
+          "global_cosine": 0.9156649708747864
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.7828575372695923,
+          "global_cosine": 0.8707057237625122
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8035963773727417,
+          "global_cosine": 0.8817717432975769
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8455325961112976,
+          "global_cosine": 0.9114190936088562
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8445122838020325,
+          "global_cosine": 0.9054992198944092
+        }
+      ],
+      "median_head_maxcos": 0.8341889083385468,
+      "min_head_maxcos": 0.7828575372695923,
+      "median_global_cosine": 0.9084591567516327
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090821-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "video_sha256": "eb1376c8c0a23e194d9bc916c2aefc49dc8b4ce4380bddc8d4748554c6fc0431",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8514297008514404,
+          "global_cosine": 0.9224274158477783
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8460664749145508,
+          "global_cosine": 0.9182772040367126
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8151354193687439,
+          "global_cosine": 0.8913170695304871
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8408704400062561,
+          "global_cosine": 0.8955667018890381
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8696445822715759,
+          "global_cosine": 0.918666660785675
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8659758567810059,
+          "global_cosine": 0.920096755027771
+        }
+      ],
+      "median_head_maxcos": 0.8487480878829956,
+      "min_head_maxcos": 0.8151354193687439,
+      "median_global_cosine": 0.9184719324111938
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090821-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "869209ea70fa41b6dc3b734b54fd3a49be5876305f02c976e6408f268a3781ec",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.594842255115509,
+          "global_cosine": 0.759446382522583
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.5931738018989563,
+          "global_cosine": 0.7337262034416199
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.5956906676292419,
+          "global_cosine": 0.718712568283081
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.5954124331474304,
+          "global_cosine": 0.718339741230011
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6032930612564087,
+          "global_cosine": 0.7203493714332581
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.5981089472770691,
+          "global_cosine": 0.7148672938346863
+        }
+      ],
+      "median_head_maxcos": 0.5955515503883362,
+      "min_head_maxcos": 0.5931738018989563,
+      "median_global_cosine": 0.7195309698581696
+    },
+    {
+      "job": {
+        "id": "idq-sully-source-2026090822-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "a2b810e20cced71a3836f49269d64a85372ef24ce8fced3a4d0c965de42dbbf5",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6729550361633301,
+          "global_cosine": 0.797450840473175
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6611886620521545,
+          "global_cosine": 0.7867814898490906
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6599105000495911,
+          "global_cosine": 0.7762488126754761
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6550391316413879,
+          "global_cosine": 0.7798622250556946
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6471218466758728,
+          "global_cosine": 0.7651616334915161
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.637802004814148,
+          "global_cosine": 0.7516953945159912
+        }
+      ],
+      "median_head_maxcos": 0.6574748158454895,
+      "min_head_maxcos": 0.637802004814148,
+      "median_global_cosine": 0.7780555188655853
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090822-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "video_sha256": "5cdf12523a7ec49ff131e70c1e310d7985dc04bafe014dd887551a1ce535b470",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8709014058113098,
+          "global_cosine": 0.9338003993034363
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8830237984657288,
+          "global_cosine": 0.9298058152198792
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8819448947906494,
+          "global_cosine": 0.9246907234191895
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8851026892662048,
+          "global_cosine": 0.9279556274414062
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8855047225952148,
+          "global_cosine": 0.93000727891922
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8775824904441833,
+          "global_cosine": 0.9240885972976685
+        }
+      ],
+      "median_head_maxcos": 0.8824843466281891,
+      "min_head_maxcos": 0.8709014058113098,
+      "median_global_cosine": 0.9288807213306427
+    },
+    {
+      "job": {
+        "id": "idq-sully-source-2026090822-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "351faf2aae83469bc13cfb4f61eb17f9370b655743b266a7059bdad9b8c211b1",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.7522240877151489,
+          "global_cosine": 0.9144068360328674
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.7208875417709351,
+          "global_cosine": 0.8319550156593323
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.7210622429847717,
+          "global_cosine": 0.8244174718856812
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.717540442943573,
+          "global_cosine": 0.8181233406066895
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.712807834148407,
+          "global_cosine": 0.8159558176994324
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.7097423076629639,
+          "global_cosine": 0.8098003268241882
+        }
+      ],
+      "median_head_maxcos": 0.719213992357254,
+      "min_head_maxcos": 0.7097423076629639,
+      "median_global_cosine": 0.8212704062461853
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090822-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "06a6f9bf64f5f4dce0473d8b70985b3a6362b3698e69b6185586f40822f2e474",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.7945666909217834,
+          "global_cosine": 0.8685802221298218
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8113957047462463,
+          "global_cosine": 0.8957443833351135
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.799249529838562,
+          "global_cosine": 0.8846105337142944
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8146601319313049,
+          "global_cosine": 0.8825358748435974
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8150125741958618,
+          "global_cosine": 0.889090895652771
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.805212140083313,
+          "global_cosine": 0.8822596669197083
+        }
+      ],
+      "median_head_maxcos": 0.8083039224147797,
+      "min_head_maxcos": 0.7945666909217834,
+      "median_global_cosine": 0.8835732042789459
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090822-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "video_sha256": "0f66e5be9b60de37ddfd86d03250c12acfeeb8b7a35010304408f51c473d64ee",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.702806293964386,
+          "global_cosine": 0.8090187907218933
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.696996808052063,
+          "global_cosine": 0.7904191613197327
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.702153742313385,
+          "global_cosine": 0.8053216338157654
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6986147165298462,
+          "global_cosine": 0.8095406889915466
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.698472797870636,
+          "global_cosine": 0.7947303652763367
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6989086866378784,
+          "global_cosine": 0.7995502352714539
+        }
+      ],
+      "median_head_maxcos": 0.6987617015838623,
+      "min_head_maxcos": 0.696996808052063,
+      "median_global_cosine": 0.8024359345436096
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090822-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "55a52dd9f3998d3eb8ac5734c377b0aab3ca642caead282131d8cd02419fc59f",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8446223735809326,
+          "global_cosine": 0.9119864702224731
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8270951509475708,
+          "global_cosine": 0.898478627204895
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.8227547407150269,
+          "global_cosine": 0.9057457447052002
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.845892608165741,
+          "global_cosine": 0.9157921671867371
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.8448256254196167,
+          "global_cosine": 0.9028617739677429
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8476570248603821,
+          "global_cosine": 0.9002976417541504
+        }
+      ],
+      "median_head_maxcos": 0.8447239995002747,
+      "min_head_maxcos": 0.8227547407150269,
+      "median_global_cosine": 0.9043037593364716
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090822-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "video_sha256": "51025f43c600c01c3786bfb1e43e13ba3576d5d469d9f52f0bed578f8d1db1bb",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.8740625381469727,
+          "global_cosine": 0.9137121438980103
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.8205092549324036,
+          "global_cosine": 0.8813323974609375
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.7957847714424133,
+          "global_cosine": 0.8704846501350403
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.8457524180412292,
+          "global_cosine": 0.8971907496452332
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.88199782371521,
+          "global_cosine": 0.9140410423278809
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.8811277747154236,
+          "global_cosine": 0.9113844037055969
+        }
+      ],
+      "median_head_maxcos": 0.859907478094101,
+      "min_head_maxcos": 0.7957847714424133,
+      "median_global_cosine": 0.904287576675415
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090822-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "video_sha256": "e175c1597d72876e67ffdde46b2d30e0c58007c39419c5313d6e085ca111a144",
+      "frames": [
+        {
+          "frame": 0,
+          "time_seconds": 0.0,
+          "reference_head_maxcos": 0.6365014314651489,
+          "global_cosine": 0.7706153392791748
+        },
+        {
+          "frame": 24,
+          "time_seconds": 1.0,
+          "reference_head_maxcos": 0.6359621286392212,
+          "global_cosine": 0.7328807711601257
+        },
+        {
+          "frame": 48,
+          "time_seconds": 2.0,
+          "reference_head_maxcos": 0.6263677477836609,
+          "global_cosine": 0.7406470775604248
+        },
+        {
+          "frame": 72,
+          "time_seconds": 3.0,
+          "reference_head_maxcos": 0.6276453137397766,
+          "global_cosine": 0.7422581315040588
+        },
+        {
+          "frame": 96,
+          "time_seconds": 4.0,
+          "reference_head_maxcos": 0.6328060030937195,
+          "global_cosine": 0.721651554107666
+        },
+        {
+          "frame": 120,
+          "time_seconds": 5.0,
+          "reference_head_maxcos": 0.6290948987007141,
+          "global_cosine": 0.7173020243644714
+        }
+      ],
+      "median_head_maxcos": 0.6309504508972168,
+      "min_head_maxcos": 0.6263677477836609,
+      "median_global_cosine": 0.7367639243602753
+    }
+  ],
+  "quality_labels": [],
+  "preference_model_changed": false,
+  "limitations": "Not MaSC, not face recognition, not an identity probability. Similarity may reflect species, hair, pose or lighting; visibility and effect must be separately reviewed. Do not discard low-scoring frames.",
+  "not_masc": true,
+  "visibility_judged": false,
+  "audio_listened": false
+}

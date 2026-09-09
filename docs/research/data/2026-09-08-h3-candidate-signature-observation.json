@@ -1,0 +1,34 @@
+{
+  "finding": "Unused sign-voting parameters prevent candidate/group-cache deduplication",
+  "status": "reproduced; not fixed in the frozen benchmark implementation",
+  "production_sha256": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+  "fixture_sha256": "c6355b09e0a390d91ac29b2aa868067a21ef13c6ba4e3f792f39f27dd019e309",
+  "recorded_sweeps": [
+    {"pair":"series30_combat","tuner_data_sha256":"e0d0369631222999bf63c53df514adf8332e1280a95cf1b7d6b51666914f9d52","compared_ranks":[2,3],"per_prefix_decisions_identical":true,"metrics_identical":true},
+    {"pair":"sully_cinema","tuner_data_sha256":"9022a1c8aec1154c59adbc397879633923869eeeba948d27576b4686278744f0","compared_ranks":[2,3],"per_prefix_decisions_identical":true,"metrics_identical":true},
+    {"pair":"series30_cinema","tuner_data_sha256":"ed1b2e8baca3b135778b08cde1f7e14fb980a9f5b05c80aa5d1c9898de0aa5bc","compared_ranks":[2,3],"per_prefix_decisions_identical":true,"metrics_identical":true},
+    {"pair":"sully_combat","tuner_data_sha256":"2369ea842aaa2e6bd14de4c42d9d108020aaa8faa512cbc58d26113d36522cef","compared_ranks":[2,3],"per_prefix_decisions_identical":true,"metrics_identical":true}
+  ],
+  "synthetic_cpu_probe": {
+    "input_a": [[1,2],[-3,4]],
+    "input_b": [[2,-1],[4,3]],
+    "weights": [0.8,0.8],
+    "dtype": "float32",
+    "arch_preset": "dit",
+    "strategy_sets": ["no_slerp","basic"],
+    "common_prefix_statistics": {"n_loras":2,"conflict_ratio":0.5,"excess_conflict":0.0,"avg_subspace_overlap":0.01},
+    "statistics_are_synthetic": true,
+    "results": [
+      {"magnitude_ratio":1.0,"avg_cos_sim":0.001,"modes":["weighted_average","weighted_average"],"densities":[0.5,0.5],"sign_methods":["frequency","total"],"dedup_triples_differ":true,"group_cache_keys_differ":true,"merged_tensors_bit_equal":true},
+      {"magnitude_ratio":3.0,"avg_cos_sim":0.001,"modes":["weighted_sum","weighted_sum"],"densities":[0.5,0.5],"sign_methods":["frequency","total"],"dedup_triples_differ":true,"group_cache_keys_differ":true,"merged_tensors_bit_equal":true},
+      {"magnitude_ratio":1.0,"avg_cos_sim":-0.001,"modes":["weighted_average","weighted_average"],"densities":[0.5,0.5],"sign_methods":["frequency","total"],"dedup_triples_differ":true,"group_cache_keys_differ":true,"merged_tensors_bit_equal":true}
+    ],
+    "procedure": "Load tests/test_lora_optimizer.py using importlib.util.spec_from_file_location to provide only Comfy stubs; force _get_compute_device to CPU. Call the actual LoRAOptimizer._decide_prefix_mode for each strategy set and supplied synthetic statistics, with smoothing/full-rank flags false. Compare the first three returned fields used by the actual _strategy_signature. Compare actual _group_merge_cache_key results with refinement none, sparsification disabled, density 0.7, dampening 0 and auto_strength enabled. Call actual _merge_diffs on fresh clones of the two stated tensors at weights 0.8/0.8, supplying each returned mode/density/sign; compare using torch.equal. This is not a native Comfy loader or full-size patch hash comparison."
+  },
+  "cause": "The no_slerp orthogonal early return uses the frequency sign placeholder; basic reaches the ordinary non-TIES total placeholder. Sum and average ignore that parameter, but both candidate signatures and group-cache keys retain it.",
+  "implication": "A top-three sweep can spend two slots on the same effective linear policy. Three candidate configurations must not be described as three distinct merged behaviors for these sweeps.",
+  "limits": "The CPU probe establishes identical tiny-tensor results, and real sweeps establish matching complete captured decisions and metrics. No full-size candidate-2/3 tensor hash comparison or controlled timing saving has been performed. A replacement candidate could change the winner; no quality gain is established.",
+  "next_action": "Prototype canonical keys that ignore only mathematically inactive parameters, initially behind an explicit experiment so disconnected behavior and frozen controls stay unchanged. Retain real TIES voting/density, sparsification, refinement and strength distinctions; regression-test before a new numerical/render study.",
+  "ranking_changed": false,
+  "quality_labels": []
+}

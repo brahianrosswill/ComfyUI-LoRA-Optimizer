@@ -1,0 +1,183 @@
+{
+  "review_id": "028333549187dc0e45a0",
+  "plan_sha256": "110d58a4adeab1dce4c3ef288bc3036c0a1b3ff79a50d862c49818103b9c40c2",
+  "public_manifest_sha256": "65d657655bb5d4309327d08f60e258f79c9c572269615616551ef0678e50551a",
+  "review_directory": ".h3-study-artifacts/20260908/character-crossed-heldout-review-seed42",
+  "heldout_policy_sha256": "40da10ebc71044f09ded4f7761388a367ac145116f45a34ed7088291b99bb760",
+  "observer": "Assistant visual inspection; not human ratings",
+  "stage": "heldout",
+  "seed": 2026090842,
+  "method_key_read_before_record": false,
+  "exposure": "Creator references, qualification/calibration results and all three completed held-out matched blocks are known. This crossed seed-42 private mapping has not been displayed. All eighteen anonymous sparse grids and both creator references were inspected before this record. Prior depictions may be recognizable; this is method-blinded, not independent double-blind human review. No held-out numerical similarity scores computed.",
+  "sampling": "21 chronological 4-fps samples per Cxx-frames.jpg, 320-pixel-wide cells in a 5x5 grid; 378 candidate samples total with four black padding cells per grid. All-124-frame and unchanged-waveform inspection required for every candidate before method unblinding.",
+  "full_video_reviewed": false,
+  "audio_listened": false,
+  "human_ratings": [],
+  "quality_scores": null,
+  "inference_before_unblinding": "Sully C08/C09/C18 retain vest with differing head designs; six others omit it and retain coarse creator-like features. Some books start held tilted above table; others are already on table with hand/edge contact. Several later hand movements need separation from set-down or earlier contact. Combat endings vary between lowered gloves and retained guard; broad activity episodes are not exact punch counts. No method attribution, sound judgment or overall winner.",
+  "observations": [
+    {
+      "blind_id": "C01",
+      "visibility": "Full head stays in frame; small shadowed face and hair/gloves partly hide facial detail during movement. Bag does not cover the face in the samples.",
+      "identity": "Long dark hair and coarse creator-like facial presentation; scale, profile pose and shadow prevent fine identity ranking.",
+      "effect": "Navy jacket, white inner shirt and red gloves. Early extension/recovery followed by a later multi-extension episode and bag motion. Gloves lower asymmetrically, then both are down at the last samples. Exact punch count, order and guard recovery require all frames.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "cae72f71aab23b69e19b5bf8e7c9e26bf551a1802b3fd4c425daae92285e328e",
+      "grid_sha256": "70ac0db07b56dd9c153274e862806fb0782c5adfffdec93cf3ebffbaeee0f731"
+    },
+    {
+      "blind_id": "C02",
+      "visibility": "Full head in frame with frontal/three-quarter stance. Bag partly hides glove contact; hair and gloves obscure part of the small face.",
+      "identity": "Long dark hair and coarse creator-like face, but shadow and different expression/pose limit fine comparison.",
+      "effect": "Navy jacket and red gloves. Two broad activity episodes, possibly multiple extensions in the first; bag swings. Both gloves lower and remain down in several ending samples. Exact attempted count and handedness need contiguous frames.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "669b58066367ae2de27a1861b3eb7636b42e5b6edb490273f3e14a99bbd0b24e",
+      "grid_sha256": "cd55c8103c98beb650666e8f91bc6ae576a57997fab805f1e6b99309443b1595"
+    },
+    {
+      "blind_id": "C03",
+      "visibility": "Full head stays in frame; face small and shadowed, hair/gloves partly obscure it during extensions. Bag remains away from face.",
+      "identity": "Long straight dark hair and broad creator-like facial cues with more side-on pose; fine identity unknown.",
+      "effect": "Navy jacket, white inner shirt and red gloves. Early and later extension/recovery episodes move the bag. Gloves remain near guard in final sampled frames; no clear lowered ending. Exact punch count/order remains deferred.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "167adc365381ae37cfa7c67943af7a8b991f54c0ff8b6a2fd9db4e626a1b9ca6",
+      "grid_sha256": "ae6387c75e78a53ecb960df6ce4cc8e41f84b5343b053f5ba1222672c4855f0d"
+    },
+    {
+      "blind_id": "C04",
+      "visibility": "Full head, horns and shoulders stay visible. Hands/book small; undersides of palms not trackable in sparse samples.",
+      "identity": "Green/purple fur, short curved horns and broad soft muzzle retain coarse creator-like cues; frontal gaze and restrained expression differ from creator reference.",
+      "effect": "Library shelves, warm lamp, cool window and closed-looking blue book. No navy vest. Initial eyes look down, then toward camera with small closed-mouth smile. Hands already at book/edges; screen-left hand later lifts/repositions toward cover. Flat palm and exact sequence need detail.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "d8069b2fc2ae3d91d9a7937004c496faa9f55b417fadfb246f27f184f008691f",
+      "grid_sha256": "442176685eb226dffffc90c550e0fa95a1f49991655cbbf8524cb8f0526f436a"
+    },
+    {
+      "blind_id": "C05",
+      "visibility": "Full head, horns and shoulders visible; contact detail small and partly hidden by fingers/book edge.",
+      "identity": "Short curved horns, green/purple fur and broad soft muzzle broadly match creator; pose/expression confound fine identity.",
+      "effect": "Library/lamp/window and closed-looking blue book; no vest. Eyes start down and rise, small closed-mouth smile develops. Hands initially near book/edges; later screen-left fingers reposition over cover. Exact flat-palm arrival and timing require all frames.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "11b8e93874c326c9740e7824d518b6fa7f246b15d8c1459eff623ffa2bfb0ec1",
+      "grid_sha256": "8ba639343fdaa3904372957bcc4f5538c409ef3a45d7833232aedfa31be4dc7a"
+    },
+    {
+      "blind_id": "C06",
+      "visibility": "Full head in frame but down-tilted face is very dark and extensively hidden by hair and gloves. Foreground bag hides glove/contact detail.",
+      "identity": "Long dark hair and broad facial presentation visible only intermittently; fine identity indeterminate under occlusion/shadow.",
+      "effect": "Navy jacket and red gloves. Early multi-extension-looking episode, recovery, then later extension/recovery. Bag swings. Both gloves remain at guard in ending samples; no demonstrated lowered ending. Exact count/order deferred.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "d25fa1c17760a7154a55f340f14b4ea32692f745385bad2d86c941907ea0ffb8",
+      "grid_sha256": "a63915a17ad85bac65e61a2eec79cf7f71ffa981f51741733c0440aa0e6e1db0"
+    },
+    {
+      "blind_id": "C07",
+      "visibility": "Full head visible, small face partly hidden by long hair and gloves during motion. Bag does not hide face in these samples.",
+      "identity": "Long dark hair and broadly creator-like face; fine identity cannot be ranked under small scale, angle and shadows.",
+      "effect": "Navy jacket, white inner shirt, red gloves. Two broad extension/recovery episodes move the bag; first may contain multiple movements. Final gloves remain at face/chest guard, no clear further lowering. Exact action counts/order need full-frame review.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "cc3d24c1850be00811950ca2b04e63e1838bd541f8c92d501fa8c0f0935d1920",
+      "grid_sha256": "b8033a8a2e1da5597d9a11b06f21ba4ed1a5b9e02fc570f68474d20b024f81ab"
+    },
+    {
+      "blind_id": "C08",
+      "visibility": "Head/horns and shoulders appear within frame, with upper horn tips near top edge. Hands wrap around tilted book, obscuring palm contact.",
+      "identity": "Olive-green/purple, longer swept pointed horns, angular muzzle/nose and bearded chin differ markedly from creator's short-curved-horn, broad-soft-muzzle design.",
+      "effect": "Navy vest, library shelves, warm lamp and cool window. Holds a closed-looking tilted blue book above table, gaze rises and closed-mouth smile develops. Later sets book down and repositions a hand over it. Need details to distinguish new placement from book-lowering contact.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "c744b2df671e022426a95398a4ea588b95bb567958c5fcd933002d22182a1c58",
+      "grid_sha256": "ebbf3473e3ae52136aeb2270abe2748fa32c56392216b7896942ac74451dd15b"
+    },
+    {
+      "blind_id": "C09",
+      "visibility": "Full head/horns/shoulders remain visible. Hand contact partly hidden behind fingers/book.",
+      "identity": "Green/purple fur, short curved horns and broad muzzle retain coarse creator cues, but heavier brow/elongated face presentation and slanted gaze differ; fine severity deferred.",
+      "effect": "Navy vest, library/lamp/window. Closed-looking book held tilted upright initially, gaze rises and closed-mouth smile develops. Later book lowers to table with fingers moving over cover. Exact flat-hand arrival independent of set-down requires detail.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "b13c4f04dcb825526b92fe94bb5f8097d425c607384c20355940cbec8fabde8b",
+      "grid_sha256": "fa517598afc13f18110bcc03a188a84315419cc5454734b24f27f6ff90ed5b2f"
+    },
+    {
+      "blind_id": "C10",
+      "visibility": "Full head and both shoulders visible; frontal framing, fingers and book near lower edge but within samples.",
+      "identity": "Short curved horns, green/purple fur and broad soft muzzle retain coarse creator cues. Frontal pose and expression differ; no fine identity rank.",
+      "effect": "Library shelves, warm overhead lamp and cool window; no navy vest. Closed-looking blue book rests on table. Eyes initially closed/lowered then rise; screen-left hand approaches/lifts over the cover early as a small closed-mouth smile develops. Hand remains over cover afterward. Exact ordering and flat-palm contact require all frames.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "541926f7995688493243abdbd1f77073a1323112f4861ab31e0d71d382749089",
+      "grid_sha256": "7572dccd0424a86f585bda26bf1dc1a5367491cb3a33805b795100923458186a"
+    },
+    {
+      "blind_id": "C11",
+      "visibility": "Full head in frame, frontal/three-quarter stance. Bag occludes glove-contact details; small shadowed face partly hidden by hair and gloves.",
+      "identity": "Long dark hair, broader facial presentation with visible forehead; coarse creator resemblance, but shadows, scale and action expression limit fine comparison.",
+      "effect": "Navy jacket and red gloves. Early extension sequence and a later extension/recovery episode move the bag. Gloves lower through several ending samples, reaching a down position before final frame. Exact counts, left/right and held guard need full-frame review.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "9ad5682ef4c86d8b5c14f884f9a819864768158076480c93984edcb870bf6eaf",
+      "grid_sha256": "6eee67cf63d3b8045361cfeacbb3777a7dbc8a6e00de6ed1eeb06fc38988a40f"
+    },
+    {
+      "blind_id": "C12",
+      "visibility": "Full head remains visible; hair and raised gloves obscure face during movement, bag remains separate from face.",
+      "identity": "Long dark hair, coarse creator-like face with small scale/side-on stance; fine identity unknown.",
+      "effect": "Navy jacket, white inner shirt, red gloves. Early extension/recovery followed by a later multi-extension episode. Both gloves lower and remain down in several final samples. Exact count/order/guard recovery deferred to all frames.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "aa5e3fbbac2958759774cb1b68064a047eb4940267630d5f04562d9c77dec996",
+      "grid_sha256": "7a914a9821846fdaea5e288e9f2f90fd33d345e4f05c617fa0d24ddeec0bc253"
+    },
+    {
+      "blind_id": "C13",
+      "visibility": "Full head, horns and shoulders visible; small hand/book contact details need enlargement.",
+      "identity": "Green/purple fur, short curved horns and broad soft muzzle retain coarse creator cues; more frontal pose and restrained expression differ from creator.",
+      "effect": "Library shelves, lamp/window, closed-looking blue book on table; no vest. Eyes start lowered/closed then rise. Screen-left hand lifts toward cover early, near gaze transition, then rests on it as a slight closed-mouth smile develops. Exact smile-before-placement ordering uncertain.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "a567a40d060b649e6e7520d97ef859b0f0e7b19a6d440c0c1f2d19904d0b6634",
+      "grid_sha256": "a1a48c503d0f6cefb845d6f175225157c44754ec7fdc7f01da50ef4c0149fbf9"
+    },
+    {
+      "blind_id": "C14",
+      "visibility": "Full head remains visible. Hair/gloves partly obscure small face during motion; bag hides some contact detail.",
+      "identity": "Long dark hair and coarse creator-like face with different angle and serious expression; fine identity deferred.",
+      "effect": "Navy jacket, red gloves. Early and later extension/recovery episodes with bag response. Gloves stay near face/chest guard through final samples; no clear further lowering. Exact counts and glove order need all frames.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "5cea2f48f120c386adae7aee03bcbe681c00126dca70b14fb8b0598ac6f80858",
+      "grid_sha256": "7c99f15c9c6db6fb305097800e6155b7d0c7e63a098eaedea12e62c147b1408b"
+    },
+    {
+      "blind_id": "C15",
+      "visibility": "Full head in frame, face often down-tilted and partly hidden by hair and gloves. Foreground bag partly hides glove contact.",
+      "identity": "Long dark hair and coarse facial cues, but shadow/profile/occlusion prevent fine reference comparison.",
+      "effect": "Navy jacket and red gloves. Early extension/recovery followed by a later multi-extension-looking episode, with bag swing. Both gloves remain near guard in final samples; lowered ending not demonstrated. Exact count/order deferred.",
+      "pair": "series30_combat",
+      "anonymous_media_sha256": "63f75e03e91fa134b93aabba9ab77bfa50ceea8587429c4da876af7999a5743e",
+      "grid_sha256": "d2492ac7744570d0f496d7da4ab540e169598dead1cf03efad6587efe8f95534"
+    },
+    {
+      "blind_id": "C16",
+      "visibility": "Full head/horns and shoulders remain in frame. Both hands near book, palm contact hidden by fingers.",
+      "identity": "Short curved horns, broad soft muzzle and green/purple fur retain coarse creator cues; frontal expression differs from reference.",
+      "effect": "Library shelves, lamp/window and closed-looking blue book on table; no navy vest. Eyes rise from lowered opening, slight closed-mouth smile follows. Both hands already at book/edges; screen-right fingers later slide/reposition, without an obvious detached new arrival in samples. Flat palm needs detail.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "405241ea6f7c5da7415af7d4dedc9851df8d334c9b64f2e3309a694db8fa13a1",
+      "grid_sha256": "6d1c57cd7af1494ec489fec5a6bff4a3be2be21d73a9649d189725371dbc7df5"
+    },
+    {
+      "blind_id": "C17",
+      "visibility": "Full head, horns and shoulders visible; hand/book near lower edge but visible.",
+      "identity": "Green/purple fur, short curved horns and broad soft muzzle retain coarse creator cues, with different frontal pose/expression.",
+      "effect": "Library shelves, lamp/window, closed-looking blue book; no vest. Eyes start lowered then rise, small closed-mouth smile develops. Screen-left hand lifts later, hovers over cover then settles on it. Earlier edge contact and exact ordering/flat-palm status need full frames.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "98173050a86060607accc0804f17437be2b749c3f01edb81105d6080f3e4b91d",
+      "grid_sha256": "7b94a66203d4bf7619963fddb38a71fc1eec9119a72f7f8158ba0da2c69b0a31"
+    },
+    {
+      "blind_id": "C18",
+      "visibility": "Head/shoulders visible, but long horn tips are close to or cropped by the top boundary in early/middle samples; precise extent needs larger frames.",
+      "identity": "Long outward/upward pointed horns, angular projecting nose/muzzle and bearded chin differ markedly from creator, despite green/purple coloration.",
+      "effect": "Navy vest, library/lamp/window. Holds a closed-looking tilted blue book off table, eyes rise with a closed-mouth smile. Later book lowers to table and fingers settle near its top/edge; independent post-set-down hand arrival and flat palm uncertain.",
+      "pair": "sully_cinema",
+      "anonymous_media_sha256": "eadb68703c847c9421aab13908bd8f166e7cb2c8ad44b744fad9edef5f20958d",
+      "grid_sha256": "e78670855fd056bd25d703fe1e127edc4009a962d058c5e2995c512007436692"
+    }
+  ],
+  "saved_context_utc": "2026-09-08 21:50:45 UTC"
+}

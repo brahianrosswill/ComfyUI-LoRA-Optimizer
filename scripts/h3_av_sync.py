@@ -1,8 +1,10 @@
-"""Frame/waveform diagnostics for already-rated H3 calibration videos.
+"""Frame/waveform diagnostics for previously exposed H3 calibration videos.
 
 No audio classification, listening judgment, synchronization score, gain change
 or automatic offset correction. Uses decoded frame PTS, not packet order or an
 assumed frame rate. Rejects discontinuous audio instead of hiding timing gaps.
+The original rated-AV path is retained. Character observations use a separate
+explicit provenance path; assistant frame observations are never human ratings.
 """
 import argparse
 import base64
@@ -145,6 +147,57 @@ def inspect(plan_path, ratings_path, job_id, out):
     source_hash = digest(video)
     if any(r["original_sha256"] != source_hash for r in rated):
         raise ValueError("Original video differs from the reviewed media")
+    return inspect_video(video, source_hash, out, dict(job_id=job_id,
+        plan_sha256=digest(plan_path), ratings_sha256=digest(ratings_path)))
+
+
+def inspect_observed(plan_path, observations_path, key_path, job_id, out):
+    if out.exists():
+        raise FileExistsError(out)
+    plan = json.loads(plan_path.read_text())
+    observations = json.loads(observations_path.read_text())
+    key = json.loads(key_path.read_text())
+    public_path = key_path.with_name("public.json")
+    public = json.loads(public_path.read_text())
+    plan_sha = digest(plan_path)
+    if (observations["plan_sha256"] != plan_sha or key["plan_sha256"] != plan_sha
+            or public["plan_sha256"] != plan_sha or observations["stage"] != "calibration"
+            or key["stage"] != "calibration" or public["stage"] != "calibration"
+            or observations["review_id"] != key["review_id"] or public["review_id"] != key["review_id"]
+            or digest(public_path) != observations["public_manifest_sha256"]):
+        raise ValueError("Only matching, already-observed character calibration may be inspected")
+    cases = [c for c in key["cases"] if c["job_id"] == job_id]
+    jobs = [j for j in plan["jobs"] if j["id"] == job_id and j["stage"] == "calibration"]
+    if len(cases) != 1 or len(jobs) != 1:
+        raise ValueError("Requested calibration case is missing or ambiguous")
+    case, job = cases[0], jobs[0]
+    rows = [r for r in observations["observations"] if r["blind_id"] == case["blind_id"]]
+    visible = [c for c in public["cases"] if c["blind_id"] == case["blind_id"]]
+    if (len(rows) != 1 or len(visible) != 1 or rows[0]["pair"] != job["pair"]
+            or visible[0]["media_sha256"] != case["media_sha256"]
+            or (job["seed"], case["seed"], key["seed"]) != (observations["seed"],) * 3):
+        raise ValueError("Observation/seed does not identify the requested case")
+    history = json.loads((Path(plan["root"]) / job_id / "history.json").read_text())
+    try:
+        from .h3_character_benchmark import expected_graph
+    except ImportError:
+        from h3_character_benchmark import expected_graph
+    if history["prompt"][2] != expected_graph(plan, job):
+        raise ValueError("Executed graph differs from frozen character case")
+    video = output_video(history)
+    source_hash = digest(video)
+    if source_hash != case["original_sha256"]:
+        raise ValueError("Original video differs from the observed media")
+    return inspect_video(video, source_hash, out, dict(job_id=job_id, plan_sha256=plan_sha,
+        observations_sha256=digest(observations_path), review_key_sha256=digest(key_path),
+        blind_id=case["blind_id"], evidence_kind="assistant_frame_observations",
+        human_ratings_supplied=False))
+
+
+def inspect_video(video, source_hash, out, provenance):
+    """Shared decode/clock math; callers establish exposure and exact identity."""
+    if out.exists():
+        raise FileExistsError(out)
     probe = json.loads(run("ffprobe", "-v", "error", "-show_streams", "-show_frames", "-of", "json", str(video)))
     visual = [s for s in probe["streams"] if s["codec_type"] == "video"]
     audio = [s for s in probe["streams"] if s["codec_type"] == "audio"]
@@ -181,8 +234,9 @@ def inspect(plan_path, ratings_path, job_id, out):
     page = PAGE.replace("__DATA__", json.dumps(display).replace("<", "\\u003c"))
     with (out / "inspect.html").open("x") as stream:
         stream.write(page)
-    record = dict(job_id=job_id, video_sha256=source_hash, plan_sha256=digest(plan_path),
-        ratings_sha256=digest(ratings_path), script_sha256=digest(__file__),
+    if digest(video) != source_hash:
+        raise ValueError("Source video changed during diagnostic extraction")
+    record = dict(provenance, video_sha256=source_hash, script_sha256=digest(__file__),
         ffmpeg_version=run("ffmpeg", "-version").decode().splitlines()[0],
         video_frame_pts=times.tolist(), audio_start=start, audio_sample_rate=rate,
         audio_decoded_samples=len(samples), envelope_window_ms=5, waveform=bins,
@@ -193,7 +247,7 @@ def inspect(plan_path, ratings_path, job_id, out):
         synchronization_score=None, automatic_offset_correction=None,
         note="Timestamped diagnostics only. Visible contact and sound identity need separate annotation; no inferred preference.")
     save_new(out / "sync.json", record)
-    return dict(job=job_id, frames=len(frames), sheets=len(sheets), audio_start=start,
+    return dict(job=provenance["job_id"], frames=len(frames), sheets=len(sheets), audio_start=start,
                 candidates=record["burst_candidates"], inspector=str(out / "inspect.html"))
 
 
@@ -240,11 +294,20 @@ draw();
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
-    parser.add_argument("--ratings", type=Path, required=True)
+    evidence = parser.add_mutually_exclusive_group(required=True)
+    evidence.add_argument("--ratings", type=Path)
+    evidence.add_argument("--observations", type=Path)
+    parser.add_argument("--review-key", type=Path)
     parser.add_argument("--job", required=True)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(inspect(args.plan, args.ratings, args.job, args.out)))
+    if args.observations:
+        if args.review_key is None:
+            parser.error("--observations requires --review-key")
+        result = inspect_observed(args.plan, args.observations, args.review_key, args.job, args.out)
+    else:
+        result = inspect(args.plan, args.ratings, args.job, args.out)
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":

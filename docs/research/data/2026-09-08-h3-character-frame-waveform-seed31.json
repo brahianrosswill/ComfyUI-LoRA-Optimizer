@@ -1,0 +1,74 @@
+{
+  "stage": "calibration",
+  "seed": 2026090831,
+  "pair": "sully_combat",
+  "plan_sha256": "1f179b668839a4379a1743fd3c8f507b0202a254ccb5f47a3047f25a7a33ed40",
+  "initial_blind_observations_sha256": "3c465168cb467a482d0bc28ca0f2ca1b9b4d7af514cf675773f8cb37c3824a2b",
+  "review_key_sha256": "c3c745f619f1981d931c35b0f9067e9023bdfddacb9ab231112d36bc07e8fc92",
+  "inspector_sha256": "0db0ed94c6e97709ae774ade4944b768cc60586e3ef00117301f0d8adba5f0af",
+  "observer": "Assistant inspection of all 124 decoded frames per selected clip, with unchanged stereo waveforms; not human ratings or continuous playback",
+  "selection": "Post-unblinding exploratory follow-up of character-only, additive, stable winner and CT. The CT wardrobe/ending signal motivated inspection; this is not a new blind comparison or coverage of every method.",
+  "unique_frames_inspected": 496,
+  "full_motion_reviewed": false,
+  "audio_listened": false,
+  "human_ratings": [],
+  "quality_scores": null,
+  "synchronization_score": null,
+  "audio_classification": null,
+  "timing_note": "Frame numbers and seconds use decoded container PTS. Contact windows are approximate visible-contact intervals, not exact sub-frame onsets. Energy maxima are anonymous broadband candidates, not identified impacts, punch counts or perceptual synchronization offsets. No audio gain, timing, source-video edits or automatic correction.",
+  "cases": [
+    {
+      "job_id": "idm-sully-combat-2026090831-character-only",
+      "variant": "character_only",
+      "video_sha256": "4ef4deb51d4f7f0bb2d8c9003dfd97a0752e071caac3f6bbc18862aa020a5510",
+      "sync_record": ".h3-study-artifacts/20260908/character-sync-seed31/character-only/sync.json",
+      "sync_sha256": "1380f8de60ce95b09fa95e865566b1d398455764d7a3a04cd32194969028cc16",
+      "visibility": "Full-body framing makes head smaller than requested; head remains visible outside punch-related self-occlusion. Vest absent.",
+      "action": "Three distinct near-arm extension/contact/recovery cycles. Approximate visible-contact frame windows 15-18, 50-53 and 85-88. Gloves return to guard, but do not lower into the requested resting finish before frame 123.",
+      "energy_peak_times_seconds": [0.7225, 2.1475, 3.5975],
+      "waveform_relation": "Three separated energy bursts occur during the three visible contact sequences. Their strongest peaks are not established impact onsets or proof of perceptually correct sound."
+    },
+    {
+      "job_id": "idm-sully-combat-2026090831-additive",
+      "variant": "additive",
+      "video_sha256": "c9882cc9ea8baa442a2de85f6645010706c123f44d9402e791c707a140aedebf",
+      "sync_record": ".h3-study-artifacts/20260908/character-sync-seed31/additive/sync.json",
+      "sync_sha256": "10f0513e0b7379b7cb4ba69b2a7a9245342d81031c3f12fa616d52cf3cec4d4b",
+      "visibility": "Wide full-body shot; fine head detail limited. Green/purple coarse features retained, vest absent.",
+      "action": "Four clear large near-arm extension/contact/recovery sequences around frames 18-20, 33-35, 55-57 and 76-78, plus distinct far-arm extensions around frames 14, 51-52, 72 and 107. The exact total contact count is not assigned where perspective obscures contact. Clearly exceeds the two-punch target. Both gloves only finish lowering at the final few frames, without an established still interval.",
+      "energy_peak_times_seconds": [0.7575, 0.8425, 1.4525, 1.5625, 2.3125, 2.4075, 3.1175, 3.2275, 3.3175, 4.5325, 4.6175, 4.7025],
+      "waveform_relation": "Several multi-peak energy bursts overlap the repeated punching sequences; 12 detector peaks do not mean 12 punches or 12 impacts."
+    },
+    {
+      "job_id": "idm-sully-combat-2026090831-stable-tuner-winner",
+      "variant": "stable_tuner_winner",
+      "video_sha256": "c0f2c7f65a28614f34bcd77c992dcc2f276dfbff1058af6cbb60fed34128b44d",
+      "sync_record": ".h3-study-artifacts/20260908/character-sync-seed31/stable-tuner-winner/sync.json",
+      "sync_sha256": "6ddac14084f343e30aff3d396ac7a4e70d9bb2d693c0e014b6a1094fb9f98a88",
+      "visibility": "Closer framing than character-only/additive. Reference-like coarse head features retained; arm/shoulder occlusion during punches. Vest absent.",
+      "action": "Five clearly separated large near-arm extension/contact/recovery sequences around frames 21-23, 33-35, 58-60, 78-80 and 114-116. Additional far-arm movement occurs before some of these, not assigned an exact independent contact count. The last punch is near the end; gloves do not settle into the requested lowered-glove finish.",
+      "energy_peak_times_seconds": [0.9125, 0.9975, 1.4525, 1.5725, 2.4775, 2.5775, 3.2775, 3.3775, 3.4625, 4.7025, 4.8025, 4.9025],
+      "waveform_relation": "Five broad multi-peak energy groups accompany the five large visible punching sequences. No sound labels or perceptual score assigned."
+    },
+    {
+      "job_id": "idm-sully-combat-2026090831-ct-merge",
+      "variant": "ct_merge",
+      "video_sha256": "b8b5190cc218fd9113577e000041d220541796ea2fd844982eed055052682fd7",
+      "sync_record": ".h3-study-artifacts/20260908/character-sync-seed31/ct-merge/sync.json",
+      "sync_sha256": "61e891136b1615c9e3cbb5df789f312043ffd4c843ab60c8bfd611f23138986e",
+      "visibility": "Reference-like green/purple broad muzzle and short horns, navy vest and closer framing retained. Punch-related self-occlusion and bag occlusion of far glove.",
+      "action": "Two clear near-arm extension/contact/recovery cycles: extension frames 10-12 then visible contact 13-15 and recovery 16-23; extension 69-71 then contact 72-74 and recovery 75-83. A third far-arm punching cycle is visible around frames 43-52, although contact is partly hidden by the bag. Gloves lower around frames 91-98 and remain lowered through frame 123 while the bag moves. Therefore the vest/ending signal does not establish exact two-punch compliance.",
+      "middle_event_inspection": {
+        "initial_ambiguity": "Small sheet thumbnails could not distinguish the moving bag from an independent far-arm punch. Waveform energy alone was not used to decide.",
+        "full_resolution_grid": ".h3-study-artifacts/20260908/character-sync-seed31/ct-merge/middle-040-055.png",
+        "grid_sha256": "a54dd3005428189c6a8c40649e4dec73206028d1fb384fa06ab557eae83a8d22",
+        "source_frames": [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55],
+        "extraction": "ffmpeg select between(n,40,55), draw frame indices, tile=4x4; original 640x384 pixels per cell, no source media edit. Frame numbers are selected-frame counter plus 40.",
+        "resolution": "The enlarged sequence shows far glove rising from low guard at 43-45, arm extending behind bag at 46-47, glove at the bag edge at 48-49, then retracting/lowering at 50-52. This supports a third attempted punch; exact first contact remains uncertain due to occlusion."
+      },
+      "energy_peak_times_seconds": [0.6075, 0.7325, 2.0275, 2.1225, 3.1175, 3.2025],
+      "waveform_relation": "Three broad energy groups coincide with the two clear near-arm cycles and the partly occluded far-arm cycle. Multiple maxima fall after initial visible contact, but peak-minus-contact is not a synchronization score."
+    }
+  ],
+  "conclusion": "All four selected outputs deviate from the exact two-punch instruction, including character-only. CT's wardrobe and settled ending are separate favorable observations, not a global win; additive and the stable winner add more repeated actions at this seed. Identity, framing, wardrobe, action count, ending and sound must remain separate evaluator dimensions. Do not feed these unblinded exploratory observations into ranking without the declared held-out validation."
+}

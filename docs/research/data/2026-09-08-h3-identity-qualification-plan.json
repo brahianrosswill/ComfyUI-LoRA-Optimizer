@@ -1,0 +1,369 @@
+{
+  "version": 1,
+  "created_at": 1788871833.5838587,
+  "base": "http://127.0.0.1:8189",
+  "root": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908",
+  "profile": "local",
+  "width": 640,
+  "height": 384,
+  "length": 124,
+  "steps": 20,
+  "adapters": {
+    "sully": {
+      "local_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+      "api_name": "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+      "strength": 1.0,
+      "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+      "version_id": 3263006,
+      "source_url": "https://civitai.com/models/2886539?modelVersionId=3263006",
+      "source_prompt_sha256": "fd997990f8abf3c20539fe61e750e26d6c66b52fa9efd34fd55eb16701744365",
+      "source_node": "140:131"
+    },
+    "series30": {
+      "local_path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+      "api_name": "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+      "strength": 0.8,
+      "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+      "version_id": 3212165,
+      "source_url": "https://civitai.com/models/2845077?modelVersionId=3212165",
+      "source_prompt_sha256": "8a8de38dc205c6753e23047d4aa2772034160fbb194316cf75e06a259ba720d3",
+      "source_node": "145"
+    }
+  },
+  "prompt_text": {
+    "sully_source": "h3sully, the large furry green and purple monster with two small horns on his head, slowly peeks his head out from behind a large doorway, one eye and horn visible first, then tilts his head curiously to the side with a gentle questioning expression, ears and fur shifting slightly. He blinks slowly and his mouth curves into a small friendly smile as he leans forward a little more. ltxsully says softly and curiously in his gentle giant voice, \"Hello? Is anyone there? \u2026Oh! Hi there, friend!\" The camera is static at first in a medium close-up focused on his face and horns catching beautiful side lighting, then does a very slow subtle push in as he reveals more of himself. Soft diffused window light creates lovely texture on his fur and gentle shadows around his horns and expressive eyes.",
+    "sully_turn": "integrated_multimodal_description: [Shot 1] 3D CG, a medium close-up of h3sully, an adult male monster with thick green and purple fur, two short curved horns, a broad nose and expressive eyes. He stands alone in a plain softly lit room. His full head and both shoulders remain visible. He begins facing the camera, slowly turns his head toward his left into a three-quarter view, then faces the camera again and gives a small closed-mouth smile. His body remains still. One continuous static shot at normal speed, soft side light revealing individual fur strands. No speech, no text or subtitles.\n\noverall_soundscape: Low steady room ambience and faint fur movement. No voices or impacts.\n\nnon_diegetic_music: N/A",
+    "series30_source": "Voice:\nai30. A bust-up shot of a Japanese woman exuding a warm, approachable, and gentle atmosphere. She is speaking to the camera in a relaxed, calm tone; her natural and kind manner of speaking has a soothing quality that puts the listener at ease. \u30df\u30cb\u30de\u30c3\u30af\u30b9 \u30a8\u30c3\u30c1\u30b9\u30ea\u30fc\u3063\u3066\u3001\u306a\u306b\u304b\u558b\u3089\u306a\u3044\u3068\u3044\u3051\u306a\u3044\u3001\u30ad\u30e7\u30a6\u30cf\u30af\u304b\u3093\u306d\u3093\u306b\u3068\u3089\u308f\u308c\u308b\u306e\u79c1\"\n\nSound effects:\nGentle rain continuously pattering against the caf\u00e9 window. Occasional soft raindrops running down the glass. Subtle clinking of ceramic coffee cups and spoons in the background. Very faint caf\u00e9 ambience and quiet movements of other customers.\n\nOverall audio:\nCozy, peaceful, intimate, and relaxing. The rain should remain the dominant environmental sound, while the caf\u00e9 ambience and mellow piano create a comfortable sense of warmth and shelter.\n\nNo text, subtitles, logos or watermarks of any kind, no animation or cartoon rendering, no overly-CG look, keep the live-action texture,\n\n\n",
+    "series30_turn": "integrated_multimodal_description: [Shot 1] Live-action, a medium close-up of ai30, a fictional adult Japanese woman in her thirties with long straight black hair, wearing an opaque white collared blouse. She stands alone in a plain softly lit room. Her full head and both shoulders remain visible. She begins facing the camera, slowly turns her head toward her left into a three-quarter view, then faces the camera again and gives a small closed-mouth smile. Her body remains still. One continuous static shot at normal speed, soft side light revealing natural skin and hair texture. No speech, no text or subtitles.\n\noverall_soundscape: Low steady room ambience and faint clothing rustle. No voices or impacts.\n\nnon_diegetic_music: N/A"
+  },
+  "jobs": [
+    {
+      "id": "idq-sully-source-2026090821-base",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_source",
+      "seed": 2026090821,
+      "variant": "base",
+      "loras": []
+    },
+    {
+      "id": "idq-series30-source-2026090821-base",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_source",
+      "seed": 2026090821,
+      "variant": "base",
+      "loras": []
+    },
+    {
+      "id": "idq-series30-source-2026090821-character",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_source",
+      "seed": 2026090821,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idq-sully-source-2026090821-character",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_source",
+      "seed": 2026090821,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idq-sully-turn-2026090821-character",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_turn",
+      "seed": 2026090821,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idq-series30-turn-2026090821-base",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_turn",
+      "seed": 2026090821,
+      "variant": "base",
+      "loras": []
+    },
+    {
+      "id": "idq-series30-turn-2026090821-character",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_turn",
+      "seed": 2026090821,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idq-sully-turn-2026090821-base",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_turn",
+      "seed": 2026090821,
+      "variant": "base",
+      "loras": []
+    },
+    {
+      "id": "idq-sully-source-2026090822-base",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_source",
+      "seed": 2026090822,
+      "variant": "base",
+      "loras": []
+    },
+    {
+      "id": "idq-series30-source-2026090822-character",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_source",
+      "seed": 2026090822,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idq-sully-source-2026090822-character",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_source",
+      "seed": 2026090822,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idq-series30-source-2026090822-base",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_source",
+      "seed": 2026090822,
+      "variant": "base",
+      "loras": []
+    },
+    {
+      "id": "idq-sully-turn-2026090822-character",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_turn",
+      "seed": 2026090822,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idq-series30-turn-2026090822-base",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_turn",
+      "seed": 2026090822,
+      "variant": "base",
+      "loras": []
+    },
+    {
+      "id": "idq-series30-turn-2026090822-character",
+      "stage": "calibration",
+      "character": "series30",
+      "prompt": "series30_turn",
+      "seed": 2026090822,
+      "variant": "character",
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idq-sully-turn-2026090822-base",
+      "stage": "calibration",
+      "character": "sully",
+      "prompt": "sully_turn",
+      "seed": 2026090822,
+      "variant": "base",
+      "loras": []
+    }
+  ],
+  "cases": [
+    {
+      "pair": "sully",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "sully_source",
+      "seed": 2026090821,
+      "job_id": "idq-sully-source-2026090821-base"
+    },
+    {
+      "pair": "series30",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "series30_source",
+      "seed": 2026090821,
+      "job_id": "idq-series30-source-2026090821-base"
+    },
+    {
+      "pair": "series30",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "series30_source",
+      "seed": 2026090821,
+      "job_id": "idq-series30-source-2026090821-character"
+    },
+    {
+      "pair": "sully",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "sully_source",
+      "seed": 2026090821,
+      "job_id": "idq-sully-source-2026090821-character"
+    },
+    {
+      "pair": "sully",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "sully_turn",
+      "seed": 2026090821,
+      "job_id": "idq-sully-turn-2026090821-character"
+    },
+    {
+      "pair": "series30",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "series30_turn",
+      "seed": 2026090821,
+      "job_id": "idq-series30-turn-2026090821-base"
+    },
+    {
+      "pair": "series30",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "series30_turn",
+      "seed": 2026090821,
+      "job_id": "idq-series30-turn-2026090821-character"
+    },
+    {
+      "pair": "sully",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "sully_turn",
+      "seed": 2026090821,
+      "job_id": "idq-sully-turn-2026090821-base"
+    },
+    {
+      "pair": "sully",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "sully_source",
+      "seed": 2026090822,
+      "job_id": "idq-sully-source-2026090822-base"
+    },
+    {
+      "pair": "series30",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "series30_source",
+      "seed": 2026090822,
+      "job_id": "idq-series30-source-2026090822-character"
+    },
+    {
+      "pair": "sully",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "sully_source",
+      "seed": 2026090822,
+      "job_id": "idq-sully-source-2026090822-character"
+    },
+    {
+      "pair": "series30",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "series30_source",
+      "seed": 2026090822,
+      "job_id": "idq-series30-source-2026090822-base"
+    },
+    {
+      "pair": "sully",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "sully_turn",
+      "seed": 2026090822,
+      "job_id": "idq-sully-turn-2026090822-character"
+    },
+    {
+      "pair": "series30",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "series30_turn",
+      "seed": 2026090822,
+      "job_id": "idq-series30-turn-2026090822-base"
+    },
+    {
+      "pair": "series30",
+      "variant": "character",
+      "stage": "calibration",
+      "prompt": "series30_turn",
+      "seed": 2026090822,
+      "job_id": "idq-series30-turn-2026090822-character"
+    },
+    {
+      "pair": "sully",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "sully_turn",
+      "seed": 2026090822,
+      "job_id": "idq-sully-turn-2026090822-base"
+    }
+  ],
+  "source_sha256": {
+    "h3_identity_study.py": "41882e86d6650a8efe463e6baf4ee927a922de6d2ffa553f2a35c030429178e4",
+    "h3_render_study.py": "63706885f6a69675cd3fba72653b78402a0a52072b069efef7aa3af1479f400b",
+    "h3_benchmark.py": "013e8104e295c2bf2eb9593dee8e14fb4a19d33754bd02794ef708aa77ae3578"
+  },
+  "protocol": {
+    "purpose": "Character-only qualification; not held-out merge evaluation",
+    "source_prompts": "Exact saved originals, including trigger quirks; no exact creator reproduction claim",
+    "source_reference_limits": "Series30 uses Turbo and post-processing; reference pixels/timing are not ground truth",
+    "comparisons": "Prompt and seed identical within base/character pairs; no frame or LoRA strength selection after results",
+    "qualification": "Inspect identity against source, reproducibility across seeds, within-clip identity and pose adherence; report failures separately",
+    "ranking": "No automatic scalar quality score, preference labels or fitted ranking weights",
+    "holdout": "These two characters/prompts/seeds are calibration. Later tests need separately frozen unused prompts/seeds; neither character is unseen after this qualification."
+  }
+}

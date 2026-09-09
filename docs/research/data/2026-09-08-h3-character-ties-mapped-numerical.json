@@ -1,0 +1,311 @@
+{
+  "study": "H3 autotuner correctness and native-factor follow-up",
+  "scope": "Numerical/performance evidence only; no new audiovisual preference labels.",
+  "merge_runs": [
+    {
+      "pair": "series30_cinema",
+      "action": "merge",
+      "mode": "ties",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "mapped_export": true,
+      "native_targets": 208,
+      "streamed_components": 312,
+      "ties_density": 0.5,
+      "ties_sign_method": "frequency",
+      "mapped_writer_sha256": "c92db305b4926d55e5ebadb0c9c584c9bd54437aa53a87dab067bd6d8579c930",
+      "export": ".h3-study-artifacts/20260908/idm-series30-cinema-ties-01-mapped/merged.safetensors",
+      "export_size": 77082394664,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "ties",
+        "_experimental_config": null,
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 172.08642691301065,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 5880553984,
+      "peak_cuda_reserved": 6849298432,
+      "max_rss_bytes": 3973509120,
+      "run": "idm-series30-cinema-ties-01-mapped",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-series30-cinema-ties-01-mapped",
+      "manifest_sha256": "3e671e113ecaf5d6254543e29ef07cd21262774c72dbe37c207ac087192f2be8",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+          "model_name": "AI Girl: Fictional Women Series30 / \u67b6\u7a7a\u306e\u5973\u6027\u30b7\u30ea\u30fc\u30ba30 MiniMax H3",
+          "civitai_version_id": 3212165,
+          "tensor_count": 600
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "898e8b1fee5324a3dd6898b87ebec84eabf0a1c698e72a4cbe88febedae21d23",
+      "dense_precision": {
+        "mode": "ties",
+        "ties_density": 0.5,
+        "ties_sign_method": "frequency",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization; per-component safetensors reader",
+        "reference": "Pinned ordinary TIES formula; normal storage rounding separately measured",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          200,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "3e671e113ecaf5d6254543e29ef07cd21262774c72dbe37c207ac087192f2be8",
+        "export_sha256": "898e8b1fee5324a3dd6898b87ebec84eabf0a1c698e72a4cbe88febedae21d23",
+        "checker_sha256": "d222be4486142ebb089980e6d560c8a113ac41d3d818586afd88ff1b04e9cf4a",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "max_rss_bytes": 2560704512,
+        "peak_cuda_allocated": 7113679360,
+        "elapsed_seconds": 147.16969609897933,
+        "all_finite": true,
+        "exact_stored_components": 300,
+        "max_relative_export_error": 7.199355041386165e-08,
+        "max_relative_storage_rounding_error": 0.0,
+        "max_relative_fp32_reference_error": 7.199355041386165e-08,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.0.attn.qkv_proj.weight",
+            "component": 2,
+            "source_indices": [
+              1
+            ],
+            "representation": "lora",
+            "normal_storage_dtype": "native FP32 factors",
+            "relative_export_error": 7.199355041386165e-08,
+            "relative_storage_rounding_error": 0.0,
+            "relative_fp32_reference_error": 7.199355041386165e-08,
+            "relative_method_change": 0.0,
+            "exact_stored_values": false,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.1.attn.out_proj.weight",
+            "component": 0,
+            "source_indices": [
+              1
+            ],
+            "representation": "lora",
+            "normal_storage_dtype": "native FP32 factors",
+            "relative_export_error": 7.120896733530487e-08,
+            "relative_storage_rounding_error": 0.0,
+            "relative_fp32_reference_error": 7.120896733530487e-08,
+            "relative_method_change": 0.0,
+            "exact_stored_values": false,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.token_refiner.blocks.1.mlp.fc1.weight",
+            "component": 0,
+            "source_indices": [
+              1
+            ],
+            "representation": "lora",
+            "normal_storage_dtype": "native FP32 factors",
+            "relative_export_error": 7.088970076577432e-08,
+            "relative_storage_rounding_error": 0.0,
+            "relative_fp32_reference_error": 7.088970076577432e-08,
+            "relative_method_change": 0.0,
+            "exact_stored_values": false,
+            "finite": true
+          }
+        ],
+        "source_sha256": "161e67d446eac783483c92d42979c440fc1bd32bf0c75b4738bcd5446187a75d"
+      },
+      "full_loader_probe": {
+        "purpose": "Full native mapped loader only; no INT8 forward pass, video or quality claim",
+        "export": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/idm-series30-cinema-ties-01-mapped/merged.safetensors",
+        "export_size": 77082394664,
+        "export_sha256_from_prior_audit": "898e8b1fee5324a3dd6898b87ebec84eabf0a1c698e72a4cbe88febedae21d23",
+        "full_payload_rehashed": false,
+        "stable_file_identity_during_probe": true,
+        "prior_audit_sha256": "161e67d446eac783483c92d42979c440fc1bd32bf0c75b4738bcd5446187a75d",
+        "probe_sha256": "96cf2a2139fe6c182bc0ec59d7450f9becc450efa4091e54b22b486d044de2a0",
+        "comfy_utils_sha256": "f3ee59baf72f6910b7662224854e372c713ba3ad01c89739ba092e5ee22460e6",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "loader": "comfy.utils.load_safetensors (Aimdo branch)",
+        "tensor_count": 224,
+        "native_targets": 208,
+        "aimdo_gpu_device_initialized": false,
+        "all_tensors_retain_mmap_and_file_slice_references": true,
+        "elapsed_seconds": 0.020284566009650007,
+        "max_rss_bytes": 755142656,
+        "source_sha256": "0a0298f421e42f6df0fc720f72a0146e8e86f68a521cbe36e1a82a13ba5a2628"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (159.7s)",
+        "INFO:root:[LoRA Optimizer]   Low-rank patches: 12 (full-rank: 300) \u2014 ~12/312 keys use minimal RAM"
+      ],
+      "log_sha256": "c5c569c2efaafba687b5697f181763aa13affebefdc6b973d449402e13b02e40"
+    },
+    {
+      "pair": "sully_combat",
+      "action": "merge",
+      "mode": "ties",
+      "strengths": [
+        1.0,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069696,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "d1a9f9657580229c30aa4a7e43d700a2308c800f4afe0ebee81a199ebae00360",
+        "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+      },
+      "mapped_export": true,
+      "native_targets": 208,
+      "streamed_components": 312,
+      "ties_density": 0.5,
+      "ties_sign_method": "frequency",
+      "mapped_writer_sha256": "c92db305b4926d55e5ebadb0c9c584c9bd54437aa53a87dab067bd6d8579c930",
+      "export": ".h3-study-artifacts/20260908/idm-sully-combat-ties-01-mapped/merged.safetensors",
+      "export_size": 80153280520,
+      "patch_compression": "smart",
+      "merge_options": {
+        "optimization_mode": "global",
+        "merge_strategy_override": "ties",
+        "_experimental_config": null,
+        "patch_compression": "smart"
+      },
+      "elapsed_seconds": 207.0871922139777,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 5880553984,
+      "peak_cuda_reserved": 6849298432,
+      "max_rss_bytes": 3676205056,
+      "run": "idm-sully-combat-ties-01-mapped",
+      "artifact_directory": ".h3-study-artifacts/20260908/idm-sully-combat-ties-01-mapped",
+      "manifest_sha256": "05eea517f20afd1822ae140624769f7cbb62c35364675bb2207dac862a9df4ce",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+          "model_name": "h3sully - Sully from Monsters Inc for H3 Minimax",
+          "civitai_version_id": 3263006,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE \uff5cFight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        }
+      ],
+      "export_sha256": "289f13fb277912637e3305c9d5c5a983e62c73d22f91db546b7153e0d3467828",
+      "dense_precision": {
+        "mode": "ties",
+        "ties_density": 0.5,
+        "ties_sign_method": "frequency",
+        "all_targets": true,
+        "native_loader": "comfy.lora; no optimizer key normalization; per-component safetensors reader",
+        "reference": "Pinned ordinary TIES formula; normal storage rounding separately measured",
+        "groups_checked": 312,
+        "native_targets": 208,
+        "source_native_targets": [
+          208,
+          208
+        ],
+        "all_source_and_export_keys_consumed": true,
+        "manifest_sha256": "05eea517f20afd1822ae140624769f7cbb62c35364675bb2207dac862a9df4ce",
+        "export_sha256": "289f13fb277912637e3305c9d5c5a983e62c73d22f91db546b7153e0d3467828",
+        "checker_sha256": "d222be4486142ebb089980e6d560c8a113ac41d3d818586afd88ff1b04e9cf4a",
+        "comfy_lora_sha256": "502b0118ff179d9c167a8fb5b05b72a7736eb69d948750c0137f57461686d6ff",
+        "torch_version": "2.11.0+cu130",
+        "max_rss_bytes": 2414854144,
+        "peak_cuda_allocated": 7113679360,
+        "elapsed_seconds": 321.4193579819985,
+        "all_finite": true,
+        "exact_stored_components": 312,
+        "max_relative_export_error": 0.0,
+        "max_relative_storage_rounding_error": 0.0016654341304242258,
+        "max_relative_fp32_reference_error": 0.0016654341304242258,
+        "worst_groups": [
+          {
+            "prefix": "diffusion_model.blocks.0.attn.out_proj.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "representation": "diff",
+            "normal_storage_dtype": "torch.bfloat16",
+            "relative_export_error": 0.0,
+            "relative_storage_rounding_error": 0.001657105579919753,
+            "relative_fp32_reference_error": 0.001657105579919753,
+            "relative_method_change": 0.5004696206366612,
+            "exact_stored_values": true,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.0.attn.qkv_proj.weight",
+            "component": 0,
+            "source_indices": [
+              0,
+              1
+            ],
+            "representation": "diff",
+            "normal_storage_dtype": "torch.bfloat16",
+            "relative_export_error": 0.0,
+            "relative_storage_rounding_error": 0.0016584552647602062,
+            "relative_fp32_reference_error": 0.0016584552647602062,
+            "relative_method_change": 0.4941231146638808,
+            "exact_stored_values": true,
+            "finite": true
+          },
+          {
+            "prefix": "diffusion_model.blocks.0.attn.qkv_proj.weight",
+            "component": 1,
+            "source_indices": [
+              0,
+              1
+            ],
+            "representation": "diff",
+            "normal_storage_dtype": "torch.bfloat16",
+            "relative_export_error": 0.0,
+            "relative_storage_rounding_error": 0.0016578195518212892,
+            "relative_fp32_reference_error": 0.0016578195518212892,
+            "relative_method_change": 0.4936923704057876,
+            "exact_stored_values": true,
+            "finite": true
+          }
+        ],
+        "source_sha256": "7df6e37e23e270b3e32af1a7c746fdcb5a40bb110359f069ef07147d01b9146e"
+      },
+      "log_observations": [
+        "INFO:root:[LoRA Optimizer] Pass 2: Merging 312 target groups (global strategy, sequential)...",
+        "INFO:root:[LoRA Optimizer]   Model patches: 312, CLIP patches: 0 (197.9s)"
+      ],
+      "log_sha256": "6882b9e05557eecf2f402c4771c9c5faf51cf58a5506418b6f99899916a4fa9f"
+    }
+  ],
+  "render_runs": []
+}

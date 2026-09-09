@@ -1,0 +1,502 @@
+{
+  "version": 1,
+  "status": "technical_and_character_review_pass_overall_goal_incomplete",
+  "audited_at_utc": "2026-09-08 22:42:31 UTC",
+  "goal_complete": false,
+  "objective": "Improve and validate the H3 LoRA autotuner with reproduced correctness fixes, numerically faithful efficiency improvements, staged audiovisual benchmarking, justified opt-in ranking changes only, reproducible records/tests, and an evidence-backed shipping recommendation; preserve disconnected behavior and do not commit/push/bump/install without approval.",
+  "current_source": {
+    "head": "27bedd7621e8e53b5d9c4d87ba594c2b7aa76008",
+    "package_version": "1.8.4",
+    "optimizer_sha256": "44695e780a8bb8e67d206827ce4a561fd66b0a710fe89ed63026b521753c7461",
+    "experimental_merge_sha256": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4",
+    "installed_node_pack": {
+      "path": "/media/p5/Comfyui/custom_nodes/ComfyUI-LoRA-Optimizer",
+      "head": "4811977",
+      "git_status": "clean",
+      "replaced": false
+    },
+    "release_actions_performed": false
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Reproduce and fix incorrect skipped sparsification and associated representation/scoring defects.",
+      "status": "verified",
+      "evidence": "Committed F05, current >40% guard does not enter unconditional DELLA; exact-guard native-factor path and applied/skipped score bookkeeping inspected. Fresh full suite includes five tests in test_sparsification_contract.py, including RNG/no-op/low-conflict/native/scoring checks.",
+      "limits": "Intentional correctness fixes can change formerly incorrect stable results; follow-up experimental admission preserves the corrected baseline, not the pre-fix bug."
+    },
+    {
+      "id": "R2",
+      "requirement": "Fix evaluator and H3 merge/architecture correctness.",
+      "status": "verified",
+      "evidence": "Committed F01-F04/F07: non-finite scores rejected before clamping, callbacks receive full-target merges, external-only failure raises, FP32 experimental compression, mixed diffusion/TE architecture handling. Current branches inspected; full suite and real stock-loader CPU round trips pass.",
+      "limits": "Not proof of support for rejected PDD/DoRA/shared spatial experiments, full-to-pruned affine conversion or arbitrary ambiguous layouts."
+    },
+    {
+      "id": "R3",
+      "requirement": "Reduce experimental merge/export overhead while preserving numerical fidelity.",
+      "status": "verified_scoped_improvement",
+      "evidence": "F06 eligible native factors; eight follow-up run records reproduced with actual export hashes, manifests/logs and per-target checks. VBVR/Cinema NP 1,419,456,448 to 375,794,896 bytes; CT 1,419,456,416 to 721,694,056 bytes. Final relative errors 8.300903446355688e-8 and 4.3588385119657244e-6 across 312 groups.",
+      "limits": "73.5%/49.2% size reductions are this pair, not universal speedups. Observed 36.289 to 11.477 seconds and 16.56 to 1.73 GiB tuner allocation compare different corrected math, not a controlled speed claim. Stable/dense fallback costs persist."
+    },
+    {
+      "id": "R4",
+      "requirement": "Execute staged multi-pair, multi-prompt, multi-seed benchmark using the existing local session and fixed low-memory profile.",
+      "status": "verified",
+      "evidence": "144 character/effect clips, four pairings, nine arms, four seeds; frozen prompts, exact executed graphs, success histories, queue-before snapshots, media hashes and stream audits revalidated. Earlier 60 pilot/AV2 media hashes also rechecked, with all 48 AV2 render records reconstructed.",
+      "limits": "FL2VA pruned INT8 convrot, FP4 TE, 640x384,124 frames,24fps,20 steps,Turbo off. Does not generalize to Ref2VA, other bases, full resolution or all LoRAs."
+    },
+    {
+      "id": "R5",
+      "requirement": "Compare all held-out character cases against creator references and matched character-only controls, with action/visibility/temporal uncertainty retained.",
+      "status": "verified_declared_still_frame_scope",
+      "evidence": "72/72 detailed and matched, 8,928 chronological frames, 288 waveform sheets and 181 original-resolution detail grids; four passing pre-unblind checkpoints and unchanged blind records. All 72 supplementary f0/f60/f123 rows rehashed and pair/method mappings checked.",
+      "limits": "Assistant still-frame chronology, not continuous audiovisual playback. Two subjects and correlated frames do not establish population significance; no calibrated fine identity score."
+    },
+    {
+      "id": "R6",
+      "requirement": "Use held-out evidence to change opt-in candidate generation/ranking only when justified.",
+      "status": "verified_negative_decision",
+      "evidence": "No learned held-out feedback or automatic NP/CT preference added. Mixed per-seed trade-offs fail to justify a universal bonus. Calibration head-patch cosine failed important identity controls. Forty-trial F08 audit exactly reproduced with unchanged common scores/decisions/winners and slower medians.",
+      "limits": "F08 remains uncommitted in the worktree for research, not shipping-qualified. No new winner exists requiring a separate F08 render. Candidate score equality is not perceptual quality."
+    },
+    {
+      "id": "R7",
+      "requirement": "Preserve disconnected experimental behavior and cover supported replay/cache/evaluator paths.",
+      "status": "verified_scoped",
+      "evidence": "Four full-adapter disconnected controls have identical configurations/scores/decision maps/winner hashes; fresh CPU regressions cover disabled/master-off behavior, active parameters, exact model+CLIP no-op gates, callbacks and cache identities. Installed pack clean at pre-study 4811977.",
+      "limits": "Three CUDA-only regression tests skip in sandbox. Real full-adapter GPU studies are separate evidence, not substituted for those exact skipped tests."
+    },
+    {
+      "id": "R8",
+      "requirement": "Maintain reproducible research records, regression tests and explicit failures/negative findings.",
+      "status": "verified_for_completed_work",
+      "evidence": "Hash-backed numerical/render/review/timing records, preserved failure/recovery artifacts, current full suite, JavaScript and real-loader round trips; present audit revalidates sources instead of relying on the stale progress header.",
+      "limits": "Large media/weights/diagnostic files remain ignored and local, not a remote backup. No new commit/push. Two early SLERP exports had unseeded randomized compression, so exact bitwise regeneration is not promised; actual frozen payload hashes retained."
+    },
+    {
+      "id": "R9",
+      "requirement": "Complete remaining real audiovisual judgments and matched ranking-agreement comparisons from the earlier AV2 acceptance gate.",
+      "status": "incomplete",
+      "evidence": "Only R1's seed03 ratings exist. Calibration seed04 and held-out seeds11/12 remain unrated: 42 comparison entries for 36 unique clips. Existing pages and technical audits exist, but no later rating records or real listening evidence. Character-study sound identity/realism/unwanted voices/music/perceived sync are null.",
+      "limits": "R1 seed03 NP top-pick ordinal gaps are 1 for Cinema and 0 for Repair; cannot extrapolate to missing seeds. Do not relabel waveform peaks, technical audit success or the newer character review as completion of this gate."
+    },
+    {
+      "id": "R10",
+      "requirement": "Give evidence-backed shipping recommendation, including negative findings, without unauthorized release actions.",
+      "status": "technical_recommendation_complete_overall_av_qualification_open",
+      "evidence": "Retain committed F01-F07 correctness/native-export changes; keep NP/CT opt-in and ranking weights/defaults unchanged; withhold F08 admission/backfill prototype as-is. Do not install or release the whole dirty worktree. Research mapped-storage hook is not an automatic production dense-export feature.",
+      "limits": "No overall AV winner or automatic quality improvement claim; final goal cannot be marked achieved while R9 is missing."
+    }
+  ],
+  "verification_runs": [
+    {
+      "name": "pytest",
+      "command": "/media/p5/miniforge3/envs/13_env_py313/bin/python -m pytest -q",
+      "session_id": 95915,
+      "exit_code": 0,
+      "output": ".................................................................................................... [ 10%]\n........................................................................ [ 18%]\n........................................................................ [ 26%]\n........................................................................ [ 34%]\n................................................................... [ 42%]\n............s......................................................... [ 49%]\n...................................................................... [ 57%]\n........................................................................ [ 65%]\n........................................................................ [ 73%]\n........................................................................ [ 81%]\n........................................................................ [ 89%]\n..............................ss...................................................................                [100%]\n=============================== warnings summary ===============================\n../miniforge3/envs/13_env_py313/lib/python3.13/site-packages/torch/cuda/__init__.py:61\n  /media/p5/miniforge3/envs/13_env_py313/lib/python3.13/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.\n    import pynvml  # type: ignore[import]\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n907 passed, 3 skipped, 1 warning, 155 subtests passed in 32.74s\n"
+    },
+    {
+      "name": "javascript",
+      "command": "node tests/js/dynamic_migration.test.cjs",
+      "session_id": null,
+      "exit_code": 0,
+      "output": "[LoRAStackDynamic] Migrated workflow (7/slot -> 9/slot, 74 -> 94 widget values): re-padded slots to restore LoRA names.\n[LoRAStackDynamic] Migrated workflow (8/slot -> 9/slot, 84 -> 94 widget values): re-padded slots to restore LoRA names.\n✔ legacy 7-widget slots retain names, filter and default H3 layout (3.08967ms)\n✔ legacy 8-widget slots retain names, filter and default H3 layout (0.309348ms)\n✔ legacy 9-widget slots retain names, filter and default H3 layout (0.261909ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 11.987953\n"
+    },
+    {
+      "name": "roundtrip",
+      "command": "/media/p5/miniforge3/envs/13_env_py313/bin/python tests/integration/comfy_roundtrip.py /media/p5/Comfyui",
+      "session_id": 17201,
+      "exit_code": 0,
+      "output": "/media/p5/miniforge3/envs/13_env_py313/lib/python3.13/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.\n  import pynvml  # type: ignore[import]\nPASS: real ComfyUI mapping/application, partial QKV, signed alpha, dense AdaLN/bias/norm, LoCon, fp32 export, atomic rejection, signed CLIP weights/bias, dense and native-factor NP-LoRA/CT-Merging round trips and metadata\n"
+    },
+    {
+      "name": "timing_reaudit",
+      "command": "/media/p5/miniforge3/envs/13_env_py313/bin/python - <<'PY'\nfrom pathlib import Path\nfrom scripts.h3_search_audit import audit,read_json\np=Path('.h3-study-artifacts/20260908/f08-search-benchmark-02/plan.json')\nr=audit(p)\nsaved=read_json(Path('docs/research/data/2026-09-08-h3-search-benchmark-audit.json'))\nassert r==saved\nimport json\nprint(json.dumps({'status':'pass','saved_audit_exactly_reproduced':True,'trials':r['trials'],'fidelity_gates':r['fidelity_gates'],'quality_claim':r['quality_claim']}))\nPY",
+      "session_id": 53781,
+      "exit_code": 0,
+      "output": "{\"status\": \"pass\", \"saved_audit_exactly_reproduced\": true, \"trials\": 40, \"fidelity_gates\": {\"disconnected_outputs_preserved\": true, \"common_candidate_scores_and_decisions_preserved\": true, \"unchanged_winner_configs_preserve_payloads\": true, \"measured_winners_repeatable\": true, \"runtime_profile_consistent\": true}, \"quality_claim\": false}\n"
+    }
+  ],
+  "character_integrity": {
+    "command": "/media/p5/miniforge3/envs/13_env_py313/bin/python .h3-study-artifacts/20260908/final-integrity-check.py",
+    "script_sha256": "a05ab6f096e5aa654ad25391f1bc4a87caab21cf92e8b571d5bcfc78bef57063",
+    "session_id": 68869,
+    "exit_code": 0,
+    "result": {
+      "status": "pass",
+      "render_cases": 144,
+      "decoded_frames": 17856,
+      "blocks": [
+        {
+          "block": "2026-09-08-h3-character-heldout-seed41",
+          "detailed": 18,
+          "matched": 18,
+          "frames": 2232,
+          "sheets": 72,
+          "detail_grids": 42
+        },
+        {
+          "block": "2026-09-08-h3-character-heldout-seed42",
+          "detailed": 18,
+          "matched": 18,
+          "frames": 2232,
+          "sheets": 72,
+          "detail_grids": 61
+        },
+        {
+          "block": "2026-09-08-h3-character-crossed-heldout-seed41",
+          "detailed": 18,
+          "matched": 18,
+          "frames": 2232,
+          "sheets": 72,
+          "detail_grids": 42
+        },
+        {
+          "block": "2026-09-08-h3-character-crossed-heldout-seed42",
+          "detailed": 18,
+          "matched": 18,
+          "frames": 2232,
+          "sheets": 72,
+          "detail_grids": 36
+        }
+      ],
+      "numerical_exports": [
+        {
+          "arm": "series30_cinema:additive",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 1.3716615822785794e-7,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-cinema-additive-01/export_check.json"
+        },
+        {
+          "arm": "series30_cinema:slerp",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.000019820491734134727,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-cinema-slerp-01/export_check.json"
+        },
+        {
+          "arm": "series30_cinema:ties",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 7.199355041386165e-8,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-cinema-ties-01-mapped/dense_export_check.json"
+        },
+        {
+          "arm": "series30_cinema:stable_tuner_winner",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.0000014597074594367112,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-cinema-winner-01/export_check.json"
+        },
+        {
+          "arm": "series30_cinema:np_lora",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 2.2492406262322632e-7,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-cinema-np-01/export_check.json"
+        },
+        {
+          "arm": "series30_cinema:ct_merge",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.00005908691147598074,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-cinema-ct-01/export_check.json"
+        },
+        {
+          "arm": "sully_combat:additive",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 9.332550212590386e-8,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-combat-additive-01/export_check.json"
+        },
+        {
+          "arm": "sully_combat:slerp",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.00244413884808433,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-combat-slerp-01/export_check.json"
+        },
+        {
+          "arm": "sully_combat:ties",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-combat-ties-01-mapped/dense_export_check.json"
+        },
+        {
+          "arm": "sully_combat:stable_tuner_winner",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.002422868331662967,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-combat-winner-01/export_check.json"
+        },
+        {
+          "arm": "sully_combat:np_lora",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 5.353157534193888e-7,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-combat-np-01/export_check.json"
+        },
+        {
+          "arm": "sully_combat:ct_merge",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.00007985942602731646,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-combat-ct-01/export_check.json"
+        },
+        {
+          "arm": "series30_combat:additive",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 1.404458617698246e-7,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-combat-additive-01/export_check.json"
+        },
+        {
+          "arm": "series30_combat:slerp",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.000010838248867216342,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-combat-slerp-01/export_check.json"
+        },
+        {
+          "arm": "series30_combat:ties",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 7.7450696814802e-8,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-combat-ties-01-mapped/dense_export_check.json"
+        },
+        {
+          "arm": "series30_combat:stable_tuner_winner",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.000002624550427430586,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-combat-winner-01/export_check.json"
+        },
+        {
+          "arm": "series30_combat:np_lora",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 4.285956659890272e-7,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-combat-np-01/export_check.json"
+        },
+        {
+          "arm": "series30_combat:ct_merge",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.0000760790200423133,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-series30-combat-ct-01/export_check.json"
+        },
+        {
+          "arm": "sully_cinema:additive",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 9.069725254912465e-8,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-cinema-additive-01/export_check.json"
+        },
+        {
+          "arm": "sully_cinema:slerp",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.002433791001434161,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-cinema-slerp-01/export_check.json"
+        },
+        {
+          "arm": "sully_cinema:ties",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-cinema-ties-01-mapped/dense_export_check.json"
+        },
+        {
+          "arm": "sully_cinema:stable_tuner_winner",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.0024254678458679947,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-cinema-winner-01/export_check.json"
+        },
+        {
+          "arm": "sully_cinema:np_lora",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 2.2483428835817887e-7,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-cinema-np-01/export_check.json"
+        },
+        {
+          "arm": "sully_cinema:ct_merge",
+          "groups": 312,
+          "native_targets": 208,
+          "max_relative_export_error": 0.000051844420074458,
+          "numerical_path": ".h3-study-artifacts/20260908/idm-sully-cinema-ct-01/export_check.json"
+        }
+      ],
+      "evidence_sha256": {
+        "docs/research/data/2026-09-08-h3-character-benchmark-plan.json": "1f179b668839a4379a1743fd3c8f507b0202a254ccb5f47a3047f25a7a33ed40",
+        ".h3-study-artifacts/20260908/idm-series30-cinema-additive-01/export_check.json": "a2f21f656a97673fadc735f9fc2426cae01d1ebf47726e420b0624584e928182",
+        ".h3-study-artifacts/20260908/idm-series30-cinema-slerp-01/export_check.json": "5adf01b45110b3d09b7d162171c0a109698fa47bcceba2cab61233fa32a7997d",
+        ".h3-study-artifacts/20260908/idm-series30-cinema-ties-01-mapped/dense_export_check.json": "161e67d446eac783483c92d42979c440fc1bd32bf0c75b4738bcd5446187a75d",
+        ".h3-study-artifacts/20260908/idm-series30-cinema-winner-01/export_check.json": "c6a62505791cfc47a84287d26825ee056e7bc16ea228b48ac7a25c44fcb3dba3",
+        ".h3-study-artifacts/20260908/idm-series30-cinema-np-01/export_check.json": "bce420df8b770ff7c52209432cd4aad349c0e058bd3fa8050b18994f67661b6f",
+        ".h3-study-artifacts/20260908/idm-series30-cinema-ct-01/export_check.json": "eae09d013dda9483fda33a7c2a7fd615405c49a1d8483e16a81bc8ebd863a936",
+        ".h3-study-artifacts/20260908/idm-sully-combat-additive-01/export_check.json": "6f81b30d5e65c5fae0979ce7a54bee46ae5c12752f6545a4ee397a143146956a",
+        ".h3-study-artifacts/20260908/idm-sully-combat-slerp-01/export_check.json": "820d2a1ca83163ff3cfcc6dffef13328c25d08923da0545c83a9666117938efc",
+        ".h3-study-artifacts/20260908/idm-sully-combat-ties-01-mapped/dense_export_check.json": "7df6e37e23e270b3e32af1a7c746fdcb5a40bb110359f069ef07147d01b9146e",
+        ".h3-study-artifacts/20260908/idm-sully-combat-winner-01/export_check.json": "a2a73897cc2e2f590931b7bb5917a2bb7ed0b4278548577618fd1f6ed0d69f21",
+        ".h3-study-artifacts/20260908/idm-sully-combat-np-01/export_check.json": "a29e14e8e39d5a354d7e03ba07a32471cf25892becbac1874f71056b29d19624",
+        ".h3-study-artifacts/20260908/idm-sully-combat-ct-01/export_check.json": "a4b9e070a2df3d4667817956ea06beb35ff828be43ea60cbe37df6bad2b2096b",
+        "docs/research/data/2026-09-08-h3-character-benchmark-seed31.json": "1680aac8c1c1222af8db727de9641ef0f73980ac55907327d731e452766c64fc",
+        "docs/research/data/2026-09-08-h3-character-benchmark-seed32.json": "e0a8399404095a1ec9bd7dc728a31b47c21c829da43c4cc64932c712e595f44b",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed41.json": "b5460850bff79fb6b641fec6d66a2886af91fd26c2a3044b5354256480523b6b",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed42.json": "d749f80809121f71fe429e62a88a2fdac4d7c3e1641079ed44c3b41d55bae009",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed41-blind-observations.json": "dedc6c9e9f7e53febc72792166007f94a44242d78d28bb2164a5a3f9f4d4a073",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed41-frame-waveform-observations.json": "b59d68eb13f243249744d8e6c581fc0d791395b334c654fe9fe2c79643c49f0f",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed41-preunblind-checkpoint.json": "c53501342dc865d26cf5dea074b99223597eb5b3e39a8feb6aca4f84e643b977",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed41-matched-comparison.json": "8a96cf7756bddb6e157a7848f52a243ba57315c6b340fe6e0979111925674a31",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed42-blind-observations.json": "616ad24493baaaa1aa8b50085ba47ac591de41f79dcdbd2db8316950594e6af6",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed42-frame-waveform-observations.json": "e2b2a7b3eaf7685ad4d9818d275bd72d9f0186afc09954515b6da05c2a9c40be",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed42-preunblind-checkpoint.json": "559ba8952fbe4ee7318e820e2254a51fa6b203bb2a5cc6ae89db47cfb58ab2c3",
+        "docs/research/data/2026-09-08-h3-character-heldout-seed42-matched-comparison.json": "0178d7e408a516b10a0e3e7575582d47b5b23ab770e13a0680d9527bc8fc3c23",
+        "docs/research/data/2026-09-08-h3-character-crossed-plan.json": "110d58a4adeab1dce4c3ef288bc3036c0a1b3ff79a50d862c49818103b9c40c2",
+        ".h3-study-artifacts/20260908/idm-series30-combat-additive-01/export_check.json": "b2fa7eb85ec1c5c74a823dabb4cf4aa2d8bdc6065f7afc7dde9a16a5cd196a13",
+        ".h3-study-artifacts/20260908/idm-series30-combat-slerp-01/export_check.json": "e7499ad309d8b20f97b181b3239295c7aa62590cdf5597ba8fc64b8c9cdc2e11",
+        ".h3-study-artifacts/20260908/idm-series30-combat-ties-01-mapped/dense_export_check.json": "3dea65f80f0c18be4a23a3d89fc80c067e37f8f7c4c6d52355a68230aabb83b6",
+        ".h3-study-artifacts/20260908/idm-series30-combat-winner-01/export_check.json": "e63e3d53f6b50f13baedb6eaf5141127d07ae403839e20d704ba92e7f5675dd2",
+        ".h3-study-artifacts/20260908/idm-series30-combat-np-01/export_check.json": "3da4ca645e8a29ab085b7dc4cdebfb4f63fc170df51c0bef789bb0b4f6a3b5f6",
+        ".h3-study-artifacts/20260908/idm-series30-combat-ct-01/export_check.json": "1a65915044c87d448ca79de5a6d3937aa7c7d4ba378a6865139107d631ee1938",
+        ".h3-study-artifacts/20260908/idm-sully-cinema-additive-01/export_check.json": "114b82157b95f3054916d57b18a4946a23ff524b3ee7ec65145e42783c4b2579",
+        ".h3-study-artifacts/20260908/idm-sully-cinema-slerp-01/export_check.json": "a042e17430ba5b8922868976d875264b46846bb9437a12c77275c9f5b93ed4db",
+        ".h3-study-artifacts/20260908/idm-sully-cinema-ties-01-mapped/dense_export_check.json": "a3dbbf4d03bea9e00a008625d9dd503fe67193860c7f138b003322a7dc926bfc",
+        ".h3-study-artifacts/20260908/idm-sully-cinema-winner-01/export_check.json": "e7dd31e6d33cda90af585f81dc7ae1f0bfb2567d6e6bb9d00e4529e72fa9078a",
+        ".h3-study-artifacts/20260908/idm-sully-cinema-np-01/export_check.json": "03835cc99e7e4df8ac15f66850b092564d7bb71cfaf8ecc2675b7bd1dda7e176",
+        ".h3-study-artifacts/20260908/idm-sully-cinema-ct-01/export_check.json": "9f9f4c886b76a04a53cb5a8b08309e61cdf3d1b0bf34fcea8466ef792f0aab5c",
+        "docs/research/data/2026-09-08-h3-character-crossed-seed31.json": "16ed55e5d127ae2d7295f222f3cc8d80d11ed4c1400232f5b18fce90108f2862",
+        "docs/research/data/2026-09-08-h3-character-crossed-seed32.json": "53c6fd5ad6c190f211e20c8bca2eaeba941f344bba7fad9205a10ae0186cae7f",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed41.json": "23e1a63f00682f538f3a9e5892985aec90d3d2b3885dedfdf34f0484619f3f20",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed42.json": "18cdc49cbd7c99266eaf4cdb3cbd1d73786bf891accc27cae88b4c586d4b9d27",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed41-blind-observations.json": "3c75118448b780df7eb936c4ad56c511ed3e1791169795a60a2cc55a1cc81ccb",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed41-frame-waveform-observations.json": "3a41e75901e8ef20d151b3fc32f4c148ff1fe5b647c10bd640a7d20ba35eed9e",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed41-preunblind-checkpoint.json": "e855fdb4dab3605b820520eba8dc3be61f15aee8c54372730d56165823b8dee4",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed41-matched-comparison.json": "f02b6a2f76902cac642afb2f5df37f7b356dff052db03487e47dd3a80a7fa790",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed42-blind-observations.json": "a2c3d8c564e5ed00bfce59f87628217bf024c1240ccd1eeb8016ce4fa67f01f5",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed42-frame-waveform-observations.json": "92924061c0b0ab4cb35db5cd4b72f582514f62673c7f9b79a9ccbf44ad0aaaa7",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed42-preunblind-checkpoint.json": "ca45abb2538ae5a9e227d7ddfcedb8fec18f7b871016a462d23feeb34e315345",
+        "docs/research/data/2026-09-08-h3-character-crossed-heldout-seed42-matched-comparison.json": "5a28490e2fa945170bfca03970b6c4b3aedb26e68ecbd3eaf4461b5ffdb2c9ce"
+      },
+      "full_scale_flags": [
+        {
+          "job": "idm-sully-combat-2026090832-effect-only",
+          "peak": 1.003684163093567,
+          "fraction": 0.0000030241813541074433
+        },
+        {
+          "job": "idm-sully-combat-2026090841-effect-only",
+          "peak": 1.0167404413223267,
+          "fraction": 0.00001814508812464466
+        },
+        {
+          "job": "idm-sully-combat-2026090842-ties",
+          "peak": 1.0325878858566284,
+          "fraction": 0.000012096725416429773
+        },
+        {
+          "job": "idm-series30-combat-2026090831-stable-tuner-winner",
+          "peak": 1.0034581422805786,
+          "fraction": 0.00000907254406232233
+        },
+        {
+          "job": "idm-series30-combat-2026090832-character-only",
+          "peak": 1.000463843345642,
+          "fraction": 0.0000030241813541074433
+        },
+        {
+          "job": "idm-series30-combat-2026090832-ct-merge",
+          "peak": 1.0365394353866577,
+          "fraction": 0.00000907254406232233
+        },
+        {
+          "job": "idm-series30-combat-2026090832-effect-only",
+          "peak": 1.0023438930511475,
+          "fraction": 0.0000030241813541074433
+        },
+        {
+          "job": "idm-series30-combat-2026090841-stable-tuner-winner",
+          "peak": 1.015299677848816,
+          "fraction": 0.0000030241813541074433
+        },
+        {
+          "job": "idm-series30-combat-2026090842-stable-tuner-winner",
+          "peak": 1.031994342803955,
+          "fraction": 0.0000030241813541074433
+        }
+      ],
+      "verification_scope": "Rehashed every original/held-out anonymous MP4, prepared/render records and review diagnostics. Full export hashes were checked at frozen acquisition; current asset guards verify inode/size/mtime and same-file installed links, not a new 314-GB export rehash. No fresh AV decode or numerical recomputation.",
+      "claimed_overall_quality_winner": null
+    },
+    "harness_corrections": "Initial checker attempts assumed expanded numerical records equaled compact summaries and that the earliest matched schema embedded reference hashes. Inspected actual collector/schema, verified full numerical source hashes and recomputed summaries, and used independently pinned creator hashes for the older schema. No evidence file or production code changed to obtain pass."
+  },
+  "earlier_integrity": {
+    "command": "/media/p5/miniforge3/envs/13_env_py313/bin/python - <<'PY'\nfrom pathlib import Path\nimport json\nfrom scripts.h3_study_record import collect_merge_run,collect_render_run,digest\nD=Path('docs/research/data'); A=Path('.h3-study-artifacts/20260908')\nload=lambda p:json.loads(Path(p).read_text())\nfollow=D/'2026-09-08-h3-followup-numerical.json'; f=load(follow)\nfor old in f['merge_runs']:\n    new=collect_merge_run(old['artifact_directory'])\n    assert new==old,old['run']\nreports=[]; total=0\nfor suffix in ('calibration-seed03','calibration-seed04','heldout-seed11','heldout-seed12'):\n    p=D/f'2026-09-08-h3-av2-{suffix}.json'; report=load(p)\n    assert len(report['renders'])==12 and report['incomplete_jobs']==[]\n    for row in report['renders']:\n        assert collect_render_run(A/row['run'])==row,row['run']\n        h=load(A/row['run']/'history.json')\n        assert h['status']['completed'] and h['status']['status_str']=='success'\n        assert h['prompt'][2]==load(A/row['run']/'prompt_api.json')\n        total+=1\n    reports.append({'path':str(p),'sha256':digest(p),'renders':12})\np=D/'2026-09-08-h3-pilot.json'; pilot=load(p)\nassert len(pilot['renders'])==12\nfor row in pilot['renders']:\n    assert digest(row['video'])==row['video_sha256'] and row['decoded_frames']==124\n    total+=1\nreports.append({'path':str(p),'sha256':digest(p),'renders':12,'scope':'Original video hashes and stored 124-frame counts rechecked; older schema not silently converted.'})\nprint(json.dumps({'status':'pass','followup_merge_runs_reproduced':8,'followup_record_sha256':digest(follow),'earlier_clips_rehashed':total,'reports':reports,'note':'No new renders, preferences or audio listening; this revalidates technical evidence only.'},indent=2))\nPY",
+    "session_id": 34694,
+    "exit_code": 0,
+    "result": {
+      "status": "pass",
+      "followup_merge_runs_reproduced": 8,
+      "followup_record_sha256": "f3c71dd09e71f2015413d4c8e71b153eb52370cee052a298877c9cc378527cc2",
+      "earlier_clips_rehashed": 60,
+      "reports": [
+        {
+          "path": "docs/research/data/2026-09-08-h3-av2-calibration-seed03.json",
+          "sha256": "c3d6d488d9711857460673cd2b6fa5a69897b9b8d66c64f7d8aa90ffb8329676",
+          "renders": 12
+        },
+        {
+          "path": "docs/research/data/2026-09-08-h3-av2-calibration-seed04.json",
+          "sha256": "da7265756d67a207b9628731050a9ba261d17ca9835444b896e52a3710320f65",
+          "renders": 12
+        },
+        {
+          "path": "docs/research/data/2026-09-08-h3-av2-heldout-seed11.json",
+          "sha256": "75e74628cb19e561b424306ff7b03248900388a091589e54f2cba63223ae2b32",
+          "renders": 12
+        },
+        {
+          "path": "docs/research/data/2026-09-08-h3-av2-heldout-seed12.json",
+          "sha256": "7631eb7ccac89dbf66550af106a984d0b2037f2415d400ce464061e196004631",
+          "renders": 12
+        },
+        {
+          "path": "docs/research/data/2026-09-08-h3-pilot.json",
+          "sha256": "918edcfeae9af00efd23dff80340ee0853179ea987f687956e6489967a3d97ea",
+          "renders": 12,
+          "scope": "Original video hashes and stored 124-frame counts rechecked; older schema not silently converted."
+        }
+      ],
+      "note": "No new renders, preferences or audio listening; this revalidates technical evidence only."
+    }
+  },
+  "remaining": {
+    "overall_av_qualification": true,
+    "av2_unrated_unique_clips": 36,
+    "av2_unrated_comparison_entries": 42,
+    "character_audio_judgments": "Unassessed; no human ratings or assistant listening",
+    "new_generation_required": false,
+    "next_safe_action": "Resolve a genuine audio-capable review/input path and the existing AV2 review/rating gate, preserving frozen scopes and missing labels. Do not repeat completed render, timing or character-frame work simply to fill time.",
+    "goal_active": true
+  },
+  "shipping_recommendation": {
+    "ship_on_technical_evidence": "Previously committed F01-F07 fixes; no release operation authorized.",
+    "keep_opt_in": [
+      "np_lora",
+      "ct_merge"
+    ],
+    "withhold": [
+      "Unreleased F08 search-admission/backfill prototype",
+      "Automatic NP/CT bonus or held-out-fitted ranker",
+      "Automatic production deployment of offline mapped-storage research hook"
+    ],
+    "quality_claim": false,
+    "default_changes": false
+  }
+}

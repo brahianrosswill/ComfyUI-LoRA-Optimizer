@@ -1,0 +1,741 @@
+{
+  "version": 1,
+  "created_at": 1788882411.468715,
+  "render_plan_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-character-benchmark-plan.json",
+  "render_plan_sha256": "1f179b668839a4379a1743fd3c8f507b0202a254ccb5f47a3047f25a7a33ed40",
+  "probe_plan_path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-identity-probe-plan.json",
+  "probe_plan_sha256": "91403be30759ae3f446245e454208f323f806e70b455335d937116105b9ea30d",
+  "jobs": [
+    {
+      "id": "idm-sully-combat-2026090831-character-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "sully"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-ties",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "series30_cinema:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-np-lora",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "sully_combat:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-ct-merge",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "sully_combat:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-base",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-base",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-sully-combat-2026090831-stable-tuner-winner",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "sully_combat:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-ties",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "sully_combat:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-additive",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "series30_cinema:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-stable-tuner-winner",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "series30_cinema:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-effect-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "combat"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-slerp",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "sully_combat:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090831-additive",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "sully_combat_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "sully_combat:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-np-lora",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "series30_cinema:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-character-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "series30"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-ct-merge",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "series30_cinema:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-effect-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "cinema"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090831-slerp",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090831,
+      "prompt": "series30_cinema_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "series30_cinema:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-ties",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "series30_cinema:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-np-lora",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "series30_cinema:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-effect-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "combat"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-character-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "series30"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-ct-merge",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "series30_cinema:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-additive",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "sully_combat:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-slerp",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "sully_combat:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-effect-only",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "effect_only",
+      "asset_keys": [
+        "cinema"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-ties",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "ties",
+      "asset_keys": [
+        "sully_combat:ties"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ties-01-mapped.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-stable-tuner-winner",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "series30_cinema:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-stable-tuner-winner",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "stable_tuner_winner",
+      "asset_keys": [
+        "sully_combat:stable_tuner_winner"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-winner-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-slerp",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "slerp",
+      "asset_keys": [
+        "series30_cinema:slerp"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-slerp-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-additive",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "additive",
+      "asset_keys": [
+        "series30_cinema:additive"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/series30-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-character-only",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "character_only",
+      "asset_keys": [
+        "sully"
+      ],
+      "loras": [
+        [
+          "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-sully-combat-2026090832-np-lora",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "np_lora",
+      "asset_keys": [
+        "sully_combat:np_lora"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-np-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "idm-series30-cinema-2026090832-base",
+      "pair": "series30_cinema",
+      "character": "series30",
+      "effect": "cinema",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "series30_cinema_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-sully-combat-2026090832-base",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "base",
+      "asset_keys": [],
+      "loras": []
+    },
+    {
+      "id": "idm-sully-combat-2026090832-ct-merge",
+      "pair": "sully_combat",
+      "character": "sully",
+      "effect": "combat",
+      "stage": "calibration",
+      "seed": 2026090832,
+      "prompt": "sully_combat_calibration",
+      "variant": "ct_merge",
+      "asset_keys": [
+        "sully_combat:ct_merge"
+      ],
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/sully-combat-ct-01.safetensors",
+          1.0
+        ]
+      ]
+    }
+  ],
+  "inherited_probe": {
+    "model_path": "/home/ethanfel/.cache/huggingface/hub/models--google--siglip2-base-patch16-512/snapshots/a89f5c5093f902bf39d3cd4d81d2c09867f0724b",
+    "model_sha256": "fe0e601c625e69eed8e73500d39e9b6164403fe03db8048e87913c3cefbbb3fe",
+    "config_sha256": "a15bc39fbcd92498dea6d5d3cb2b0d8b9ba389d6a3f2b565ea66128a2d141934",
+    "frames": [
+      0,
+      24,
+      48,
+      72,
+      96,
+      120
+    ],
+    "references": {
+      "sully": {
+        "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/identity-acquisition/sully-reference.mp4",
+        "frame": 0,
+        "normalized_head_rectangle": [
+          0.52,
+          0.04,
+          0.86,
+          0.98
+        ],
+        "sha256": "34786badbe615b71fd23db8e9651d8d89b78ee1a32a37e58f5ccff65d8cc5269"
+      },
+      "series30": {
+        "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/identity-acquisition/series30-reference.mp4",
+        "frame": 0,
+        "normalized_head_rectangle": [
+          0.24,
+          0.01,
+          0.66,
+          0.97
+        ],
+        "sha256": "65bf11aaa71df4c999f0a44c24458653e384818623ebfbae18abdf6fc305ccf7"
+      }
+    },
+    "processor": {
+      "size": {
+        "height": 512,
+        "width": 512
+      },
+      "resample": 2,
+      "do_resize": true,
+      "do_rescale": true,
+      "rescale_factor": 0.00392156862745098,
+      "do_normalize": true,
+      "image_mean": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "image_std": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "do_convert_rgb": true
+    },
+    "limitations": "Not MaSC, not face recognition, not an identity probability. Similarity may reflect species, hair, pose or lighting; visibility and effect must be separately reviewed. Do not discard low-scoring frames."
+  },
+  "helper_sha256": {
+    "h3_character_similarity.py": "2b0aa3025055255f8bfdbf6cf878fdc18053757b898e44610d4bf3e286217690",
+    "h3_identity_probe.py": "7a3e9e5f4523a333b2ec77d8ba302f3cf513e576b99f8d4408abc083a2bc1653",
+    "h3_character_benchmark.py": "69f75f3de7a3ae679e103a85bdcce4d78f7a40507d8e62fba433ab589111d26f",
+    "h3_identity_study.py": "41882e86d6650a8efe463e6baf4ee927a922de6d2ffa553f2a35c030429178e4",
+    "h3_render_study.py": "63706885f6a69675cd3fba72653b78402a0a52072b069efef7aa3af1479f400b",
+    "h3_av_review.py": "71407df68f92ebe4cc01ef9dd395d83e91b9b97cc03a7bbef938122e730dde40",
+    "h3_benchmark.py": "013e8104e295c2bf2eb9593dee8e14fb4a19d33754bd02794ef708aa77ae3578"
+  },
+  "purpose": "Apply the already calibrated head-region formula unchanged to both nine-arm calibration blocks; do not alter masks, frames or thresholds after outputs.",
+  "exposure": "Seed-31 sparse visual observations were already recorded and unblinded. Seed-32 generations are in progress; no seed-32 visual observations have been made at recipe freeze.",
+  "reporting": "Retain every sampled frame and all controls. Subtract the matched character-only and additive medians in raw cosine units, not normalized preservation percentages. Effects, visibility and AV quality remain separate.",
+  "heldout_allowed": false,
+  "evaluator_feedback": false,
+  "quality_labels": []
+}

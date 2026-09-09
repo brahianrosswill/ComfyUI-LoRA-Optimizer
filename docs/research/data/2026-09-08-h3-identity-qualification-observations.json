@@ -1,0 +1,113 @@
+{
+  "purpose": "Unblinded character-only calibration diagnostics, not merge results or preference labels",
+  "plan_sha256": "566db7c77212267ee8dcf8e6f304123e9ac52996968036633d5a274390e57127",
+  "technical_records": [
+    {
+      "path": "docs/research/data/2026-09-08-h3-identity-qualification-seed21.json",
+      "sha256": "f683c42902f5d2c9f04a3969e939fd1097e2147278beed10c49211bad4e5eb32"
+    },
+    {
+      "path": "docs/research/data/2026-09-08-h3-identity-qualification-seed22.json",
+      "sha256": "82272aa36a5b346533f761ea23a01658ed6a2c5423139a742d6fe6da4145b823"
+    }
+  ],
+  "inspection": {
+    "observer": "assistant",
+    "unblinded": true,
+    "media": "All 16 generated clips inspected through 4 fps diagnostic contact sheets; three samples per creator reference",
+    "sampled_frames_per_generated_clip": 21,
+    "sheet_padding": "Last four tiles are black padding, not video frames",
+    "full_motion_review": false,
+    "audio_listened": false,
+    "human_ratings": [],
+    "automatic_identity_scores": [],
+    "limits": "Sparse visual inspection cannot establish full temporal or audiovisual quality; observations are not independent human labels. Both characters and seeds are calibration, not held out."
+  },
+  "technical_outcome": {
+    "completed": 16,
+    "missing": 0,
+    "failed": 0,
+    "executed_graphs_match": true,
+    "decoded_frames_per_clip": 124,
+    "width": 640,
+    "height": 384,
+    "fps": 24,
+    "audio_sample_rate": 32000,
+    "audio_channels": 2,
+    "clips_with_decoded_audio_samples_above_absolute_1": 0,
+    "render_elapsed_seconds_range": [29.386, 42.448],
+    "render_elapsed_seconds_sum": 601.174,
+    "timing_limits": "History execution intervals with uncontrolled caching, not end-to-end wall time or a merge-mode speed comparison"
+  },
+  "observations": [
+    {
+      "prompt": "sully_source",
+      "seeds": [2026090821, 2026090822],
+      "comparison": "The character adapter produces fur, short curved horns, broad muzzle and nose closer to the creator reference than either generic-monster base output in the inspected samples.",
+      "caveats": [
+        "The adapter also changes the doorway/background toward a bright window-lit room; whole-frame similarity would mix identity with scene changes.",
+        "Seed 2026090822 character starts with the face largely outside the crop or hidden by the door in the earliest sampled frames; retain and report visibility, do not remove those frames to improve identity scores.",
+        "Green/purple fur is explicitly requested by the preserved creator prompt; canonical blue is not the target for this case."
+      ]
+    },
+    {
+      "prompt": "series30_source",
+      "seeds": [2026090821, 2026090822],
+      "comparison": "The character adapter produces facial appearance and long loose hair closer to the fictional creator reference on both seeds; the broad cafe setting remains recognizable.",
+      "caveats": [
+        "The adapter changes crop, clothing and background details. Seed 21 uses a white top with dark outer layer; seed 22 a white sleeveless top. Base outfits and framing differ.",
+        "Creator reference used Turbo and post-processing whereas local qualification did not; this is not an exact reproduction."
+      ]
+    },
+    {
+      "prompt": "sully_turn",
+      "seeds": [2026090821, 2026090822],
+      "comparison": "Character appearance remains recognizably closer to the Sully reference across sampled frontal and turned views on both seeds. The base produces a long-horned, tusked, bearded generic monster.",
+      "caveats": [
+        "Head-turn and return are visible in sampled sequences, but shoulders/body also move and seed 21 reaches a stronger profile than the requested three-quarter view.",
+        "Pose adherence and identity must be separate judgments; a recognizable face is not proof of exact motion control."
+      ]
+    },
+    {
+      "prompt": "series30_turn",
+      "seeds": [2026090821, 2026090822],
+      "comparison": "Character facial appearance stays closer to the fictional source through sampled head-turn and return views on both seeds, with long black hair and a white blouse.",
+      "caveats": [
+        "Seed 21 begins somewhat three-quarter rather than strictly frontal; standing is not established by the crop and a chair back is visible in the base.",
+        "Seed 22 base and character turn toward opposite screen sides. Do not assume same-seed frames have corresponding poses or silently mirror them for an identity score."
+      ]
+    }
+  ],
+  "decision": {
+    "status": "Both adapters are usable exploratory character controls, with visibility and pose caveats retained",
+    "next": "Freeze a separate character-plus-effect merge experiment, including each adapter alone and explicit stable/experimental methods; evaluate identity retention and second-concept success separately",
+    "not_established": [
+      "Validated automatic identity metric",
+      "Full-motion or audio quality",
+      "Any merge-mode perceptual improvement",
+      "Generalization to unseen characters",
+      "Justification to change autotuner ranking or production defaults"
+    ]
+  },
+  "review": {
+    "path": ".h3-study-artifacts/20260908/identity-qualification-review/review.html",
+    "sha256": "d3e5d7a344bb7e8a9c46d1583e153b496d39d65bcfd60b30980d508aaa83d78c",
+    "manifest_sha256": "295f6876c8617e1d826cbc9a0f08aa45c2341cd9e800413be18360873d68616a",
+    "comparison_rows": 8,
+    "unique_mp4s": 18,
+    "embedded_original_bytes_verified": true,
+    "javascript_syntax_verified": true,
+    "unblinded": true,
+    "ratings": []
+  },
+  "validation": {
+    "python_passed": 700,
+    "python_skipped": 3,
+    "subtests_passed": 69,
+    "suite_seconds": 23.53,
+    "new_tests": 14,
+    "production_code_changed": false,
+    "old_av2_plan_changed": false,
+    "commit_push_or_version_bump": false
+  }
+}

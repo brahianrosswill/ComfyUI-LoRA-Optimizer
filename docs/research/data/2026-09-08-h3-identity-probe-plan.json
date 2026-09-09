@@ -1,0 +1,318 @@
+{
+  "version": 1,
+  "source_plan": "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-identity-qualification-plan.json",
+  "source_plan_sha256": "566db7c77212267ee8dcf8e6f304123e9ac52996968036633d5a274390e57127",
+  "model_path": "/home/ethanfel/.cache/huggingface/hub/models--google--siglip2-base-patch16-512/snapshots/a89f5c5093f902bf39d3cd4d81d2c09867f0724b",
+  "model_sha256": "fe0e601c625e69eed8e73500d39e9b6164403fe03db8048e87913c3cefbbb3fe",
+  "config_sha256": "a15bc39fbcd92498dea6d5d3cb2b0d8b9ba389d6a3f2b565ea66128a2d141934",
+  "runner_sha256": "7a3e9e5f4523a333b2ec77d8ba302f3cf513e576b99f8d4408abc083a2bc1653",
+  "frames": [
+    0,
+    24,
+    48,
+    72,
+    96,
+    120
+  ],
+  "references": {
+    "sully": {
+      "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/identity-acquisition/sully-reference.mp4",
+      "frame": 0,
+      "normalized_head_rectangle": [
+        0.52,
+        0.04,
+        0.86,
+        0.98
+      ],
+      "sha256": "34786badbe615b71fd23db8e9651d8d89b78ee1a32a37e58f5ccff65d8cc5269"
+    },
+    "series30": {
+      "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/identity-acquisition/series30-reference.mp4",
+      "frame": 0,
+      "normalized_head_rectangle": [
+        0.24,
+        0.01,
+        0.66,
+        0.97
+      ],
+      "sha256": "65bf11aaa71df4c999f0a44c24458653e384818623ebfbae18abdf6fc305ccf7"
+    }
+  },
+  "clips": [
+    {
+      "job": {
+        "id": "idq-sully-source-2026090821-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-source-2026090821-base_00001_.mp4",
+      "sha256": "73352532dac5eaf10409e8b8534119841afd8d262979108d1fe6636202a90fe0"
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090821-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-source-2026090821-base_00001_.mp4",
+      "sha256": "3b430253722266fa8163b9464229209e34f0730f851550db5ce9e9d670d607d7"
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090821-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-source-2026090821-character_00001_.mp4",
+      "sha256": "78285ffa6e1013403d0b9def1f024d80ecd3d5675a07053cac683903c4aef6de"
+    },
+    {
+      "job": {
+        "id": "idq-sully-source-2026090821-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-source-2026090821-character_00001_.mp4",
+      "sha256": "87b1fc001c733fe36b80aae5110d4b9e9af5bf650810ef0969717635f8452d20"
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090821-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-turn-2026090821-character_00001_.mp4",
+      "sha256": "d55111de65783486fc61f020e17e4987ee51b2e6f6cd1eb6f72877b96b45ab59"
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090821-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-turn-2026090821-base_00001_.mp4",
+      "sha256": "7b56b58c333299643e7cf18580fad27a4dec710db9d4903d2b305ec6329efefa"
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090821-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090821,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-turn-2026090821-character_00001_.mp4",
+      "sha256": "eb1376c8c0a23e194d9bc916c2aefc49dc8b4ce4380bddc8d4748554c6fc0431"
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090821-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090821,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-turn-2026090821-base_00001_.mp4",
+      "sha256": "869209ea70fa41b6dc3b734b54fd3a49be5876305f02c976e6408f268a3781ec"
+    },
+    {
+      "job": {
+        "id": "idq-sully-source-2026090822-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-source-2026090822-base_00001_.mp4",
+      "sha256": "a2b810e20cced71a3836f49269d64a85372ef24ce8fced3a4d0c965de42dbbf5"
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090822-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-source-2026090822-character_00001_.mp4",
+      "sha256": "5cdf12523a7ec49ff131e70c1e310d7985dc04bafe014dd887551a1ce535b470"
+    },
+    {
+      "job": {
+        "id": "idq-sully-source-2026090822-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_source",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-source-2026090822-character_00001_.mp4",
+      "sha256": "351faf2aae83469bc13cfb4f61eb17f9370b655743b266a7059bdad9b8c211b1"
+    },
+    {
+      "job": {
+        "id": "idq-series30-source-2026090822-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_source",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-source-2026090822-base_00001_.mp4",
+      "sha256": "06a6f9bf64f5f4dce0473d8b70985b3a6362b3698e69b6185586f40822f2e474"
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090822-character",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/h3sully_000002500.safetensors",
+            1.0
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-turn-2026090822-character_00001_.mp4",
+      "sha256": "0f66e5be9b60de37ddfd86d03250c12acfeeb8b7a35010304408f51c473d64ee"
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090822-base",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-turn-2026090822-base_00001_.mp4",
+      "sha256": "55a52dd9f3998d3eb8ac5734c377b0aab3ca642caead282131d8cd02419fc59f"
+    },
+    {
+      "job": {
+        "id": "idq-series30-turn-2026090822-character",
+        "stage": "calibration",
+        "character": "series30",
+        "prompt": "series30_turn",
+        "seed": 2026090822,
+        "variant": "character",
+        "loras": [
+          [
+            "MiniMax H3/character/h3-identity-study-20260908/MiniMax H3  AI Girl Fictional Women Series30.safetensors",
+            0.8
+          ]
+        ]
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-series30-turn-2026090822-character_00001_.mp4",
+      "sha256": "51025f43c600c01c3786bfb1e43e13ba3576d5d469d9f52f0bed578f8d1db1bb"
+    },
+    {
+      "job": {
+        "id": "idq-sully-turn-2026090822-base",
+        "stage": "calibration",
+        "character": "sully",
+        "prompt": "sully_turn",
+        "seed": 2026090822,
+        "variant": "base",
+        "loras": []
+      },
+      "path": "/media/unraid/comfyui/output/h3_identity_study_20260908/idq-sully-turn-2026090822-base_00001_.mp4",
+      "sha256": "e175c1597d72876e67ffdde46b2d30e0c58007c39419c5313d6e085ca111a144"
+    }
+  ],
+  "processor": {
+    "size": {
+      "height": 512,
+      "width": 512
+    },
+    "resample": 2,
+    "do_resize": true,
+    "do_rescale": true,
+    "rescale_factor": 0.00392156862745098,
+    "do_normalize": true,
+    "image_mean": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "image_std": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "do_convert_rgb": true
+  },
+  "processor_source": "https://huggingface.co/google/siglip2-base-patch16-512/blob/main/preprocessor_config.json",
+  "roi_policy": "Single first creator frame; manually declared head rectangles from already exposed reference grids, before scoring. Approximate head regions, not segmentation; do not tune on scores.",
+  "scope": "Six fixed frames from every old character-only calibration clip. No new merge outputs, no held-out frames, no preference labels or fitted thresholds.",
+  "limitations": "Not MaSC, not face recognition, not an identity probability. Similarity may reflect species, hair, pose or lighting; visibility and effect must be separately reviewed. Do not discard low-scoring frames.",
+  "created_at": 1788880822.8714511
+}

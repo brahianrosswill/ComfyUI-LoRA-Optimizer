@@ -1,0 +1,21 @@
+{
+  "version": 4,
+  "stage": "calibration_only_joint_input_diagnostic",
+  "parent_policy_sha256": "01c605ecc59713d90d856f4e1d5619402e6d4ce83d91bc8821f6ba31ccca241b",
+  "reason": "The first modality probe recognized sound in audio-only input but called the identical nonzero waveform silent when interleaved with video. Source alone does not establish whether input mapping or model behavior caused the difference.",
+  "source_job": "av2-boxing-2026090803-combat-cinema-combat",
+  "routes_in_order": ["interleaved_endpoint", "separate", "interleaved_reader", "audio_only", "interleaved_endpoint_repeat"],
+  "conditions_per_route": ["original", "muted"],
+  "total_cases": 10,
+  "route_definitions": {
+    "interleaved_endpoint": "Existing joint path: one video slot, audio interleaving enabled, endpoint-derived time grid.",
+    "separate": "Same sampled video and waveform, separate video and audio slots, audio-in-video disabled. Diagnostic only; not assumed equivalent for synchronization.",
+    "interleaved_reader": "Same joint path and sampled video, using the reader's reported sampling rate instead of the endpoint-derived rate, to isolate that timing variable.",
+    "audio_only": "Same original/silent waveforms with no video; descriptive reference.",
+    "interleaved_endpoint_repeat": "Repeat first pair after other routes in fresh conversations, no shared KV cache."
+  },
+  "generation": {"do_sample": false, "max_new_tokens": 192, "repetition_penalty": 1.1},
+  "prompt": "Same short audio-only description instruction as the prior modality probe; no target sound description, human labels, merge names or file paths.",
+  "tracing": "Record token counts/runs, input feature hashes, and a read-only prefill hook on the text decoder to hash actual inserted audio embeddings and their position IDs. Compare hashes across routes/conditions. Preserve raw answers and failures.",
+  "interpretation": "No route is admitted for quality scoring merely because it produces a plausible sound caption. Full silence/delay/repeat calibration remains required. No held-out access, default changes, production changes, model/environment updates or release actions."
+}

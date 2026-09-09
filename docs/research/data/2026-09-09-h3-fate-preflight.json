@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "checked_at_utc": "2026-09-09 08:10:52 UTC",
+  "status": "source_and_public_assets_inspected_not_installed_or_evaluated",
+  "method": "FATE: Frame-Level Audio-Visual Temporal Embedding",
+  "paper_date": "2026-08-02",
+  "sources": [
+    "https://arxiv.org/html/2608.01310v1",
+    "https://github.com/guankaisi/FATE",
+    "https://huggingface.co/facebook/pe-av-small",
+    "https://huggingface.co/Guan123/fate"
+  ],
+  "official_code_revision": "beae95aeb6f72cf1751d06d1428931016a7a1867",
+  "local_source": ".h3-study-artifacts/20260909/fate/source",
+  "public_models": [
+    {
+      "repo": "facebook/pe-av-small",
+      "revision": "dd050762bb9704ae9cd996ca45532a98f81d817e",
+      "gated": false,
+      "files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 1519,
+          "sha256": null
+        },
+        {
+          "path": "README.md",
+          "bytes": 8997,
+          "sha256": null
+        },
+        {
+          "path": "config.json",
+          "bytes": 31503,
+          "sha256": null
+        },
+        {
+          "path": "model.safetensors",
+          "bytes": 3388082648,
+          "sha256": "a8fc31329df9fab7fb3467873d4e8e40df40a486d9e6645feb9de6fa5c7b75d9"
+        },
+        {
+          "path": "preprocessor_config.json",
+          "bytes": 225,
+          "sha256": null
+        },
+        {
+          "path": "processor_config.json",
+          "bytes": 1187,
+          "sha256": null
+        },
+        {
+          "path": "special_tokens_map.json",
+          "bytes": 694,
+          "sha256": null
+        },
+        {
+          "path": "tokenizer.json",
+          "bytes": 3583119,
+          "sha256": null
+        },
+        {
+          "path": "tokenizer_config.json",
+          "bytes": 434,
+          "sha256": null
+        },
+        {
+          "path": "video_preprocessor_config.json",
+          "bytes": 406,
+          "sha256": null
+        }
+      ]
+    },
+    {
+      "repo": "Guan123/fate",
+      "revision": "8463ab93a644a22bd85db91e7e77d99ebe1ec5e0",
+      "gated": false,
+      "files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 1519,
+          "sha256": null
+        },
+        {
+          "path": "README.md",
+          "bytes": 5164,
+          "sha256": null
+        },
+        {
+          "path": "adapter_config.json",
+          "bytes": 1137,
+          "sha256": null
+        },
+        {
+          "path": "adapter_model.safetensors",
+          "bytes": 9461792,
+          "sha256": "9f7d815920e975db1a078ce462f4b76a7a3fc4b75446719d2f59541fcb3ce680"
+        },
+        {
+          "path": "training_state.pt",
+          "bytes": 6312405,
+          "sha256": "8fe1594c2d123f04c472c2a3628a212f75d7154becf10af29a1d7e657f3c41dc"
+        }
+      ]
+    }
+  ],
+  "required_safetensors_bytes": 3397544440,
+  "training_state_pt_required_by_supported_inference": false,
+  "loading_observation": "Supported retrieval evaluator uses PeAudioVideoModel.from_pretrained plus PeftModel.from_pretrained with is_trainable=False; it does not load training_state.pt. Safetensors-only loading is a feasible next path, not tested here.",
+  "dependencies": "Upstream lower bounds include torch>=2.6, torchcodec>=0.7, transformers>=4.53, peft>=0.18, timm>=1.0. A new isolated pinned environment would be required; no installed environment was changed.",
+  "rationale": "Retains temporally aligned feature sequences and scores their diagonal correspondence rather than only a single offset class. More directly relevant to local semantic/timing mismatch than the rejected global-offset ranking.",
+  "evidence_limits": "The authors report mean sample-level Spearman correlation 0.1724 on 750 generated clips, with ten annotators and five generation families, none H3. This is a weak absolute correlation and a preprint result, not H3 validation or an expected improvement.",
+  "preflight_findings": [
+    {
+      "kind": "silent_decode_substitution",
+      "location": "eval/eval_mixed_retrieval.py:get_embeddings",
+      "observation": "Invalid/failed video decoding falls back to black frames; empty audio becomes two seconds of zeros. This must be rejected as input failure in a local evaluation harness, not accepted as genuine media."
+    },
+    {
+      "kind": "metadata_fallback",
+      "location": "datasets.py:AvsyncDatasetCrossRetrieval._get_video_duration",
+      "observation": "Duration failure silently becomes ten seconds. Local harness must preserve actual PTS/duration and explicit failure instead."
+    },
+    {
+      "kind": "time_dimension_edge_case",
+      "location": "models/pe_av/modeling_pe_audio_video.py:PeAudioVideoModel._align_video_hidden_state",
+      "probe": {
+        "probe": "reviewed_upstream_alignment_method_only",
+        "video_shape": [
+          1,
+          6,
+          4
+        ],
+        "audio_shape": [
+          1,
+          3,
+          4
+        ],
+        "video_valid_length": 3,
+        "audio_valid_length": 3,
+        "actual_output_shape": [
+          1,
+          6,
+          3
+        ],
+        "expected_output_shape": [
+          1,
+          3,
+          4
+        ],
+        "shape_correct": false,
+        "full_module_imported": false,
+        "model_weights_loaded": false,
+        "gpu_used": false
+      },
+      "observation": "The special mask-length branch passes an N,T,D tensor directly to interpolate; in the synthetic padded case it resizes D rather than T. Not established to occur on an unpadded two-second clip. No upstream source edited."
+    },
+    {
+      "kind": "remaining_loader_and_timing_audit",
+      "observation": "Before any model inference, verify every required encoder/head and adapter key/shape, processor sampling, actual temporal feature clocks, padding masks and consistent window boundaries. Do not accept randomly initialized missing keys, arbitrary remote code or a silent source resampling shortcut."
+    }
+  ],
+  "next_action": "Under the existing isolated evaluator authorization, freeze a bounded control protocol, audit the remaining processor/loading path and only then install verified safetensors and test. Include local timing and semantic controls as distinct dimensions. No automatic held-out admission or ranker fitting.",
+  "artifact_sha256": {
+    ".h3-study-artifacts/20260909/fate/source/README.md": "549a1f08b944355a956de211613f355b88696ccc5bde209f60c2519b65913e11",
+    ".h3-study-artifacts/20260909/fate/source/requirements.txt": "5e6ba16198ae548c4bf7fbb3190a2a20c3f71b626a974ebc77cc7ef1d7bcd87f",
+    ".h3-study-artifacts/20260909/fate/source/datasets.py": "160d911bb8a2d8522c4b7934418f5c7a0242aa46a6889884df3f89e371c30d48",
+    ".h3-study-artifacts/20260909/fate/source/eval/eval_mixed_retrieval.py": "bf7553c8c6423191090f6e13dfb6bbe41d078650b330b384617c20ca2137b41b",
+    ".h3-study-artifacts/20260909/fate/source/models/pe_av/modeling_pe_audio_video.py": "73a9bd7271c73e6828e8dcfe5bee9d71a538d9a7615175ea2d7d71e9ddd12d41"
+  },
+  "model_weights_downloaded": false,
+  "packages_installed": false,
+  "full_model_imported": false,
+  "model_inference": false,
+  "clips_uploaded": false,
+  "gpu_used": false,
+  "production_changed": false,
+  "goal_complete": false
+}

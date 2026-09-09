@@ -43,6 +43,33 @@ def collect_merge_run(run):
             max_error_to_method_change=max((r["error_to_method_change"] or 0) for r in rows),
             worst_groups=sorted(rows, key=lambda r: r["relative_export_error"], reverse=True)[:3],
             source_sha256=digest(run / "export_check.json"))
+        for field in ("relative_normal_storage_rounding_error", "relative_error_after_storage_rounding"):
+            if all(field in r for r in rows):
+                record["precision"]["max_" + field] = max(r[field] for r in rows)
+    if manifest.get("mapped_export"):
+        check_path = run / "dense_export_check.json"
+        check = json.loads(check_path.read_text())
+        rows = check["results"]
+        if (not rows or check["groups_checked"] != len(rows) or not check["all_targets"]
+                or check["manifest_sha256"] != record["manifest_sha256"]
+                or check["export_sha256"] != record["export_sha256"]):
+            raise ValueError("Incomplete or mismatched dense numerical audit")
+        record["dense_precision"] = {k: v for k, v in check.items() if k != "results"}
+        record["dense_precision"].update(
+            all_finite=all(r["finite"] for r in rows),
+            exact_stored_components=sum(r["exact_stored_values"] for r in rows),
+            max_relative_export_error=max(r["relative_export_error"] for r in rows),
+            max_relative_storage_rounding_error=max(r["relative_storage_rounding_error"] for r in rows),
+            max_relative_fp32_reference_error=max(r["relative_fp32_reference_error"] for r in rows),
+            worst_groups=sorted(rows, key=lambda r: r["relative_export_error"], reverse=True)[:3],
+            source_sha256=digest(check_path))
+        probe_path = run / "full_loader_probe.json"
+        if probe_path.exists():
+            probe = json.loads(probe_path.read_text())
+            if (probe["prior_audit_sha256"] != digest(check_path)
+                    or probe["export_sha256_from_prior_audit"] != record["export_sha256"]):
+                raise ValueError("Full loader probe belongs to a different audit/export")
+            record["full_loader_probe"] = dict(probe, source_sha256=digest(probe_path))
     if (run / "merge.log").exists():
         log = (run / "merge.log").read_text()
         terms = ("Candidate #", "Pass 2:", "Model patches:", "SVD-compressed:",

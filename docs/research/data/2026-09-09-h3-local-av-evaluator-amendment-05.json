@@ -1,0 +1,15 @@
+{
+  "version": 5,
+  "stage": "calibration_only_system_and_question_diagnostic",
+  "parent_policy_sha256": "01c605ecc59713d90d856f4e1d5619402e6d4ce83d91bc8821f6ba31ccca241b",
+  "reason": "All ten route-trace cases completed with finite features. Original-audio embeddings are byte-identical across audio-only, separate AV and interleaved AV. Both joint timing choices and separate input still report false silence. The first/last joint repetitions agree, reducing the stale-request hypothesis. Next isolate prompt conditioning without target-sound or human-score leakage.",
+  "source_job": "av2-boxing-2026090803-combat-cinema-combat",
+  "routes_in_order": ["interleaved_official_system", "interleaved_joint_question", "interleaved_official_joint"],
+  "conditions_per_route": ["original", "muted"],
+  "total_cases": 6,
+  "generation": {"do_sample": false, "max_new_tokens": 192, "repetition_penalty": 1.1},
+  "question": "Briefly describe what you see and hear in this clip. Mention any audible sounds, speech or music. If there is no audible sound, say so.",
+  "system_source": "The default system message defined in the pinned installed Qwen2.5-Omni processor source. Retrieve it as configuration data; do not change package code.",
+  "unchanged": ["same original and exact-zero waveforms", "same frames and endpoint timing", "same feature/embedding trace", "same explicit EOS/pad IDs", "no labels or target sounds", "no held-out access"],
+  "admission": "This is the final bounded prompt-compatibility diagnostic before rejecting this Qwen2.5 joint evaluator configuration. Do not search arbitrary phrasings until a preferred answer appears. Even a positive result must pass full frozen control/calibration gates."
+}

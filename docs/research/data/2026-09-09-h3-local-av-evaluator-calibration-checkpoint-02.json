@@ -1,0 +1,936 @@
+{
+  "schema_version": 1,
+  "checked_at_utc": "2026-09-09T07:30:29Z",
+  "previous_goal_turn": "progress: installed evaluator, corrected stopping and localized joint-AV false-silence failure",
+  "status": "qwen25_joint_quality_configuration_rejected_after_controls",
+  "goal_complete": false,
+  "goal_status": "active",
+  "new_inference_cases": 24,
+  "scope": "10 input-routing cases, 6 prompt compatibility cases, 8 structured controls; two already-rated seed03 sources only.",
+  "route_trace": {
+    "cases": [
+      {
+        "route": "interleaved_endpoint",
+        "condition": "original",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "There is no sound audible in this audio clip.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      },
+      {
+        "route": "interleaved_endpoint",
+        "condition": "muted",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "No sound is audible.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      },
+      {
+        "route": "separate",
+        "condition": "original",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "There is no sound audible in this audio clip.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      },
+      {
+        "route": "separate",
+        "condition": "muted",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "There is no sound to report.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      },
+      {
+        "route": "interleaved_reader",
+        "condition": "original",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "There is no sound audible in this audio clip.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      },
+      {
+        "route": "interleaved_reader",
+        "condition": "muted",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "No sound is audible.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      },
+      {
+        "route": "audio_only",
+        "condition": "original",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "I hear a series of loud thumps followed by a single soft click. No speech or music is audible.",
+        "token_counts": {
+          "audio": 129,
+          "video": 0,
+          "all": 189
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          },
+          "video_embeddings": null
+        }
+      },
+      {
+        "route": "audio_only",
+        "condition": "muted",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "No sound is audible.",
+        "token_counts": {
+          "audio": 129,
+          "video": 0,
+          "all": 189
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          },
+          "video_embeddings": null
+        }
+      },
+      {
+        "route": "interleaved_endpoint_repeat",
+        "condition": "original",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "There is no sound audible in this audio clip.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      },
+      {
+        "route": "interleaved_endpoint_repeat",
+        "condition": "muted",
+        "status": "complete",
+        "stopped_on_eos": true,
+        "raw_response": "No sound is audible.",
+        "token_counts": {
+          "audio": 129,
+          "video": 2400,
+          "all": 2591
+        },
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          },
+          "video_embeddings": {
+            "shape": [
+              2400,
+              3584
+            ],
+            "sha256": "4213ebfe927cbdefd83948702c5e10db3a202fc75df1045214690e93b1dea1cf",
+            "finite": true,
+            "max_abs": 26.375
+          }
+        }
+      }
+    ],
+    "conclusion": "Every route/condition has finite actual decoder-prefill embeddings. Original audio embeddings are byte-identical across all five routes, and differ from muted embeddings. No evidence of dropped audio, source-waveform mismatch, or a preceding muted-request explanation. Both timing grids and separate AV input still give false silence for original sound under the audio-only question.",
+    "original_audio_embedding_sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+    "muted_audio_embedding_sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129"
+  },
+  "prompt_compatibility": {
+    "cases": [
+      {
+        "route": "interleaved_official_system",
+        "condition": "original",
+        "status": "complete",
+        "raw_response": "I don't hear any speech or music. I just hear some generic impact sounds. It seems like someone might be hitting something. What do you think?",
+        "stopped_on_eos": true,
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          }
+        }
+      },
+      {
+        "route": "interleaved_official_system",
+        "condition": "muted",
+        "status": "complete",
+        "raw_response": "I don't hear any specific sounds like speech or music. It's just the sound of the punching bag swinging gently. What do you think?",
+        "stopped_on_eos": true,
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          }
+        }
+      },
+      {
+        "route": "interleaved_joint_question",
+        "condition": "original",
+        "status": "complete",
+        "raw_response": "In the video clip from 0.00 to 5.17 seconds, we see an individual practicing boxing in a spacious gym with wooden floors and large windows. The person is wearing a gray tracksuit, red boxing gloves, and black shoes. They are engaged in hitting a heavy punching bag that swings back and forth after each impact. The background features blue walls with some doors visible on the left side of the frame. There is no audible speech during this segment; instead, the sound of the punches landing on the bag can be heard.",
+        "stopped_on_eos": true,
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          }
+        }
+      },
+      {
+        "route": "interleaved_joint_question",
+        "condition": "muted",
+        "status": "complete",
+        "raw_response": "There is a man wearing boxing gloves hitting a punching bag in an empty gym. There is no audible sound.",
+        "stopped_on_eos": true,
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          }
+        }
+      },
+      {
+        "route": "interleaved_official_joint",
+        "condition": "original",
+        "status": "complete",
+        "raw_response": "I see a man in a gym doing boxing training. He's wearing red boxing gloves and gray sportswear. There's a black punching bag hanging from the ceiling. The gym has wooden floors, blue walls with some white parts, and several windows letting in light. I can't really tell if there's any music playing because it doesn't seem to be mentioned. What do you think about boxing? Do you like it?",
+        "stopped_on_eos": true,
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "81a6c36ea1c8ad2af31125f065ebb491091d3198f0705982fae2430ee169814f",
+          "finite": true,
+          "max_abs": 1.3873951435089111
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "3edbf1e816227f77381d4a142b5c8d8e3ebae5ca275904b28baf316041b78c5a",
+            "finite": true,
+            "max_abs": 10.75
+          }
+        }
+      },
+      {
+        "route": "interleaved_official_joint",
+        "condition": "muted",
+        "status": "complete",
+        "raw_response": "In the clip, I see a person practicing boxing in an indoor gym. They're wearing a gray tracksuit, red boxing gloves, and a cap. There's a black punching bag hanging from the ceiling. The gym has wooden floors, blue walls with some white trim, and large windows letting in light. The person is throwing punches at the bag. There's no audible sound mentioned in the description. So, it seems like there might not be any background noise or music. What do you think about boxing? Have you ever tried it?",
+        "stopped_on_eos": true,
+        "audio_input": {
+          "shape": [
+            1,
+            128,
+            30000
+          ],
+          "sha256": "d53c4002be228d33aef63738e6e0150cdc0b9c49f59be81be12a98d3c0b6bcf8",
+          "finite": true,
+          "max_abs": 1.5
+        },
+        "prefill": {
+          "audio_embeddings": {
+            "shape": [
+              129,
+              3584
+            ],
+            "sha256": "209fcbac17f40f77a08977530bd1135288ea8db0c6ff10860448d8905507e129",
+            "finite": true,
+            "max_abs": 14.4375
+          }
+        }
+      }
+    ],
+    "conclusion": "Helpful-system plus joint see/hear wording recognizes impacts/original and silence/muted on one source. Official-system with audio-only question hallucinates bag-swing sound on the exact-zero control. This is prompt sensitivity, not a qualified judge; preserve all variants."
+  },
+  "flat_controls": {
+    "gates": {
+      "all_structured_responses_valid": true,
+      "silence_boolean_gate": true,
+      "synchronization_direction_gate": false,
+      "best_source_original_sync_score": 3,
+      "best_source_delayed_sync_score": 3,
+      "categorical_and_score_repeatability_gate": true,
+      "necessary_numeric_gates_pass": false,
+      "semantic_evidence_review_required": true,
+      "qualified_for_quality_ranking": false
+    },
+    "records": [
+      {
+        "case_id": "A05",
+        "condition": "original",
+        "repeat": 0,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "Plausible impact sounds consistent with boxing activities.",
+          "audible_sound": true,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 3,
+          "synchronization_score": 3,
+          "overall_score": 3,
+          "sync_evidence": "The audio and video events align well, with the impact sounds matching the punches thrown.",
+          "uncertainty": "The sampling rate may affect the precision of the synchronization."
+        },
+        "inference_seconds": 7.280232794000767,
+        "peak_allocated_bytes": 19036089344,
+        "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "inputs": {
+          "waveform_sha256": "8faf1ba77e1433ea11e690157ddf7067c188fe711058475fcd8a127565367c24",
+          "video_tensor_sha256": "a33e5546560ffc1856f5676716695d85a81a230ba9f27b4950a33c5bb8f457d0"
+        }
+      },
+      {
+        "case_id": "A05",
+        "condition": "muted",
+        "repeat": 0,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "No distinct impact sounds or other audible cues are present.",
+          "audible_sound": false,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 1,
+          "synchronization_score": 2,
+          "overall_score": 2,
+          "sync_evidence": "The audio lacks any impact sounds corresponding to the punches, indicating a mismatch between visual and auditory cues.",
+          "uncertainty": "The lack of audible impact sounds makes it impossible to confirm if the punches were actually thrown."
+        },
+        "inference_seconds": 6.471994830004405,
+        "peak_allocated_bytes": 19036786688,
+        "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "inputs": {
+          "waveform_sha256": "869e7fcb5698f872eef0372f4738d1331af917ad6e19731e2464acfcfd8b0755",
+          "video_tensor_sha256": "a33e5546560ffc1856f5676716695d85a81a230ba9f27b4950a33c5bb8f457d0"
+        }
+      },
+      {
+        "case_id": "A05",
+        "condition": "delay750",
+        "repeat": 0,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "Plausible impact sounds consistent with boxing activities.",
+          "audible_sound": true,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 3,
+          "synchronization_score": 3,
+          "overall_score": 3,
+          "sync_evidence": "The audio and video events align well, with the impact sounds matching the punches thrown.",
+          "uncertainty": "The sampling rate may affect the precision of the synchronization."
+        },
+        "inference_seconds": 6.084512704983354,
+        "peak_allocated_bytes": 19036786688,
+        "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "inputs": {
+          "waveform_sha256": "c48c92d01c6561ba65d20331c78b346fe6f47e1eb70d1aeaabd582ad8b45297d",
+          "video_tensor_sha256": "a33e5546560ffc1856f5676716695d85a81a230ba9f27b4950a33c5bb8f457d0"
+        }
+      },
+      {
+        "case_id": "A09",
+        "condition": "original",
+        "repeat": 0,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "Plausible impact sounds consistent with boxing training.",
+          "audible_sound": true,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 3,
+          "synchronization_score": 3,
+          "overall_score": 3,
+          "sync_evidence": "The audio and video events align well, with clear matching between the punches and their corresponding impact sounds.",
+          "uncertainty": "The sampling rate may limit precise timing verification."
+        },
+        "inference_seconds": 6.3688793409965,
+        "peak_allocated_bytes": 19036786688,
+        "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+        "inputs": {
+          "waveform_sha256": "85a05f8a7a1a659b7e93b604d385b8cd9b09e66520a5f7185b192217c4a6b36f",
+          "video_tensor_sha256": "1c16e883891c6fda61f8e8bf1dc139ae46ded46d71b08a4f6f003670d114ae4d"
+        }
+      },
+      {
+        "case_id": "A09",
+        "condition": "muted",
+        "repeat": 0,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "No distinct impact sounds or other audible cues are present.",
+          "audible_sound": false,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 0,
+          "synchronization_score": 2,
+          "overall_score": 2,
+          "sync_evidence": "The audio lacks any impact sounds corresponding to the punches, indicating a mismatch between visual and auditory cues.",
+          "uncertainty": "The lack of audible impact sounds makes it impossible to determine if the punches were actually thrown."
+        },
+        "inference_seconds": 5.80277718702564,
+        "peak_allocated_bytes": 19036786688,
+        "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+        "inputs": {
+          "waveform_sha256": "869e7fcb5698f872eef0372f4738d1331af917ad6e19731e2464acfcfd8b0755",
+          "video_tensor_sha256": "1c16e883891c6fda61f8e8bf1dc139ae46ded46d71b08a4f6f003670d114ae4d"
+        }
+      },
+      {
+        "case_id": "A09",
+        "condition": "delay750",
+        "repeat": 0,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "Plausible impact sounds consistent with boxing training.",
+          "audible_sound": true,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 3,
+          "synchronization_score": 3,
+          "overall_score": 3,
+          "sync_evidence": "The audio and video events align well, with the impact sounds matching the punches thrown.",
+          "uncertainty": "The sampling rate may affect the precision of the synchronization."
+        },
+        "inference_seconds": 5.622228786000051,
+        "peak_allocated_bytes": 19036786688,
+        "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+        "inputs": {
+          "waveform_sha256": "2a3984ecac0ab6f0ed096597fc36e5519e2119c2d27e4ed656c665127aa9b50e",
+          "video_tensor_sha256": "1c16e883891c6fda61f8e8bf1dc139ae46ded46d71b08a4f6f003670d114ae4d"
+        }
+      },
+      {
+        "case_id": "A05",
+        "condition": "original",
+        "repeat": 1,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "Plausible impact sounds consistent with boxing activities.",
+          "audible_sound": true,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 3,
+          "synchronization_score": 3,
+          "overall_score": 3,
+          "sync_evidence": "The audio and video events align well, with the impact sounds matching the punches thrown.",
+          "uncertainty": "The sampling rate may affect the precision of the synchronization."
+        },
+        "inference_seconds": 5.368119188002311,
+        "peak_allocated_bytes": 19036786688,
+        "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "inputs": {
+          "waveform_sha256": "8faf1ba77e1433ea11e690157ddf7067c188fe711058475fcd8a127565367c24",
+          "video_tensor_sha256": "a33e5546560ffc1856f5676716695d85a81a230ba9f27b4950a33c5bb8f457d0"
+        }
+      },
+      {
+        "case_id": "A05",
+        "condition": "muted",
+        "repeat": 1,
+        "status": "valid_response",
+        "response": {
+          "observed_video": "A person wearing boxing gloves throws two punches at a heavy bag, returns to a guard position, steps back, and stops.",
+          "observed_audio": "No distinct impact sounds or other audible cues are present.",
+          "audible_sound": false,
+          "speech_present": false,
+          "music_present": false,
+          "action_score": 3,
+          "temporal_score": 3,
+          "appearance_score": 3,
+          "audio_score": 1,
+          "synchronization_score": 2,
+          "overall_score": 2,
+          "sync_evidence": "The audio lacks any impact sounds corresponding to the punches, indicating a mismatch between visual and auditory cues.",
+          "uncertainty": "The lack of audible impact sounds makes it impossible to confirm if the punches were actually thrown."
+        },
+        "inference_seconds": 5.9981592270196415,
+        "peak_allocated_bytes": 19036786688,
+        "source_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "inputs": {
+          "waveform_sha256": "869e7fcb5698f872eef0372f4738d1331af917ad6e19731e2464acfcfd8b0755",
+          "video_tensor_sha256": "a33e5546560ffc1856f5676716695d85a81a230ba9f27b4950a33c5bb8f457d0"
+        }
+      }
+    ],
+    "input_integrity_verified": true,
+    "conclusion": "All eight responses are valid and stop at EOS; both silence controls and categorical/score repeats pass. Both +750 ms audio delays leave sync at 3/4 and claim alignment. The best-source directional gate fails. Do not use this configuration for merge quality ranking, and do not keep searching phrasings to obtain a preferred answer.",
+    "full_calibration_sweep_run": false,
+    "heldout_evaluated": false
+  },
+  "tests": {
+    "command": ".h3-study-artifacts/20260909/audio-evaluator/venv/bin/python -m pytest -q tests/test_h3_local_av_evaluator.py tests/test_h3_local_av_routes.py tests/test_h3_local_av_control_audit.py",
+    "passed": 60,
+    "seconds": 0.19,
+    "full_merger_suite_rerun": false
+  },
+  "safety": {
+    "all_three_gpu_sessions_terminal": true,
+    "auditor_terminal": true,
+    "post_run_queue_running": 0,
+    "post_run_queue_pending": 0,
+    "gpu_used_mib": 3128,
+    "gpu_free_mib": 29016,
+    "unrelated_processes_stopped": false,
+    "new_model_downloads": false,
+    "new_packages": false,
+    "external_clip_uploads": false
+  },
+  "production": {
+    "changed": false,
+    "optimizer_sha256": "44695e780a8bb8e67d206827ce4a561fd66b0a710fe89ed63026b521753c7461",
+    "experimental_merge_sha256": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4",
+    "installed_nodes_changed": false,
+    "committed": false,
+    "pushed": false,
+    "version_bumped": false
+  },
+  "artifact_sha256": {
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/interleaved_endpoint-original.json": "4443b6b56e23a6fd1d108d023ce3b599838060e2b3889d12466d78e7b096853e",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/interleaved_endpoint-muted.json": "6de5db3c90dc86e352e17a8ab72eaa7705562776abe2040a2b586886a3395914",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/separate-original.json": "43d17522b9a05f9ed7e1b5bff91531dd04b53f41d8a9553034a4ab3fd0cca750",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/separate-muted.json": "ab1e9539d79ba030bcc024315f736918079e60e2d226c68e6b466a3735c0d3ed",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/interleaved_reader-original.json": "54c8045c74ce8ea3c9fe8319a84e7f4f73b591cb36455b5aa88b1ba69ec77e2a",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/interleaved_reader-muted.json": "339df55d0503457133242fd570f4cd12ccc1f7b74e9c77f62ef10eb190cab5be",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/audio_only-original.json": "c6033159a5712df45122f19aa294da5d2e2660a8c97d4381f2fe821415ed093f",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/audio_only-muted.json": "2fd2212791e77b85fc314622860e9c308f6a1d1af52c2a11ccf4fa77da40c499",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/interleaved_endpoint_repeat-original.json": "c457bbfc49c2d1e1ef79e97b0826e3344ebfd4592c4a5d155effed06d068ba0f",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/interleaved_endpoint_repeat-muted.json": "4be3e18a5888e4cf3a388fb2320ef2f7b85108b3f6bc13d9ec9c00150e92e7c1",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/interleaved_official_system-original.json": "3e7674ffdd4eed6050bbc7663889a33d247b22713943d4b41b43445b55163eae",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/interleaved_official_system-muted.json": "b3ef00881e5ca24745cce9cb18375a05e64a4aac1448c1ff44067480236d3ab2",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/interleaved_joint_question-original.json": "ec5b438a2b17c6cee3fa3845df1500e19b07825cbc4509b6af5239700e16b289",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/interleaved_joint_question-muted.json": "db38ccbcc33071db454b452d347bb025f3b0712b722f905539c0a9a34f6cac0e",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/interleaved_official_joint-original.json": "0e379731845b8287293f2ae3a4546a64273cb5c28b8b15d9e39b46d1ac958c7c",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/interleaved_official_joint-muted.json": "bc25344b2f05ae25bcb4a4c27fe2899d7b5d4d315bec10ff0160748d5bd2fd33",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/start.json": "0e7bb812de69f337d9b4c5819663e91e9e150bf49e5a57e38359e64103143bd1",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/complete.json": "24ca2746e0460dd24631d1f16593174af86f6afd6609400704d5f96610e67ba4",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/route-trace-01/runner.py": "5045a8686205a2b77467de20a137e60cdd1c03983d85db2328f797dda3aecbfa",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/start.json": "8b682adb48405ed22dbb814c7d323a15e00886eba770218e754492d7ecded7e3",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/complete.json": "54124f57399a443492a89c9bc65a30587dfa62e271d88f75122357355ebce575",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/runner.py": "6895478e4bd1caa75e65969f26f6db47942b7c381f11a8226ac2cbed84221b72",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/start.json": "320ed5b023c8cc97e1e200154be855fb3a6aba9a0db001581b1d62678df4a575",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/complete.json": "831c2663faa3a39023fb42cb123d28a57bf8577b38bbdf7f5a9bf8920dba4b98",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/runner.py": "033b32612c50a816858265afdb6776982aee53a5263a0a78db43eebfc40ee256",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/prompt-compatibility-01/evaluator-source.py": "5a10cf9bad41fcb46c12d8489ec51a5a71e6960abae68d54dcd1a98d5f10eb79",
+    ".h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/control-audit.json": "7b4dcdbbb1ee6279e2ee02dde6bf0fb12901dca88cc5c363049b1aec76202a44",
+    "docs/research/data/2026-09-09-h3-local-av-evaluator-amendment-04.json": "8cbc33d219f18d916d653d1dbb13a21b6d2738809e0d0e792f9922447614fab5",
+    "docs/research/data/2026-09-09-h3-local-av-evaluator-amendment-05.json": "d91c87f492fc7cc3106b6f93b46abab2c7e362ff736f869daa7d6b87a0161b19",
+    "docs/research/data/2026-09-09-h3-local-av-evaluator-amendment-06.json": "ff950d820e4e271f366fd4257e6f1edcc5b5d79d419d808425eaa5f553aa65dd",
+    "scripts/h3_local_av_evaluator.py": "033b32612c50a816858265afdb6776982aee53a5263a0a78db43eebfc40ee256",
+    "scripts/h3_local_av_routes.py": "6895478e4bd1caa75e65969f26f6db47942b7c381f11a8226ac2cbed84221b72",
+    "scripts/h3_local_av_control_audit.py": "89565c7967c7781439e97f55799b0a18d725b9a75a4dea2cd8325f8c4b6fc700",
+    "tests/test_h3_local_av_evaluator.py": "378f59a1668c1c5970dc9807ecf058bccb2561e7c9816fde2f071148a61f4675",
+    "tests/test_h3_local_av_routes.py": "01573c221717c4043f054efd6e663725c6f73084443670432ae915c70db55f84",
+    "tests/test_h3_local_av_control_audit.py": "f45ee57091563cb7650c40a174d4be31aacd6fe6296f79563b4487e12fb352ec"
+  },
+  "control_audit_artifact_sha256": {
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-original-r0.json": "b30f09b970121c6219cb32c05e3fbfa4551fb38c74c1604a78ada608aff68327",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-original-r0.input.json": "573ed5e06854931fe093e8bde66f5267cb6023b3974ff918b06161a00a02906e",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-muted-r0.json": "971c2e0be807fec61a66ee3a860337e5f5e80d7d7afa0eba3b5948c1be5b77bb",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-muted-r0.input.json": "afcf4e22502c341d6af881ab7584c8dcd872080c928b0926323c50ea2c2b4efb",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-delay750-r0.json": "3a292b14463ac5b96098b68a97016b28af33d3eec6a359f419a832c0cee22a34",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-delay750-r0.input.json": "ee41ee77552cac24a2721fe78cd0238abd754cc6a1f8a39049e76f62d9dfc8c9",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A09-original-r0.json": "9ce72140ee5536995a54d2cd81cf8d73c68cbe1c5836c17eec63676c42e3f51c",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A09-original-r0.input.json": "297b7e36a77b8e09710225427e67d426e8d7cea490d1fe52a2aebc5927726800",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A09-muted-r0.json": "8701a0efe6f83bc200ec8de0a8533a78e5c41c4819ac9a63c651e178630b2438",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A09-muted-r0.input.json": "fd955a1bcb2ed2321d5691100129d66a19a1c7e1bc059913096c87ad017e9cb2",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A09-delay750-r0.json": "6c3e9b0a765e5dbd72a52f94aa81734e9b4adfd2a36956385989411ac2c2058b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A09-delay750-r0.input.json": "c4f678f6ab1f13fe2784d1a25855e2ca1fd5c937b1578fbea990bd4a1ac99b1e",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-original-r1.json": "d09b434cef91077b5b12bb2b6d0dff6bad4b5475bbe900f09d702586f6fd9713",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-original-r1.input.json": "0ea54e78f780b85a57e4dfc97ff370d4715ce91e90de9ad3c6de87d187a9e2ab",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-muted-r1.json": "d7f1ee46a5793435d2cebc6959fe0ee9dbfe5c92cdbcb1fa47109fe44b018933",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/A05-muted-r1.input.json": "940db79cf918708100ae2e25bd510f568b825d113434e76333bfc64bc057c5bd",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/start.json": "320ed5b023c8cc97e1e200154be855fb3a6aba9a0db001581b1d62678df4a575",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/runs/flat-controls-01/complete.json": "831c2663faa3a39023fb42cb123d28a57bf8577b38bbdf7f5a9bf8920dba4b98",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/calibration-inputs-flat-01.json": "a51212a23027089f5958b69a80418d510f029d4f5f2328064fcc95905dcfc967",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-09-h3-local-av-evaluator-policy.json": "01c605ecc59713d90d856f4e1d5619402e6d4ce83d91bc8821f6ba31ccca241b",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/scripts/h3_local_av_evaluator.py": "033b32612c50a816858265afdb6776982aee53a5263a0a78db43eebfc40ee256",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/audio-evaluator/setup-receipt.json": "d4a559cd0c4a20f01e26e624f4ce7cdb93a079f8a12af63a04e2dc53f0c71440"
+  },
+  "next_method": {
+    "proposed": "Separately validated synchronization estimator, initially Synchformer, with local audio assessment retained as a distinct dimension.",
+    "sources": [
+      "https://github.com/microsoft/AVGen-Bench",
+      "https://github.com/v-iashin/Synchformer",
+      "https://github.com/v-iashin/Synchformer/blob/main/example.py"
+    ],
+    "rationale": "The current language-model judge is insensitive to an imposed timing error. AVGen-Bench separates Synchformer synchronization from audio/visual quality measures.",
+    "constraints": "Inspect model/code/dependencies and decoding/version caveats before setup; freeze local source/offset/silence controls and actual timestamp handling before inference. Passing sync controls is not general audiovisual preference or stereo-quality validation. No new model installed or evaluated in this checkpoint."
+  }
+}

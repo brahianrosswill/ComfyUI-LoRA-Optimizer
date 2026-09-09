@@ -1,0 +1,406 @@
+{
+  "version": 1,
+  "status": "complete_scoped_visual_comparison_not_overall_av_qualification",
+  "stage": "heldout",
+  "seed": 2026090842,
+  "review_id": "028333549187dc0e45a0",
+  "observer": "Assistant chronological still-frame/waveform inspection, not human ratings or continuous playback",
+  "provenance": {
+    "plan_sha256": "110d58a4adeab1dce4c3ef288bc3036c0a1b3ff79a50d862c49818103b9c40c2",
+    "policy_sha256": "40da10ebc71044f09ded4f7761388a367ac145116f45a34ed7088291b99bb760",
+    "initial_observations_sha256": "a2c3d8c564e5ed00bfce59f87628217bf024c1240ccd1eeb8016ce4fa67f01f5",
+    "detailed_observations_sha256": "92924061c0b0ab4cb35db5cd4b72f582514f62673c7f9b79a9ccbf44ad0aaaa7",
+    "preunblind_checkpoint_sha256": "ca45abb2538ae5a9e227d7ddfcedb8fec18f7b871016a462d23feeb34e315345",
+    "review_key_sha256": "c1a8a756347c535b93b441589f2b37efeaa5ad4c3b760e3b91939d09f6d5be47",
+    "unblind_clock_observation_utc": "2026-09-08 22:27:35 UTC",
+    "unblind_clock_note": "Clock read immediately after mapping display; all eighteen detailed observations and passing checkpoint saved and hashed first.",
+    "blind_records_preserved": true,
+    "prior_three_heldout_mappings_read": true
+  },
+  "comparison_scope": {
+    "cases": 18,
+    "pairs": 2,
+    "full_frame_observations": 2232,
+    "matched_character_controls": {
+      "sully_cinema": "C10",
+      "series30_combat": "C03"
+    },
+    "creator_references_reinspected": true,
+    "creator_reference_grids": [
+      {
+        "path": ".h3-study-artifacts/20260908/identity-acquisition/sully-reference-grid.jpg",
+        "sha256": "37b44bf75987042e30d23f4e0b22fd2b1378d13cab7177560505b62f87711335"
+      },
+      {
+        "path": ".h3-study-artifacts/20260908/identity-acquisition/series30-reference-grid.jpg",
+        "sha256": "0db00fb8bd429811913458e174eb50cae20167d1d09911a38c71b282068d6d76"
+      }
+    ],
+    "additional_same_frame_identity_views": {
+      "frames": [
+        0,
+        60,
+        123
+      ],
+      "cases": 18,
+      "resolution": "Original 640x384 frames, three-frame row, ID/frame labels only; no crop, color, gain, timing or source-media change",
+      "purpose": "All eighteen views actually inspected after unblinding to supplement, not replace, all-frame action inspection",
+      "artifacts": [
+        {
+          "blind_id": "C01",
+          "pair": "series30_combat",
+          "variant": "np_lora",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C01/matched-identity-000-060-123.jpg",
+          "sha256": "8dca6c16d520fb53b308f3e84118188c9109a8ad34c526f51ec15f853042a20c"
+        },
+        {
+          "blind_id": "C02",
+          "pair": "series30_combat",
+          "variant": "ct_merge",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C02/matched-identity-000-060-123.jpg",
+          "sha256": "8332996571994517dacf550e07f0d9ee6b75cf3ba139226be3d9083762f63a06"
+        },
+        {
+          "blind_id": "C03",
+          "pair": "series30_combat",
+          "variant": "character_only",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C03/matched-identity-000-060-123.jpg",
+          "sha256": "bae2e1a978d19934c8226fd1f7b46ef2f8e7e432bfc560d5c27a4fc1c9388064"
+        },
+        {
+          "blind_id": "C04",
+          "pair": "sully_cinema",
+          "variant": "slerp",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C04/matched-identity-000-060-123.jpg",
+          "sha256": "2030e516b19d7914eb9142f24b9fe95019ed6e51e6d5e6d5eaad2717ce7252ba"
+        },
+        {
+          "blind_id": "C05",
+          "pair": "sully_cinema",
+          "variant": "ties",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C05/matched-identity-000-060-123.jpg",
+          "sha256": "9c4852e8140b33769a2c6346734912eb7b0660f0dec916677aac0ece6df2f4cd"
+        },
+        {
+          "blind_id": "C06",
+          "pair": "series30_combat",
+          "variant": "base",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C06/matched-identity-000-060-123.jpg",
+          "sha256": "1e1466537d137fa2a42553806a1fe24075752803f8ad83b11a17afa78dc88ccc"
+        },
+        {
+          "blind_id": "C07",
+          "pair": "series30_combat",
+          "variant": "slerp",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C07/matched-identity-000-060-123.jpg",
+          "sha256": "e495d9a43630d79aa34c397fb0913adbd1242413a0eb8fd75462a1207f2e77e2"
+        },
+        {
+          "blind_id": "C08",
+          "pair": "sully_cinema",
+          "variant": "base",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C08/matched-identity-000-060-123.jpg",
+          "sha256": "c3ce5069ec3f4a6783fd10d1b6ccec79c03ec6217024bd4801349283e9c7a96f"
+        },
+        {
+          "blind_id": "C09",
+          "pair": "sully_cinema",
+          "variant": "ct_merge",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C09/matched-identity-000-060-123.jpg",
+          "sha256": "eefa4fd498a1a4986b8697ad4d1097ac7e64fdd2af10ed2037a4c4062120d289"
+        },
+        {
+          "blind_id": "C10",
+          "pair": "sully_cinema",
+          "variant": "character_only",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C10/matched-identity-000-060-123.jpg",
+          "sha256": "b9d3423b1e1b8945e36263779a5b19fcc9bd6c126f2fdbe868a74bfad317d996"
+        },
+        {
+          "blind_id": "C11",
+          "pair": "series30_combat",
+          "variant": "effect_only",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C11/matched-identity-000-060-123.jpg",
+          "sha256": "21e54bc54fa63a54ed83dfa4a6d562d1fa6b5a46e933bf7556ce4d1502f65340"
+        },
+        {
+          "blind_id": "C12",
+          "pair": "series30_combat",
+          "variant": "additive",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C12/matched-identity-000-060-123.jpg",
+          "sha256": "3b425255bc3669453f891886d4419caf7cde5a8402571faae7fbdbec0bdfa1dd"
+        },
+        {
+          "blind_id": "C13",
+          "pair": "sully_cinema",
+          "variant": "additive",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C13/matched-identity-000-060-123.jpg",
+          "sha256": "9979030ce8a95627b60182b0116de031b6d84e49da4a21e6627b58799fa67033"
+        },
+        {
+          "blind_id": "C14",
+          "pair": "series30_combat",
+          "variant": "stable_tuner_winner",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C14/matched-identity-000-060-123.jpg",
+          "sha256": "a1213952d9b8589e724caea076af3de80c347f8605965c8701cadfbfe991e504"
+        },
+        {
+          "blind_id": "C15",
+          "pair": "series30_combat",
+          "variant": "ties",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C15/matched-identity-000-060-123.jpg",
+          "sha256": "13ea6fef6ea395425f2987b01347cf7bb124f69c024876708bf0869dcc6e0350"
+        },
+        {
+          "blind_id": "C16",
+          "pair": "sully_cinema",
+          "variant": "stable_tuner_winner",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C16/matched-identity-000-060-123.jpg",
+          "sha256": "c16747704cb63cc3100eeeb71f0ed2c16266fb655b7a8081afb9b9aa7d484edd"
+        },
+        {
+          "blind_id": "C17",
+          "pair": "sully_cinema",
+          "variant": "np_lora",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C17/matched-identity-000-060-123.jpg",
+          "sha256": "fab75fca6b6ef7a4d55f66618f0c1160a92f01a3e83ac0b18c413ad5d04118c8"
+        },
+        {
+          "blind_id": "C18",
+          "pair": "sully_cinema",
+          "variant": "effect_only",
+          "path": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C18/matched-identity-000-060-123.jpg",
+          "sha256": "7871b575e2194cf50814d2946a97fb837a8bf94e59e93a0f983bcf4c5d479aa5"
+        }
+      ]
+    }
+  },
+  "pairs": [
+    {
+      "pair": "sully_cinema",
+      "character_control": "C10",
+      "cases": [
+        {
+          "blind_id": "C08",
+          "variant": "base",
+          "book_state": "Closed intact book held tilted, lowered to table about 83-89; not cover closure.",
+          "navy_vest": true,
+          "full_head": false,
+          "gaze_smile": "Gaze rises 20-35; closed-mouth smile strengthens 30-45 with overlap.",
+          "placement": "Already gripping hands follow book setdown; curled/hovering fingers do not establish an independent flat palm.",
+          "identity": "No-character control: long outward/upward pointed horns, angular projecting nose/muzzle and purple beard differ markedly from both creator and C10. Warm yellow-green lighting is not itself the identity failure; geometry differs. An upper horn reaches/crops the top."
+        },
+        {
+          "blind_id": "C10",
+          "variant": "character_only",
+          "book_state": "Closed and table-supported throughout.",
+          "navy_vest": false,
+          "full_head": true,
+          "gaze_smile": "Down then gaze lift 9-19 and closed-mouth smile 20-31.",
+          "placement": "Hand lift begins 10-14 during gaze lift, before established smile; lands 28-33 with curved fingers. A later arrival is retained despite initial edge contact, but the requested order and flat palm are not fully established.",
+          "identity": "Matched anchor: green/purple fur, short curled horns and broad soft muzzle close to creator cues, with more frontal presentation. Different pose, gaze and expression from the creator's tilted doorway view prevent a perfect fine-identity claim. Both shoulders visible."
+        },
+        {
+          "blind_id": "C18",
+          "variant": "effect_only",
+          "book_state": "Closed intact book held tilted, lowered about 55-86 and table-supported by 84-88.",
+          "navy_vest": true,
+          "full_head": false,
+          "gaze_smile": "Gaze lift 10-22, small closed-mouth smile 24-44.",
+          "placement": "Support/thumb rotates onto top 68-73 and fingers curl across edge 74-86 during whole-book lowering; no independent flat-palm arrival.",
+          "identity": "No-character control: green/yellow-purple cues but long swept ridged horns, angular nose/narrow muzzle and long beard differ markedly from creator/C10. Horn tip crops during head rise. Retaining clothing and book action is not character preservation."
+        },
+        {
+          "blind_id": "C13",
+          "variant": "additive",
+          "book_state": "Closed and table-supported throughout.",
+          "navy_vest": false,
+          "full_head": true,
+          "gaze_smile": "Gaze lift 6-12; closed-mouth smile 18-33.",
+          "placement": "Hand starts lifting 9-17, before established smile, and lands 28-37. Curved fingers rather than proved flat palm; similar ordering limitation to C10.",
+          "identity": "Coarse short curled horns, green/purple fur and broad soft muzzle remain close to C10 and creator. More three-quarter opening then frontal ending, wider-eyed gaze and lighting variation do not establish a fine identity advantage or loss."
+        },
+        {
+          "blind_id": "C04",
+          "variant": "slerp",
+          "book_state": "Closed and table-supported throughout.",
+          "navy_vest": false,
+          "full_head": true,
+          "gaze_smile": "Gaze lift 5-9; small closed-mouth smile 25-40.",
+          "placement": "Later hand lift 54-63 and landing 64-69 after the smile; clearer sequence separation than C10/additive, but fingers remain arched and full flat palm is unconfirmed.",
+          "identity": "Short curved horns and broad soft muzzle remain in the C10/creator family. Slightly tilted head, brow/eye shape and expression vary; no calibrated fine identity ordering."
+        },
+        {
+          "blind_id": "C05",
+          "variant": "ties",
+          "book_state": "Closed and table-supported throughout.",
+          "navy_vest": false,
+          "full_head": true,
+          "gaze_smile": "Gaze lift 7-16; small closed-mouth smile 25-43.",
+          "placement": "Fingers unfurl/slide forward 69-83 with retained edge/thumb contact; settled by 83-87. Not a detached whole-hand arrival or demonstrated flat palm.",
+          "identity": "Close to character-only/creator in short curled horns, broad soft muzzle and fur pattern. Three-quarter pose and eyelid/mouth variation do not prove a fine identity change; no advantage assigned over additive/NP."
+        },
+        {
+          "blind_id": "C16",
+          "variant": "stable_tuner_winner",
+          "book_state": "Closed and table-supported throughout.",
+          "navy_vest": false,
+          "full_head": true,
+          "gaze_smile": "Gaze lift 4-10, initially mild upward mouth shape and stronger small smile 20-40.",
+          "placement": "Screen-right fingers lift/unfurl 60-66, extend and settle 67-74 while wrist/heel remains near table; not an independent whole-hand flat-palm arrival.",
+          "identity": "Broad soft muzzle, short curled horns and green/purple features close to C10/creator. Tilt, gaze and expression differ from frontal C10; no reliable fine superiority."
+        },
+        {
+          "blind_id": "C17",
+          "variant": "np_lora",
+          "book_state": "Closed and table-supported throughout.",
+          "navy_vest": false,
+          "full_head": true,
+          "gaze_smile": "Gaze lift 6-12; small closed-mouth smile 22-37.",
+          "placement": "Hand lifts 47-55, hovers/rotates 56-63 and lands 64-68 after the smile. Clearer ordered later arrival than additive/C10; arched fingers still prevent certifying exact flat palm.",
+          "identity": "Very close to additive and C10's short-horned broad-soft-muzzle family in the compared views, also retaining coarse creator features. No demonstrated fine identity improvement over additive; wardrobe omission persists."
+        },
+        {
+          "blind_id": "C09",
+          "variant": "ct_merge",
+          "book_state": "Closed intact book held upright/tilted; entire book lowered 65-86 and table-supported by about 85-88.",
+          "navy_vest": true,
+          "full_head": false,
+          "gaze_smile": "Initially down, gaze lift 9-15; small closed-mouth smile 31-52.",
+          "placement": "Already gripping support fingers rotate onto top during book setdown, remaining arched. No independent flat-palm arrival.",
+          "identity": "Retains short curved horns and green/purple fur substantially closer to the creator/C10 design than base/effect controls. Compared with C10, horns curl in a different direction, eyes/brow are heavier/narrower and the muzzle/chin is longer; downward three-quarter pose and light confound precise severity. This is not total identity loss or the long-pointed-horn design of C08/C18. An upper horn slightly clips near setdown."
+        }
+      ],
+      "interpretation": [
+        "All nine arms retain library, closed blue book, gaze lift and a closed-mouth smile. Base/effect/CT set down a whole closed book; that must not be mislabeled an initially open cover closing.",
+        "Character-only already omits the vest and starts the hand movement before an established smile. Additive shares those limitations. Initial edge contact does not negate a later hand arrival.",
+        "NP and SLERP have a more clearly separated post-smile hand lift and landing than additive/character-only. This local ordering improvement does not establish a flat palm, restore the missing vest or prove better identity/style/AV quality.",
+        "TIES and stable winner chiefly reposition fingers while retaining wrist/edge contact. All five non-CT merged arms retain coarse short-horned soft-muzzle character cues and omit the vest.",
+        "CT is the only merged arm retaining the vest. Unlike crossed seed 41's swept-horn/toothy result, this seed retains short curved horns and a closed-mouth smile. Heavier brow, different horn curl and elongated chin/muzzle still differ from C10, with pose/light confounds. No categorical all-seed identity collapse is claimed.",
+        "Base/effect controls are themselves long-horned angular/bearded designs. Their correct wardrobe/book action does not constitute identity preservation. No merged arm demonstrates all requested identity/wardrobe/head framing/ordered flat-palm conditions together."
+      ]
+    },
+    {
+      "pair": "series30_combat",
+      "character_control": "C03",
+      "cases": [
+        {
+          "blind_id": "C06",
+          "variant": "base",
+          "visible_attempts": 3,
+          "pattern": "near, far, later far with short preparatory hesitation",
+          "contact_caveat": "Three clear longer extensions; small lead-in at 70-73 does not establish an independent fourth punch.",
+          "lowering": "Full final guard 88-90 then held through 123; no distinct later lowering.",
+          "identity": "No-character control has heavier forehead fringe, downturned head, deep facial shadow and glove occlusion compared with C03/creator. Generic long-hair cues are insufficient to assert exact identity; this presentation is not merge-caused."
+        },
+        {
+          "blind_id": "C03",
+          "variant": "character_only",
+          "visible_attempts": 2,
+          "pattern": "near, far",
+          "contact_caveat": "Two clear extensions with visual contact windows 23-26 and 72-78; preparation 64-70 is not an extra action. Anatomical left/right remains unconfirmed.",
+          "lowering": "Separate guard recoveries 32-35 and 87-90; final guard held through 123, without glove lowering.",
+          "identity": "Matched anchor retains creator-like long side-parted dark hair and coarse facial features. Smaller side-on fighting pose, serious expression, hair and shadow differ from the smiling creator close-up; no perfect fine identity claim."
+        },
+        {
+          "blind_id": "C11",
+          "variant": "effect_only",
+          "visible_attempts": 3,
+          "pattern": "near, far, far",
+          "contact_caveat": "Three longer extensions, late reach continuous despite bag occlusion; no extra cycle established.",
+          "lowering": "Final retreat to lower chest without held full guard; further descent 97-106, down 107-123.",
+          "identity": "No-character control is more frontal with a clear center-parted forehead and narrower-eyed darker facial presentation than C03. Light/expression/pose confound precise identity difference. Later down pose is already supplied without a character merge."
+        },
+        {
+          "blind_id": "C12",
+          "variant": "additive",
+          "visible_attempts": 3,
+          "pattern": "near, near, far",
+          "contact_caveat": "Three contact windows; no held guard between final two attempts.",
+          "lowering": "Final retreat goes directly downward, both down by 93-96 and held through 123; no held final full guard.",
+          "identity": "Close to C03's side-on long-haired face family and to coarse creator cues. Hair drape, head inclination and post-action expression differ; no gross replacement or calibrated fine identity loss established."
+        },
+        {
+          "blind_id": "C07",
+          "variant": "slerp",
+          "visible_attempts": 3,
+          "pattern": "near, far, far",
+          "contact_caveat": "No held full guard inside first pair; visual contacts 18-19,24-26,76-80.",
+          "lowering": "Final full guard 89-92 held through 123; no lowering.",
+          "identity": "Coarse long-haired face presentation close to C03/creator, with a lower gaze and slightly different angle/light. No fine identity superiority over additive or C03 established."
+        },
+        {
+          "blind_id": "C15",
+          "variant": "ties",
+          "visible_attempts": 3,
+          "pattern": "near, near, far",
+          "contact_caveat": "Three visual contact windows; preparation not extra punches, no held pause between final two.",
+          "lowering": "Full guard returns 86-89 and stays through 123; no distinct lowering.",
+          "identity": "Long dark hair and coarse character-only features persist, but downturned head, hair and gloves obscure substantially more facial detail. Reduced visibility must not be excluded from comparison; a confident fine identity ordering is unavailable."
+        },
+        {
+          "blind_id": "C14",
+          "variant": "stable_tuner_winner",
+          "visible_attempts": 4,
+          "pattern": "near, far, near, far",
+          "contact_caveat": "Two short near attempts around 19-22 and 72-75 have small/ambiguous gaps; only far contacts 25-28 and 78-81 confirmed. Two major energy groups do not turn this into two attempted punches.",
+          "lowering": "Guard recovers between pairs and at 88-91, then held through 123; no lowering.",
+          "identity": "Coarse long-haired facial cues retained relative to C03/creator, with a more frontal face and clearer late eye/nose visibility. Visibility/pose improvement is not proof of better fine identity."
+        },
+        {
+          "blind_id": "C01",
+          "variant": "np_lora",
+          "visible_attempts": 3,
+          "pattern": "near, near, far",
+          "contact_caveat": "Three clear contact windows, no separate held full guard between final two. Same count/pattern as additive, not an alternating two-action success.",
+          "lowering": "Far glove retreats lower first, near glove lowers late 109-119; both down by 120 and held to 123. No held full final guard. Settled down ending is later than additive.",
+          "identity": "Close to additive/C03 in long side-parted hair and coarse side-on facial structure. Different bag color is not identity loss; shadows, hair and motion blur limit fine ranking. No NP identity advantage demonstrated."
+        },
+        {
+          "blind_id": "C02",
+          "variant": "ct_merge",
+          "visible_attempts": 3,
+          "possible_additional_short_attempt": true,
+          "pattern": "near, far, later far episode with ambiguous short reversal",
+          "contact_caveat": "Later brief reach 70-71, slight withdrawal/reappearance 72 and longer 73-78 extension; retain uncertainty rather than certifying exactly four independent punches.",
+          "lowering": "After final retreat both lower 85-94, down by 95-96 and held through 123; no separately held final full guard.",
+          "identity": "Retains long dark hair/coarse face cues, but is more frontal, narrower-faced/eyed and more center-parted than C03's side-on view, resembling the effect-control presentation in some respects. Lighting, serious expression and initial glove occlusion limit confident fine identity attribution; not a demonstrated wholesale replacement."
+        }
+      ],
+      "interpretation": [
+        "Character-only is the only arm with exactly two clear attempted extensions and separate guard recoveries, but it does not lower the gloves. Anatomical left-jab/right-straight assignment is not certified. Base/effect-only already have three longer extensions; repetition is not exclusively caused by merging.",
+        "All six merged arms exceed the two-attempt target: additive/SLERP/TIES/NP have three clear attempts, stable winner four, CT three longer attempts plus an ambiguous short reversal. Stable winner's two confirmed contacts and two major energy groups must not hide its four attempted cycles.",
+        "Additive and NP share near-near-far ordering. Both lower the gloves without a held final full guard; NP's final near-glove lowering is later than additive. NP's seed-41 local count/order advantage does not reproduce here.",
+        "CT also reaches a held lowered ending but repeats a far episode and has ambiguous extra motion. SLERP/TIES/stable winner retain guard instead of lowering. No merged arm satisfies count/order/guard/ending together.",
+        "Coarse long-haired character cues remain across merged arms, with CT more frontal/narrower-eyed, TIES more occluded, and pose/light/expression differences across the rest. Creator and matched-control views do not support a reliable fine identity ranking.",
+        "Clothing and head framing are broadly retained; bag does not cover the face. Partial glove/arm contact occlusion and bottom-edge glove clipping remain explicit. Still-frame chronology is not full continuous-motion or perceptual AV evaluation."
+      ]
+    }
+  ],
+  "audio": {
+    "listened": false,
+    "human_ratings": [],
+    "sound_identity": null,
+    "unwanted_speech_or_music": null,
+    "realism": null,
+    "perceptual_synchronization": null,
+    "overall_av_winner": null,
+    "note": "Frozen waveform observations unchanged. Energy maxima/groups are descriptive timing aids, not action counts, sound labels or quality scores."
+  },
+  "decision": {
+    "change_ranking": false,
+    "change_defaults": false,
+    "automatic_np_ct_preference": false,
+    "overall_quality_winner": null,
+    "shipping_qualification_complete": false,
+    "reason": "All four held-out blocks now have detailed and matched visual records, with seed-dependent trade-offs rather than a universal NP/CT advantage. Goal-wide code/evidence/test audit and shipping recommendation remain; no perceived-audio quality claim."
+  },
+  "remaining_scope": {
+    "heldout_detailed_cases": 0,
+    "heldout_matched_cases": 0,
+    "heldout_blocks": 0,
+    "goal_wide_audit": true,
+    "goal_active": true
+  },
+  "saved_context_utc": "2026-09-08 22:31:10 UTC"
+}

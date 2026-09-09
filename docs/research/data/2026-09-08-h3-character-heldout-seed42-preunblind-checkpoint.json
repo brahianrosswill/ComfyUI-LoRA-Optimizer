@@ -1,0 +1,42 @@
+{
+  "status": "pass_before_observer_unblinding",
+  "review_id": "4fac4d820326bc91440d",
+  "stage": "heldout",
+  "seed": 2026090842,
+  "detailed_observations": {
+    "path": "docs/research/data/2026-09-08-h3-character-heldout-seed42-frame-waveform-observations.json",
+    "sha256": "e2b2a7b3eaf7685ad4d9818d275bd72d9f0186afc09954515b6da05c2a9c40be",
+    "status": "complete_before_unblinding",
+    "candidates": 18,
+    "frames": 2232
+  },
+  "initial_observations_sha256": "616ad24493baaaa1aa8b50085ba47ac591de41f79dcdbd2db8316950594e6af6",
+  "heldout_policy_sha256": "40da10ebc71044f09ded4f7761388a367ac145116f45a34ed7088291b99bb760",
+  "plan_sha256": "1f179b668839a4379a1743fd3c8f507b0202a254ccb5f47a3047f25a7a33ed40",
+  "prepared_manifest_sha256": "e19b54b7c1154c5ecfed62030fc9e739dd8ebcb994778eeb6fe6e43d40d20fde",
+  "public_manifest_sha256": "00da43bc1d5d59f33d5bc000095d56f31155953a19b6c3583ef446f2a993e8b9",
+  "media_verification_sha256": "13e416cabd804c58fe9d384d27ff83c89a59700843d4627c1b1af02b55c1af0e",
+  "private_key_sha256": "7108616285914935e63a01fb94ff90a29c563ccd68ef4a2b069cd2f59b0de59b",
+  "wrapper_sha256": "d76fcf18d109bb65631eab9e6cf1ea16dfe03c53292812ff8bfe205c9eefe4f5",
+  "validation": {
+    "command": "Read-only Python integrity check using frozen scripts.h3_character_heldout_sync.prepare_scope plus SHA-256/schema/range/recovery checks; session 63898 terminated with exit 0 before this record was saved.",
+    "complete_unique_public_ids": 18,
+    "original_and_anonymous_media_rehashed": 18,
+    "prepared_artifacts_rehashed": 108,
+    "original_resolution_details_rehashed": 61,
+    "checks": [
+      "All frozen prerequisite policy/helper/calibration/plan hashes and complete 18-job original/public/private/AV-verification alignment revalidated without displaying method mappings.",
+      "Every executed/prepared graph and original video agrees with the existing 124-frame technical audit. Existing decoded-AV equality is pinned; this checkpoint rehashes media, not a fresh AV decode.",
+      "All eighteen observations identify 124 frames and the exact four waveform sheets. All 108 prepared artifacts, 61 original-resolution detail hashes/ranges and anonymous maxima lists agree with sources.",
+      "Observations are unique and complete, remaining scope empty, detail/contact ranges within 0-123, sound/sync/offset fields null; no listening or human labels.",
+      "Recovery manifest and driver hashes revalidated; three retained completed cases and preserved interrupted C04 sheet are unchanged.",
+      "Optimizer, experimental formula and both frozen seed-41 detailed observation hashes are unchanged. git diff --check passed; no production changes or test rerun in this data-only checkpoint."
+    ]
+  },
+  "method_mapping_read_by_observer": false,
+  "audio_listened": false,
+  "human_ratings": [],
+  "saved_context_utc": "2026-09-08 21:42:21 UTC",
+  "next_action": "Only after this checkpoint is saved and rehashed, open diagonal seed-42 mapping and save separate matched comparisons. Preserve both blind records unchanged. Both seed-41 blocks are already matched; crossed seed-42 key remains unopened.",
+  "goal_complete": false
+}

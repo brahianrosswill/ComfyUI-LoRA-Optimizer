@@ -1,0 +1,13 @@
+# Isolated Synchformer calibration environment, not ComfyUI dependencies.
+torch==2.8.0+cu128
+torchvision==0.23.0+cu128
+torchaudio==2.8.0+cu128
+transformers==4.37.2
+timm==0.9.16
+einops==0.6.1
+omegaconf==2.3.0
+numpy==2.2.6
+librosa==0.11.0
+soundfile==0.13.1
+av==16.1.0
+pytest==8.4.2

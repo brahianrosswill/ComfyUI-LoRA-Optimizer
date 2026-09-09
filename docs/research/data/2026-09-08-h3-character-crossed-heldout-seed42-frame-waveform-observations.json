@@ -1,0 +1,1222 @@
+{
+  "status": "complete_before_unblinding",
+  "review_id": "028333549187dc0e45a0",
+  "stage": "heldout",
+  "seed": 2026090842,
+  "plan_sha256": "110d58a4adeab1dce4c3ef288bc3036c0a1b3ff79a50d862c49818103b9c40c2",
+  "heldout_policy_sha256": "40da10ebc71044f09ded4f7761388a367ac145116f45a34ed7088291b99bb760",
+  "initial_observations_sha256": "a2c3d8c564e5ed00bfce59f87628217bf024c1240ccd1eeb8016ce4fa67f01f5",
+  "review_key_sha256": "c1a8a756347c535b93b441589f2b37efeaa5ad4c3b760e3b91939d09f6d5be47",
+  "wrapper_sha256": "d76fcf18d109bb65631eab9e6cf1ea16dfe03c53292812ff8bfe205c9eefe4f5",
+  "prepared_sha256": "c9244e868a8ac3f143a96218c681f23c87f2883ec0deaee29865554b062c6f19",
+  "preparation_status": "Complete: original session 9774 exited 0 after all 18 diagnostics (2232 frames); no restart or recovery.",
+  "observer": "Assistant chronological still-frame/waveform inspection, not human ratings or continuous playback",
+  "prior_exposure": "All calibration evidence and three completed held-out matched blocks are known. Crossed seed-42 method mapping remains unread; no held-out learned similarity scoring.",
+  "method_mapping_read": false,
+  "audio_listened": false,
+  "human_ratings": [],
+  "required_candidates": 18,
+  "completed_candidates": 18,
+  "remaining_candidates": [],
+  "saved_context_utc": "2026-09-08 22:26:01 UTC",
+  "observations": [
+    {
+      "blind_id": "C01",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C01",
+      "source_video_sha256": "31d79bb5f995f87238d6a80a6033d425aea7dc3fdc73f5360533934efdad9218",
+      "anonymous_video_sha256": "cae72f71aab23b69e19b5bf8e7c9e26bf551a1802b3fd4c425daae92285e328e",
+      "sync_sha256": "c31b040a28481f1a2e85dc5fbbf60dd2c0f4a56abe018c806af3df76478cddc6",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            20,
+            35
+          ],
+          "file": "details-020-035.jpg",
+          "sha256": "e18cbcba251a2553c91d8028b7169e37c7fa691aa9fc87c13132f939058167c6"
+        },
+        {
+          "frames": [
+            56,
+            79
+          ],
+          "file": "details-056-079.jpg",
+          "sha256": "78845998f6c057150aaee8bd019032fa7251c3447054f88d5405ad42953f1165"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        1.0325,
+        1.1324999999999998,
+        1.2275,
+        2.6075,
+        2.7075,
+        3.0575,
+        3.1375,
+        3.2325
+      ],
+      "identity_visibility": "Full head remains in frame, with long dark hair, navy jacket, white inner shirt and red gloves. Coarse creator-like face is smaller and more side-on than reference; shadow, hair and crossing arm partly obscure details. No apparent cut or gross feature switch. Bag does not cover the face.",
+      "action": "Three clear attempts: near crossing extension about 22-27, another near crossing about 60-64, then a far-side extension about 71-75. Preparation at 20-21 and 58-59 is not additional punches. Pattern near-near-far, not the requested single alternating pair; anatomical left/right is not certified.",
+      "visual_contact_windows_frames": [
+        [
+          23,
+          26
+        ],
+        [
+          61,
+          63
+        ],
+        [
+          71,
+          74
+        ]
+      ],
+      "contact_window_interpretation": "Visible glove/bag overlap and subsequent bag deflection support three contact windows. Boundaries/blur limit exact impact instants; these are visually identified windows, not waveform-derived counts.",
+      "recovery_and_ending": "First guard restored about 31-34 and held. Second near glove returns about 67-69 while far hand is already preparing the next extension; no separately held full guard between the final two. After the third, the far glove retreats below chest and gradually lowers while near glove remains higher; near glove lowers about 109-119. Both are down by 120 and remain so through 123, partly below bottom boundary. No final full guard before lowering.",
+      "waveform": "Three main stereo-energy groups near 1.00-1.30, 2.58-2.82 and 3.03-3.30 seconds correspond descriptively to three visual contact neighborhoods; the detector yields eight anonymous maxima. No sound labels, audible-silence claim or perceived synchronization rating.",
+      "conclusion": "Three attempts, near-near-far, with asymmetrical lowering to a held down ending and no final full-guard recovery. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C02",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C02",
+      "source_video_sha256": "c032fff4406719952e1f72ddfee7e6019877e2529a8bfb6eaacee00d8feea3c3",
+      "anonymous_video_sha256": "669b58066367ae2de27a1861b3eb7636b42e5b6edb490273f3e14a99bbd0b24e",
+      "sync_sha256": "0c6f4f002d137630e7861524ba1dd4e865ab62779c535e9ba03d8af1d7372c27",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            12,
+            35
+          ],
+          "file": "details-012-035.jpg",
+          "sha256": "36af8f8eb0f1b81b23dae0e9a3d1af2e6c38e612dd4a26bd304f928248b04472"
+        },
+        {
+          "frames": [
+            68,
+            87
+          ],
+          "file": "details-068-087.jpg",
+          "sha256": "8b57b7892030b11f95a46e398811e8ed5b4eef6503cd668a83033ba099bd5388"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.7775000000000001,
+        1.1625,
+        1.2574999999999998,
+        3.1425,
+        3.2325
+      ],
+      "identity_visibility": "Full head remains in frame, long dark hair and navy jacket with red gloves. Coarse creator-like facial cues, but more frontal fighting pose, serious expression, smaller scale and shadow limit fine comparison. Foreground bag conceals the glove's leading surface; no apparent cut or gross feature switch.",
+      "action": "Two clear early attempts: a near crossing about 17-21 and a far extension about 25-29, without a separately held guard between them. The later far-side episode contains a brief reach around 70-71, slight withdrawal/reappearance at 72 and reextension at 73-78. Retain three longer extensions plus a possible extra short reach/hesitation; the tiny reversal and bag occlusion do not support a confident count of four independent punches. In any interpretation, the requested single alternating pair is exceeded. Anatomical handedness unconfirmed.",
+      "visual_contact_windows_frames": [
+        [
+          18,
+          20
+        ],
+        [
+          26,
+          28
+        ],
+        [
+          70,
+          71
+        ],
+        [
+          73,
+          78
+        ]
+      ],
+      "contact_window_interpretation": "First two and final long windows have bag-boundary overlap and subsequent response, with glove contact surfaces hidden. The short 70-71 window is an uncertain reach/possible touch within the later far episode, not a certified impact. Do not turn this uncertainty into an exact waveform-based punch count.",
+      "recovery_and_ending": "After the early pair, full guard returns about 36-40 and remains through 68. The final far arm retreats at 79-84, then both gloves lower about 85-94, settling by 95-96 and remaining down through 123, partly below the frame. There is no separately held full guard before final lowering.",
+      "waveform": "Three main stereo-energy groups around 0.74-0.82, 1.14-1.34 and 3.12-3.34 seconds. The latter covers the later reaching episode; it cannot resolve the ambiguous short reach or identify impacts/sounds. No perceived synchronization rating.",
+      "conclusion": "An early alternating pair plus a later far-side episode with an ambiguous short reversal; three longer extensions, possible additional short reach, and a settled lowered ending. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C03",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C03",
+      "source_video_sha256": "74956d443c66de1eca965a2f9b2f846a940aaf165dc80461dad6f6c409567cb8",
+      "anonymous_video_sha256": "167adc365381ae37cfa7c67943af7a8b991f54c0ff8b6a2fd9db4e626a1b9ca6",
+      "sync_sha256": "958ba9eb2a4fd923d5302ee1d5876f1532f84a2e627dcbf493f9f20adf6bc7c7",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            20,
+            35
+          ],
+          "file": "details-020-035.jpg",
+          "sha256": "bd2399d4bcdd211136bc40b24a357fd56594f164461ce5eaae979cc4f95eb9ca"
+        },
+        {
+          "frames": [
+            64,
+            87
+          ],
+          "file": "details-064-087.jpg",
+          "sha256": "d5efa1ab28c30a2f3d750051c5da2e658d80ff74834f9ac6fb5b6371b58a6789"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        1.0575,
+        3.0575
+      ],
+      "identity_visibility": "Full head remains in frame, long dark hair, navy jacket over white inner shirt and red gloves. Coarse creator-like face is small, side-on and shadowed with hair/crossing-arm occlusion. No apparent cut or gross feature switch.",
+      "action": "Exactly two clear extensions: near crossing around 21-27, then far-side extension around 71-79. Preparation around 64-70 is not an extra punch. The latter is one sustained extension, not a repeated punch. Near then far is not certified anatomical left then right.",
+      "visual_contact_windows_frames": [
+        [
+          23,
+          26
+        ],
+        [
+          72,
+          78
+        ]
+      ],
+      "contact_window_interpretation": "Glove/bag boundary overlap and bag deflection support two contact neighborhoods; bag occlusion and blur limit precise impact instants.",
+      "recovery_and_ending": "First guard returns around 32-35 and is held through 63. Far arm withdraws at 80-87, with guard restored around 87-90 and held through 123. No distinct post-guard lowering is visible; this does not require straight arms at the sides.",
+      "waveform": "Two narrow main stereo-energy groups around 1.05-1.12 and 3.05-3.15 seconds, with tails and very small traces elsewhere. Their temporal proximity to two visual windows is descriptive, not a sound label or perceived synchronization rating.",
+      "conclusion": "Two alternating attempts and guard recoveries, but no distinct final glove-lowering phase. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C04",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C04",
+      "source_video_sha256": "c34188b01063c0a66a255eac74a4756b51fd7a0bcc99f06ea43cf2b4594cf687",
+      "anonymous_video_sha256": "d8069b2fc2ae3d91d9a7937004c496faa9f55b417fadfb246f27f184f008691f",
+      "sync_sha256": "088f2bcb3e4f416049a49243feff3d70fa97a538f73dbda12b67e142232324ad",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            0,
+            15
+          ],
+          "file": "details-000-015.jpg",
+          "sha256": "178a570213a2e70d9680fc103b248d5e3d9ee6256a0a624294ed59525ff8c855"
+        },
+        {
+          "frames": [
+            52,
+            75
+          ],
+          "file": "details-052-075.jpg",
+          "sha256": "39a12513a47fa4051fdcabd5d6e93436dd25265706f487f32d0397078a703e84"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        2.9475,
+        3.0675
+      ],
+      "identity_visibility": "Short curved horns, broad soft muzzle and green/purple fur retain coarse creator cues; full head and both shoulders remain visible. Navy vest absent. Library shelves, warm lamp, window and closed blue book remain. More frontal pose/light than creator; no apparent cut or gross feature switch.",
+      "action": "Eyes start lowered and rise about 5-9, followed by a small closed-mouth smile developing about 25-40. Blue book is closed throughout. Both hands initially touch its edges. Screen-left hand lifts/repositions about 54-63, after the smile, then lowers onto the cover about 64-69.",
+      "visual_contact_windows_frames": [
+        [
+          64,
+          69
+        ]
+      ],
+      "contact_window_interpretation": "Later visible fingertip/cover landing is retained despite initial edge contact. Fingers remain arched with nails pointing down; a genuinely flat palm is unconfirmed.",
+      "recovery_and_ending": "Hands rest at/on the closed book through 123, with screen-left curved fingers on top and the other at the edge. Smile retained; vest remains absent.",
+      "waveform": "Unchanged linear-scale stereo traces remain very small throughout. Anonymous maxima do not establish book sounds, audible silence or perceived synchronization.",
+      "conclusion": "Downward gaze, lift, small smile and a later hand landing, but flat palm uncertain and vest missing. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C05",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C05",
+      "source_video_sha256": "1d4f9b65061c397538c7b90550b25bcfe6f9893c58d6c3bbe8aad703c9ed9673",
+      "anonymous_video_sha256": "11b8e93874c326c9740e7824d518b6fa7f246b15d8c1459eff623ffa2bfb0ec1",
+      "sync_sha256": "3ea61d2361d99ac800e1f93071db13e5d3ceb56454f76a5de26223c109145e5b",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            0,
+            15
+          ],
+          "file": "details-000-015.jpg",
+          "sha256": "78e90ec9e4549c902f38995f9ed3da8ea26aa07fe4139fcfe4eb88955bee5a79"
+        },
+        {
+          "frames": [
+            68,
+            91
+          ],
+          "file": "details-068-091.jpg",
+          "sha256": "61ac4758afd948045f30c3f6e8fae7c69c9aceb1ef483b111930ce804c4b961b"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        3.4975
+      ],
+      "identity_visibility": "Short curved horns, broad soft muzzle and green/purple fur retain coarse creator cues. Full head and shoulders stay in frame; no navy vest. Library shelves, lamp, window and blue book remain. No apparent cut or gross feature switch; pose/light differs from creator.",
+      "action": "Opening lowered eyes rise about 7-16, followed by a small closed-mouth smile about 25-43. Book remains closed. Both hands initially contact its edges. Around 69-83 the screen-left fingers unfurl/slide forward onto the top and front edge.",
+      "visual_contact_windows_frames": [
+        [
+          75,
+          83
+        ]
+      ],
+      "contact_window_interpretation": "Original-resolution details show finger spreading/settling, with thumb/edge contact retained. This is a later reposition but not a clearly detached whole-hand arrival; curved fingers at the front edge do not establish a flat palm.",
+      "recovery_and_ending": "Later screen-left hand rest settles about 83-87 and persists through 123. Other hand remains at the edge; closed book and small smile retained, vest absent.",
+      "waveform": "Very small unchanged linear-scale stereo traces throughout, not proof of audible silence. Anonymous maxima are not sound labels or a synchronization score.",
+      "conclusion": "Gaze then smile and later finger reposition, but no demonstrated flat-palm arrival and no vest. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C06",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C06",
+      "source_video_sha256": "9dc62da041ffa9cdb92ff389e6962e12881b507f3c7299a5e0e2373cf0a7109f",
+      "anonymous_video_sha256": "d25fa1c17760a7154a55f340f14b4ea32692f745385bad2d86c941907ea0ffb8",
+      "sync_sha256": "c59f70ef0393499af82b618c42b1384594f36ff092959638a5f644c5d33d68fa",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            12,
+            35
+          ],
+          "file": "details-012-035.jpg",
+          "sha256": "c38e1e306d238e94a5a3410a522dae41c302d6d94224a11d9b0ce0349dd3356c"
+        },
+        {
+          "frames": [
+            68,
+            87
+          ],
+          "file": "details-068-087.jpg",
+          "sha256": "9610bf9a059d1ca2f53302c45a5cdb7ac3582de8e87322e60149abe7e7146aff"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.7775000000000001,
+        1.1625,
+        3.2775
+      ],
+      "identity_visibility": "Full head remains visible, with long dark hair draped across forehead, navy jacket and red gloves. Face is substantially shadowed, lowered and partly glove/hair-occluded compared with creator, limiting fine identity assessment. Bag does not cover face; no apparent cut or gross feature switch.",
+      "action": "Early near crossing around 15-20 followed by far extension around 24-29; near glove recovers as far already starts, without a held full guard between. Later far episode begins with a short forward reach/hesitation at 70-73 then a fuller extension at 74-80. Three clear longer extensions; original details do not establish an independent fourth punch from the short preparation. Anatomical left/right unconfirmed.",
+      "visual_contact_windows_frames": [
+        [
+          17,
+          19
+        ],
+        [
+          25,
+          28
+        ],
+        [
+          75,
+          80
+        ]
+      ],
+      "contact_window_interpretation": "Bag boundary overlap and deflection support these three long-extension neighborhoods. Leading glove face is hidden. Short earlier reach at 70-73 remains uncertain preparation/touch, not a certified additional impact.",
+      "recovery_and_ending": "Guard restored after early pair around 35-39 and held through 68. Final far withdrawal around 81-87, with guard by 88-90 held through 123. No distinct later lowering phase; no requirement for arms straight at the sides.",
+      "waveform": "Three main stereo-energy groups around 0.76-0.84, 1.14-1.32 and 3.26-3.36 seconds. The final group follows the visually overlapping far reach neighborhood on the container timeline; this is not a calibrated impact offset or synchronization score. Tiny preparation is not resolved by energy peaks.",
+      "conclusion": "An early alternating pair plus an additional longer far extension, with a short ambiguous lead-in and a guard ending rather than glove lowering. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C07",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C07",
+      "source_video_sha256": "656e03ebc33c66df157dc98966e20f51030e3b900caf2a294bdc669d22634662",
+      "anonymous_video_sha256": "cc3d24c1850be00811950ca2b04e63e1838bd541f8c92d501fa8c0f0935d1920",
+      "sync_sha256": "a7e0050e14c54509b668c147ad36d079ce13b0a691fec5e5c3242a9311568897",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            12,
+            35
+          ],
+          "file": "details-012-035.jpg",
+          "sha256": "695f46bf3b6ec4ab4451398c8268d31217e1a2b221ea5d3601f305c8905d4a0f"
+        },
+        {
+          "frames": [
+            72,
+            91
+          ],
+          "file": "details-072-091.jpg",
+          "sha256": "1d37946d15d4b7ff1b26ad9e2de96cf9c233e4a3fe8705290fea7332c51a56b2"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.7775000000000001,
+        1.1025,
+        1.1975,
+        3.2775,
+        3.3725
+      ],
+      "identity_visibility": "Full head visible throughout, long side-part dark hair, navy jacket, white inner shirt and red gloves. Coarse creator-like facial cues but small three-quarter fighting face, shadow and expression limit fine comparison. No apparent cut or gross feature switch; bag remains separate from face.",
+      "action": "Three clear attempts: near crossing about 16-20, far-side about 23-27, then far-side about 75-81. Near-far-far, not a single alternating pair. Opening 14-15 and later 73-74 are preparation, not extra punches. Anatomical handedness not certified.",
+      "visual_contact_windows_frames": [
+        [
+          18,
+          19
+        ],
+        [
+          24,
+          26
+        ],
+        [
+          76,
+          80
+        ]
+      ],
+      "contact_window_interpretation": "Visible glove/bag boundary overlap and bag deflection support three neighborhoods, with exact impact instants limited by blur.",
+      "recovery_and_ending": "First near arm recovers around 21-23 as far starts, without a separately held full guard. Guard restored after the early pair about 35-39 and held. Final far withdraws 81-88, guard restored around 89-92 and held through 123. No distinct subsequent glove lowering.",
+      "waveform": "Three main stereo-energy groups near 0.77-0.90, 1.09-1.40 and 3.26-3.60 seconds, with multi-peak tails. These are descriptive timing groups, not sound labels or a synchronization score.",
+      "conclusion": "Three near-far-far attempts and a guard ending without distinct lowering. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C08",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C08",
+      "source_video_sha256": "ffc0d90ee1b4a25f04ba74bde2202817e696e70e2629037807143a6fe29535e7",
+      "anonymous_video_sha256": "c744b2df671e022426a95398a4ea588b95bb567958c5fcd933002d22182a1c58",
+      "sync_sha256": "f31ee3191cd58be9ef929174248825451c03743fe10d57b560f78a5e289a8766",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            16,
+            39
+          ],
+          "file": "details-016-039.jpg",
+          "sha256": "65f14a5124b06909625df9a20384e05acafbb0b6dac96238d8f2e411d15a38aa"
+        },
+        {
+          "frames": [
+            72,
+            95
+          ],
+          "file": "details-072-095.jpg",
+          "sha256": "796db6425d36c4a62b5148b02dacba0376194cc922b26c05d541e7b0f1a3c20e"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        3.6975
+      ],
+      "identity_visibility": "Navy vest retained, but long outward/upward pointed horns, projecting angular nose/muzzle, pronounced purple brows and beard differ substantially from creator's short-curved-horn broad-soft-muzzle design. Green/purple cues partly remain under yellow light. Both shoulders visible; one horn reaches/crops the top boundary during the middle-late head lift. No cut or abrupt feature switch apparent.",
+      "action": "Lowered gaze rises about 20-35, with a small closed-mouth smile strengthening around 30-45, partly overlapping the lift. Book is intact and closed but held tilted off the table from the opening, not resting flat. Both hands already hold it. Whole book lowers gradually about 64-87; this is not cover closure.",
+      "visual_contact_windows_frames": [
+        [
+          83,
+          89
+        ]
+      ],
+      "contact_window_interpretation": "Window describes closed-book/table settling. Screen-left fingers release from the supporting grip and remain arched over/near the cover edge; exact flat-palm contact is not established.",
+      "recovery_and_ending": "Book lies down by about 87-89, other hand remains at its edge, screen-left hand curls above/near the top edge through the ending. Small smile and vest persist. No demonstrated independent flat-palm placement after set-down.",
+      "waveform": "Very small stereo traces throughout, with a small energy patch around 3.69-3.73 seconds near late book/hand settling. Temporal proximity does not identify a book sound or establish perceived synchronization; no audible-silence claim.",
+      "conclusion": "Vest and later book set-down retained, but different facial/horn design, partial horn cropping, book initially held off table and flat-palm arrival unconfirmed. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C09",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C09",
+      "source_video_sha256": "bff85163c4d803999a9a85531249115893c484ff89f5c6d335c9aaf2f191ec96",
+      "anonymous_video_sha256": "b13c4f04dcb825526b92fe94bb5f8097d425c607384c20355940cbec8fabde8b",
+      "sync_sha256": "9e8230775b1dc8bc7194cfcb919e33e966e4a9aa5b00cb0c953b6d4ba0a6a7dc",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            0,
+            19
+          ],
+          "file": "details-000-019.jpg",
+          "sha256": "92d696eb1a548eb5eab8349f67d7596f5e1318de1c697afc95c81db4fcdcc693"
+        },
+        {
+          "frames": [
+            72,
+            95
+          ],
+          "file": "details-072-095.jpg",
+          "sha256": "65eedaf404e4c3a1e17cf82d490791dbbad909a5dc769f6aa96c20048abb1182"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.0075,
+        0.0975,
+        0.2175,
+        0.3225,
+        0.4575,
+        0.6125,
+        0.7725,
+        0.8574999999999999,
+        0.9424999999999999,
+        1.0474999999999999,
+        1.1324999999999998,
+        1.2125,
+        1.2925,
+        1.4175,
+        1.5175,
+        1.5975000000000001,
+        1.6975,
+        1.7825,
+        1.9475,
+        2.0575,
+        2.2125,
+        2.2925,
+        2.3975,
+        2.5025,
+        2.5925000000000002,
+        2.7175000000000002,
+        2.8275,
+        2.9175,
+        3.0275,
+        3.1325,
+        3.2125,
+        3.2975,
+        3.3825,
+        3.4725,
+        3.6125,
+        3.7325,
+        3.8275,
+        3.9175,
+        3.9975,
+        4.1475,
+        4.2325,
+        4.3774999999999995,
+        4.4775,
+        4.5725,
+        4.7225,
+        4.8325,
+        4.922499999999999,
+        5.0175,
+        5.157500000000001
+      ],
+      "identity_visibility": "Green/purple fur, short curved horns and soft muzzle retain coarse creator cues, with a heavier brow, longer facial presentation and smaller/narrower eyes in this downward three-quarter pose. Navy vest present. Both shoulders visible; an upper horn reaches/slightly crops the top edge near the later set-down. No apparent cut or gross feature switch.",
+      "action": "Eyes start lowered, briefly close around 7-8, then rise about 9-15. A small closed-mouth smile strengthens about 31-52. Closed blue book is held tilted upright from the opening, supported near its lower edge, rather than flat on the table. Both hands already hold it. Whole book lowers about 65-86, not cover closure.",
+      "visual_contact_windows_frames": [
+        [
+          83,
+          88
+        ]
+      ],
+      "contact_window_interpretation": "Closed-book/table settling; screen-left supporting fingers rotate/reposition onto the top edge as it lowers. Curved fingers and continuing support do not establish an independent flat-palm arrival.",
+      "recovery_and_ending": "Closed book rests on table by about 85-88. Screen-left arched fingers remain at/on top, screen-right hand stays near the edge; small smile and vest retained through 123. No separately demonstrated later flat-palm placement.",
+      "waveform": "Very small unchanged linear-scale stereo traces throughout. Anonymous maxima do not establish sounds, audible silence or perceived synchronization.",
+      "conclusion": "Vest and coarse character cues retained with changed facial presentation; book initially tilted/held and later set down, but flat-palm placement uncertain and slight horn-edge cropping. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C10",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C10",
+      "source_video_sha256": "67d55dc02839cf5c6a55612e53225688b9a2b20f8f54d068153f5ab3d715a4b2",
+      "anonymous_video_sha256": "541926f7995688493243abdbd1f77073a1323112f4861ab31e0d71d382749089",
+      "sync_sha256": "ef241cd113247c4345b7aa35d3eda1060397d05fff90b3087daf4e2bce528325",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            0,
+            23
+          ],
+          "file": "details-000-023.jpg",
+          "sha256": "11e235e74f750a269d30eec84c67ebed5f28b924deaac106d34cb3c2d91bfd03"
+        },
+        {
+          "frames": [
+            24,
+            43
+          ],
+          "file": "details-024-043.jpg",
+          "sha256": "a47e3b47d8f8c49c3ce2dc3f3504b8e3c2618444a8968f3c5b6f169f6b912145"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        1.4125
+      ],
+      "identity_visibility": "Frontal short-curved-horn, broad-soft-muzzle green/purple figure retains coarse creator cues. Full head and both shoulders visible; lower front of book partly at bottom boundary. Navy vest absent. Library shelves, lamp and window remain. No apparent cut or gross feature switch; frontal pose differs from creator.",
+      "action": "Eyes initially lowered, briefly closed around 7-8, then lift about 9-19. Small closed-mouth smile develops around 20-31. Book remains closed on the table. Screen-left hand starts lifting about 10-14, while gaze is still rising and before the smile, then hovers over cover through about 25.",
+      "visual_contact_windows_frames": [
+        [
+          28,
+          33
+        ]
+      ],
+      "contact_window_interpretation": "Later fingertip/cover settling is visible, but fingers remain bent; exact flat-palm contact is unconfirmed. Initial other-hand/edge contact does not erase this arrival.",
+      "recovery_and_ending": "Screen-left fingers settle about 28-33 and remain on top through 123; other hand stays at edge. Gaze, smile and landing overlap rather than a clean completed smile followed by starting hand placement. Vest missing throughout.",
+      "waveform": "Very small unchanged stereo traces, with a small patch around 1.38-1.43 seconds following the hand landing neighborhood. This is descriptive timing, not sound identification or a perceived synchronization score.",
+      "conclusion": "Closed book and later hand landing, but hand motion begins before smile completion, flat palm uncertain and vest absent. No method attribution or AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C11",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C11",
+      "source_video_sha256": "f62d6a4a628e8737e6df64c88e5da8ddf7f7712d7acd560bb86334e9afc3661c",
+      "anonymous_video_sha256": "9ad5682ef4c86d8b5c14f884f9a819864768158076480c93984edcb870bf6eaf",
+      "sync_sha256": "c2e6304705789440bf9b1be8ff037b975346bc3dcdc75b28bfe3436eca66cf3c",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            12,
+            35
+          ],
+          "file": "details-012-035.jpg",
+          "sha256": "14f9160f85da87562ae18afb571c41de701a595e5f293a1ff313cc5e23849f98"
+        },
+        {
+          "frames": [
+            68,
+            91
+          ],
+          "file": "details-068-091.jpg",
+          "sha256": "7bce673e48df6286c136430af647d304d36feb96a059f0274028e82c4bc501b3"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.7775000000000001,
+        1.1025,
+        1.2025000000000001,
+        3.0575,
+        3.1375
+      ],
+      "identity_visibility": "One full-headed woman with long dark hair, relatively clear forehead and frontal/three-quarter face, navy jacket and red gloves. Coarse hair/face cues remain compatible with the creator reference; the small face, shadow and intermittent glove/hair occlusion limit fine identity judgment. Bag stays separate from the face.",
+      "action": "Three clear longer extensions, near-cross then far-side then far-side: approximately 17–21, 24–29 and 70–76. Contact windows 18–20, 25–28 and 71–75. The late reach remains one continuous extension despite changing bag-edge occlusion around 72–73; the detailed frames do not establish an independent short extra punch. Thus the early alternating pair is followed by a repeated far-side action, not exactly the requested two.",
+      "visual_contact_windows_frames": [
+        [
+          18,
+          20
+        ],
+        [
+          25,
+          28
+        ],
+        [
+          71,
+          75
+        ]
+      ],
+      "contact_window_interpretation": "Near/far tracks screen depth, not independently certified anatomical left/right. Visible glove/bag overlap and bag displacement support these contact windows; no exact sub-frame impact claim.",
+      "recovery_and_ending": "Near retracts 21–23 as far begins: no held full guard inside the early pair. Both recover by roughly 38–41 and remain in guard through the mid-60s. After the last reach, far withdraws 76–84 to lower chest rather than a held face-level guard; near lowers 85–90. Both are near lower chest at 90–96, then lower further 97–106, settled down 107–123 with gloves mostly below the bottom edge. Lowering is present, but full guard-then-lower after the last punch is not established.",
+      "waveform": "Three main energy groups approximately 0.76–0.94, 1.09–1.40 and 3.055–3.34 seconds plus tails; a very small patch around 3.69–3.79 accompanies lowering rather than another visually established punch. These are descriptive timeline groups, not identified punch sounds or calibrated sync offsets.",
+      "conclusion": "Three attempts with a repeated far-side action and a clear lowering ending; missing held final full guard remains separate. No sound-identity or audiovisual preference score.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C12",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C12",
+      "source_video_sha256": "2da47066c4f622cab2d53dd6873924836fdd272f081596c6e5dcd33df306e7f0",
+      "anonymous_video_sha256": "aa5e3fbbac2958759774cb1b68064a047eb4940267630d5f04562d9c77dec996",
+      "sync_sha256": "5cc07b4ed9c752c0460966f1ddf1256de6c75cfa496dbd57cce5acde82d25f9e",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            20,
+            35
+          ],
+          "file": "details-020-035.jpg",
+          "sha256": "ec69482d6360e7f90cc46fc8d644ddb2bd245447aed5909dfaeda273799564d4"
+        },
+        {
+          "frames": [
+            56,
+            79
+          ],
+          "file": "details-056-079.jpg",
+          "sha256": "2d741dc4f396f629c10416097187704e9c60baf6346173f54a4f4107928177e8"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        1.0575,
+        1.1625,
+        2.6425,
+        3.0575,
+        3.1375
+      ],
+      "identity_visibility": "One woman, full head and shoulders, long dark side-parted hair and softly shaped face with partial hair/three-quarter shadow. Navy jacket over a white inner shirt, red gloves; bag separate from face. Coarse creator-like hair/face cues are visible but pose, size and shadow constrain fine identity comparison.",
+      "action": "Three clear extensions: near-side 22–27, near-side again 60–64, then far-side 71–79. Contacts visible at 23–26, 61–63 and 72–78. Frames 20–21 and 58–59 are preparation before the first two long reaches, not extra punches. The later far glove drops/loads at 66–69 then extends, not another independent contact before 72. Sequence is near-near-far rather than exactly two alternating actions.",
+      "visual_contact_windows_frames": [
+        [
+          23,
+          26
+        ],
+        [
+          61,
+          63
+        ],
+        [
+          72,
+          78
+        ]
+      ],
+      "contact_window_interpretation": "Depth-side tracking and glove/bag contact are visible in detailed contiguous frames; anatomical left/right is not independently certified. Bag shifts with the reaches. One sustained final extension, not multiple punches inferred from waveform lobes.",
+      "recovery_and_ending": "First glove returns 27–34, guard restored around 35–38 and held until preparation at 58. After second reach near returns 64–69 while far loads, without a held two-glove guard before third. Final far extension retreats downward 79–86 while near also lowers 85–92; both down by 93–96 and held through 123, some lower-glove/bottom-edge clipping. No held full guard before this lowering.",
+      "waveform": "Three main energy groups around 1.04–1.40, 2.61–2.93 and 3.055–3.40 seconds, including tails; low residual texture afterward. Their broad placement follows visible contacts descriptively but is not a sound-label or synchronization-quality judgment.",
+      "conclusion": "Three near-near-far attempts and a clear lowered ending. Exact two-action order and final held guard are not met. Audio identity and preference remain unknown.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C13",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C13",
+      "source_video_sha256": "3a71c0cf9f9ab79d858ed12b62e66a72827e0ce0f02733105a2003a603fbcc01",
+      "anonymous_video_sha256": "a567a40d060b649e6e7520d97ef859b0f0e7b19a6d440c0c1f2d19904d0b6634",
+      "sync_sha256": "cfa3787066dde3c05835df25237154b8d9eda5844b3feeee0936f21905b4af4f",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            0,
+            19
+          ],
+          "file": "details-000-019.jpg",
+          "sha256": "bae777539dc8f06b39cdb527880f903dc1c8d5500a9fdd4e8cf12f55ecb71a39"
+        },
+        {
+          "frames": [
+            20,
+            43
+          ],
+          "file": "details-020-043.jpg",
+          "sha256": "c1e94a2dc5ee4e540979fbdb98cc6480a9cea3266fa21ed59359c24fc94571db"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.0975,
+        0.3525,
+        0.4875,
+        0.6575,
+        0.8225,
+        0.9275,
+        1.1625,
+        1.2974999999999999,
+        1.4775,
+        1.7475,
+        2.0025,
+        2.0925000000000002,
+        2.1925,
+        2.3875,
+        2.5425,
+        2.7175000000000002,
+        2.9375,
+        3.0375,
+        3.1425,
+        3.3175,
+        3.5025,
+        3.6875,
+        3.8625,
+        4.0875,
+        4.2075,
+        4.317500000000001,
+        4.4475,
+        4.532500000000001,
+        4.637499999999999,
+        4.7475000000000005,
+        4.887499999999999,
+        4.9975000000000005,
+        5.1325
+      ],
+      "identity_visibility": "Single full-headed, broad soft-muzzled green/purple furry character with short inward-curved horns, matching coarse creator cues. Both shoulders remain visible. Frontal rounder-eyed pose differs from the creator's tilted doorway view; no navy vest. Library shelves, warm lamp and cool window are present.",
+      "action": "Closed blue book lies flat on the table throughout. Initial gaze is down, eyelids close around 3–5, then eyes lift 6–12; a small closed-mouth smile develops approximately 18–33. Both hands begin at the book edges/table. Screen-left hand lifts approximately 9–17 and hovers through the mid-20s, then descends onto the cover around 28–37. The hand movement starts during/just after gaze lift, before the smile is established, rather than a clean completed-smile-then-started-placement sequence.",
+      "visual_contact_windows_frames": [
+        [
+          28,
+          37
+        ]
+      ],
+      "contact_window_interpretation": "Contiguous original-resolution frames show a later hand arrival even though there was initial edge contact; that initial contact does not erase the later event. Landing and settling retain curved knuckles/fingers/claws, not a clearly established flat palm. Book is closed before, during and after; no cover-closing event is inferred.",
+      "recovery_and_ending": "After approximately 38–43 the screen-left hand stays resting across/near the cover with curved fingers, the other remains at the edge, and the smile/gaze are held through the end. No new book opening or gross feature switch observed in still frames.",
+      "waveform": "Stereo envelopes stay visually tiny on the unchanged full-scale axes across all four sheets. This neither proves digital nor audible silence, and supplies no identified sound or synchronization judgment.",
+      "conclusion": "Coarse creator appearance, library, closed book, gaze and smile retained; missing vest, early overlapping hand movement and unproven flat palm remain separate prompt deviations. No fine identity or AV preference rank.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C14",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C14",
+      "source_video_sha256": "388605d670f7dae07096310750f6205c17156f9abf3112d63c7ed9998cd4b749",
+      "anonymous_video_sha256": "5cea2f48f120c386adae7aee03bcbe681c00126dca70b14fb8b0598ac6f80858",
+      "sync_sha256": "91cd7433b6113f6fc65ee5d3653c3232a863fb81a529b8dbd96e32db0b950f39",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            16,
+            35
+          ],
+          "file": "details-016-035.jpg",
+          "sha256": "a21ab2a3cb4c090e9ae81927d418603fd8ee74dacbf45c9193d89f64d9807d99"
+        },
+        {
+          "frames": [
+            68,
+            87
+          ],
+          "file": "details-068-087.jpg",
+          "sha256": "0a526d349e1e5da23cae33922b103b79a2958fbaaf817affc7f5362bc7d6fdc7"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        1.0975000000000001,
+        1.1975,
+        3.3125,
+        3.4025,
+        3.4975
+      ],
+      "identity_visibility": "One full-headed woman, long dark side-parted hair, navy jacket and red gloves. Face is visible in a three-quarter pose with mild hair/shadow occlusion; coarse creator cues are retained, but no fine similarity rank follows from this different pose and scale. Bag stays separate from the face.",
+      "action": "Four visible attempted extension/retraction cycles in two near-then-far pairs. Short near reaches approximately 19–22 and 72–75 stop at or just short of the bag edge; longer far reaches approximately 24–29 and 77–82 make visible contact. Original-resolution frames retain a small/ambiguous gap for the short near reaches around 21 and 73, so they are attempts, not confidently confirmed impacts. This is a repeated pair, not exactly two attempted actions.",
+      "visual_contact_windows_frames": [
+        [
+          25,
+          28
+        ],
+        [
+          78,
+          81
+        ]
+      ],
+      "contact_window_interpretation": "Confirmed windows list only the two longer far-side contacts. Short near attempts around 20–21 and 73 remain unconfirmed/visibly near-missing, not silently discarded from attempted-action count. Near/far is depth-side tracking, not independently certified anatomical handedness.",
+      "recovery_and_ending": "No held complete guard inside either rapid pair: near return overlaps far launch. First full guard restored approximately 36–39 and held into the high 60s. Final far retracts 82–87, full guard restored 88–91 and held through 123. No distinct glove-lowering ending; small guard movement does not establish one.",
+      "waveform": "Two large energy groups roughly 1.085–1.55 and 3.31–3.93 seconds, with small patches around the earlier short reaches near 0.88 and 3.055. Four visual attempts do not become two because only two groups are large; energy amplitude is not an impact label or a synchronization score.",
+      "conclusion": "Two alternating attempted pairs, two clearly established far contacts, and guard held at the ending. Exact attempted-action count and glove lowering fail independently. No audiovisual preference score.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C15",
+      "pair": "series30_combat",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C15",
+      "source_video_sha256": "42c27ab6a45eee93d97d72300e6d50e7b9327e79459003c70e9603520352ba2d",
+      "anonymous_video_sha256": "63f75e03e91fa134b93aabba9ab77bfa50ceea8587429c4da876af7999a5743e",
+      "sync_sha256": "3d74069a21523380eb2a764c3bd3373910e181639790c6f42d0204345ff7ab5d",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            12,
+            31
+          ],
+          "file": "details-012-031.jpg",
+          "sha256": "38954bcd4e951715e0daa8760ac5c279fc0d85eab9b463b5523e78bb0c0f33eb"
+        },
+        {
+          "frames": [
+            56,
+            79
+          ],
+          "file": "details-056-079.jpg",
+          "sha256": "b23f2a217cfa9d6ec09875457ad388d36f6dd4b2046173279fe67e564803dff4"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.7375,
+        2.5575,
+        3.0575
+      ],
+      "identity_visibility": "One full-headed woman with long dark hair, navy jacket and red gloves. Coarse creator-like hair/face cues remain, but downward head angle, hair across the forehead/eye and raised gloves substantially occlude the small face, especially early and at the ending. Bag does not cover the face.",
+      "action": "Three clear extensions: near 16–20, near again 59–64, then far 71–79. Contacts at 17–19, 60–63 and 72–78. Frames 13–15 and 57–58 are preparation for the longer near reaches, not independent punches. The final far reach is sustained, not several attempts corresponding to waveform subpeaks. Near-near-far is not the exact requested alternating two-action sequence.",
+      "visual_contact_windows_frames": [
+        [
+          17,
+          19
+        ],
+        [
+          60,
+          63
+        ],
+        [
+          72,
+          78
+        ]
+      ],
+      "contact_window_interpretation": "Visible glove/bag overlap and displacement support the listed contacts. First glove is already separating at 20, so it is not included as confidently contacting. Near/far refers to camera depth, not independently certified anatomical handedness.",
+      "recovery_and_ending": "First returns 20–27; guard restored around 28–31 and held through 56. Second near returns 64–69, briefly near the other glove at 68–69 before far starts at 70–71; not a held pause like the earlier guard. Final far retracts 79–85, guard restored 86–89 and retained through 123. No distinct lowering ending.",
+      "waveform": "Three main energy groups approximately 0.725–0.92, 2.55–2.73 and 3.055–3.30 seconds plus weak residual texture. Broad timing is recorded descriptively; maxima are not semantic impacts, sound-quality labels or a calibrated synchronization metric.",
+      "conclusion": "Three near-near-far attempts with full guard at the ending but no subsequent lowering. Coarse identity visibility is limited by hair/gloves; no fine identity or AV preference score.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C16",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C16",
+      "source_video_sha256": "84dda31d7c857d4879ba16f8a220574bd7b2c5e392d5ff08fe7e5f1755d93a31",
+      "anonymous_video_sha256": "405241ea6f7c5da7415af7d4dedc9851df8d334c9b64f2e3309a694db8fa13a1",
+      "sync_sha256": "b47ebf1ee32cc11a81683ca8f7d04a5b0cf5a14a208c7610f052816df9ff3ddf",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            0,
+            19
+          ],
+          "file": "details-000-019.jpg",
+          "sha256": "c69fb64f927588a5fd5365964db27bc9d64c7a686b32cb360ba7c343fb352ae6"
+        },
+        {
+          "frames": [
+            56,
+            79
+          ],
+          "file": "details-056-079.jpg",
+          "sha256": "3150a7213735fc75b823fc71c8a078ac8352b0ceb3ff9c17c4a0444db3b6a2a7"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.10250000000000001,
+        0.1875,
+        0.2975,
+        0.3975,
+        0.4975,
+        0.6475,
+        0.7275,
+        0.8225,
+        0.9025000000000001,
+        0.9975,
+        1.1025,
+        1.1875,
+        1.2974999999999999,
+        1.3824999999999998,
+        1.5125,
+        1.6025,
+        1.6825,
+        1.7925,
+        1.8725,
+        2.0225,
+        2.1175,
+        2.2375,
+        2.3925,
+        2.5125,
+        2.6325,
+        2.7375,
+        2.8425000000000002,
+        2.9425,
+        3.0525,
+        3.1525,
+        3.2325,
+        3.3325,
+        3.4775,
+        3.5625,
+        3.6475,
+        3.7425,
+        3.8425000000000002,
+        3.9875,
+        4.1025,
+        4.2125,
+        4.362500000000001,
+        4.442500000000001,
+        4.5525,
+        4.637499999999999,
+        4.7475000000000005,
+        4.8475,
+        4.9275,
+        5.0175,
+        5.1225000000000005
+      ],
+      "identity_visibility": "Single broad soft-muzzled green/purple character with short inward-curved horns and coarse creator-like appearance. Full head and both shoulders stay in frame. Frontal/three-quarter wide-eyed pose differs from the tilted creator example; navy vest absent. Library shelves, lamp and window are present.",
+      "action": "Closed blue book stays flat on the table throughout. Eyes start down and lift approximately 4–10, with a mild closed-mouth upward mouth shape already present initially and a more apparent small smile developing about 20–40. Both hands begin with curved fingers at the cover/edges. Screen-right fingers lift/unfurl approximately 60–66, then extend/settle across the right cover edge 67–74 while the wrist/heel remains near the tabletop.",
+      "visual_contact_windows_frames": [
+        [
+          67,
+          74
+        ]
+      ],
+      "contact_window_interpretation": "This is a later finger lift/reposition/settle, not proof of a completely detached whole-hand arrival. Original-resolution frames show curved fingertips across the edge with palm/heel beside the book, not an independently established flat palm fully on the cover. Initial contact does not erase the later reposition. The book is closed throughout.",
+      "recovery_and_ending": "Right fingers remain extended/curved across the cover edge and toward the table after 75–79; the other hand stays at its initial cover position. Gaze and small smile continue through 123 without a further distinct placement or book opening.",
+      "waveform": "All stereo waveform sheets remain visually tiny at the unchanged full-scale axes. No sound identity, audible-silence claim, preference score or perceived synchronization judgment can be derived from this appearance.",
+      "conclusion": "Coarse creator appearance and library/closed-book/gaze cues retained, vest absent. Later finger reposition is visible but the specified flat-palm placement is not established; smile is not wholly new after gaze because a mild initial upward mouth shape is already present.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C17",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C17",
+      "source_video_sha256": "bbf89bda41448678093d0abec9242ff4b4f448f3ff14cef23d8573ea948da2a3",
+      "anonymous_video_sha256": "98173050a86060607accc0804f17437be2b749c3f01edb81105d6080f3e4b91d",
+      "sync_sha256": "8ddc5207d21379288398f7738b041a00dd15c6b655b58519f83fad94c457bde8",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            0,
+            15
+          ],
+          "file": "details-000-015.jpg",
+          "sha256": "fdcccfb89c4ffbcda749658dff628cb817a6ad373f2f58aa31aa1cf8c55ada1c"
+        },
+        {
+          "frames": [
+            48,
+            71
+          ],
+          "file": "details-048-071.jpg",
+          "sha256": "336f540b4ffa3d457b3d05c67a5ea5812b60a2b8d00877ff9c285600d0500068"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        0.0275,
+        0.1375,
+        0.2875,
+        0.3775,
+        0.4825,
+        0.6625000000000001,
+        0.7475,
+        0.9275,
+        1.0625,
+        1.1425,
+        1.2375,
+        1.4175,
+        1.5125,
+        1.5975000000000001,
+        1.7925,
+        1.8775,
+        1.9925000000000002,
+        2.0825,
+        2.2175000000000002,
+        2.3975,
+        2.5675,
+        2.6625,
+        2.7625,
+        2.8475,
+        2.9675000000000002,
+        3.0875,
+        3.1675,
+        3.3225,
+        3.4975,
+        3.6175,
+        3.7025,
+        3.8375,
+        3.9375,
+        4.0275,
+        4.1075,
+        4.237500000000001,
+        4.3225,
+        4.487500000000001,
+        4.5725,
+        4.737500000000001,
+        4.8675,
+        4.987500000000001,
+        5.1325
+      ],
+      "identity_visibility": "One full-headed green/purple furry character with short inward-curved horns and broad soft muzzle, retaining coarse creator cues. Both shoulders visible; navy vest absent. Frontal round-eyed face is not the same pose/expression as the creator's tilted doorway view. Library shelves, lamp, window and blue book visible.",
+      "action": "Blue book remains closed and flat on the table for all 124 frames. Downward initial gaze/blink at about 1–5 becomes upward gaze 6–12; small closed-mouth smile develops approximately 22–37. Screen-left hand lifts later around 47–55, rotates/extends above the cover 56–63, then lands and settles about 64–68, after gaze and smile. Screen-right hand stays at the edge/table.",
+      "visual_contact_windows_frames": [
+        [
+          64,
+          68
+        ]
+      ],
+      "contact_window_interpretation": "A later detached lift/hover/arrival is clearly visible despite initial hand proximity/contact. The broad hand rests across the cover by 68–71, but arched fingers and front-facing claws remain; exact flat-palm contact is not confidently established. Book placement is not a cover-closing event.",
+      "recovery_and_ending": "Hand stays resting across the cover after 68–71; small smile and upward gaze are held through 123. No later book opening, additional placement or gross feature switch is established by the chronological still frames.",
+      "waveform": "Stereo envelopes remain visually tiny on all unchanged full-scale waveform sheets. Do not equate this with silence or label the hand arrival's sound. Audio quality and perceived synchronization are unknown.",
+      "conclusion": "Correct broad gaze-smile-later-hand ordering and coarse creator appearance; missing vest and uncertain exact palm flatness remain. No automatic identity/effect/AV composite or method preference.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    },
+    {
+      "blind_id": "C18",
+      "pair": "sully_cinema",
+      "directory": ".h3-study-artifacts/20260908/character-crossed-heldout-sync-seed42/C18",
+      "source_video_sha256": "65b4c4b0bd6ef6cb72ff678a3b77ce42fcc471ffde04dd3d2a6442c13551dbaa",
+      "anonymous_video_sha256": "eadb68703c847c9421aab13908bd8f166e7cb2c8ad44b744fad9edef5f20958d",
+      "sync_sha256": "dc8bec0b74c4473c0aa5789aee177ba96c8c848a4a5500ce071e510482bc5368",
+      "all_frames_inspected": 124,
+      "sheets_inspected": [
+        "frames-000-031.png",
+        "frames-032-063.png",
+        "frames-064-095.png",
+        "frames-096-123.png"
+      ],
+      "original_resolution_details": [
+        {
+          "frames": [
+            8,
+            31
+          ],
+          "file": "details-008-031.jpg",
+          "sha256": "3aa76b6f1cc2841b7d6621c099aa6b61a88be773f4e33da48936f3afab1f4bab"
+        },
+        {
+          "frames": [
+            64,
+            87
+          ],
+          "file": "details-064-087.jpg",
+          "sha256": "ef6113264dc1cbf0fc90f897fb871305e8e7ecdd6d560e71591fd6c7bcaeb646"
+        }
+      ],
+      "waveform_maxima_seconds": [
+        3.6975,
+        3.7775
+      ],
+      "identity_visibility": "Navy vest, both shoulders, green/yellow fur under warm library lighting, purple brows/head/beard and shoulders. Long outward/upward ridged horns, angular projecting nose and narrower muzzle with a long purple beard differ substantially from the creator's short curved horns and broad soft muzzle. The full face stays visible; an upper horn tip reaches/crops the top as the head rises, particularly middle-late. Both horns fit at 8-19, so do not label the whole clip as initially cropped. No apparent cut or gross feature switch.",
+      "action": "Initially looks down at a closed intact blue book held tilted off the table with both hands gripping its edges; the white page block is not an open-cover stage. Gaze lifts about 10-22, and a small closed-mouth smile develops about 24-44, broader by 64. The entire closed book lowers/rotates about 55-86, settling on the table about 84-88. Screen-left support/thumb contact appears on top around 68-73; fingers curl across its top/edge about 74-86 while the book is lowered. No independent detached flat-palm arrival is established.",
+      "visual_contact_windows_frames": [
+        [
+          68,
+          73
+        ],
+        [
+          74,
+          86
+        ],
+        [
+          84,
+          88
+        ]
+      ],
+      "contact_window_interpretation": "First two windows identify changes in an already gripping hand's top/edge support; the last is whole-book table setdown. They are not three hand placements or an open book closing. Curved fingers, support under the page block and a palm beside the book do not establish a flat palm on the cover.",
+      "recovery_and_ending": "Closed book rests on the table by about 84-88 and stays there through 123. Hands remain curved at its edges/nearby table, with no additional clear palm placement; gaze and closed-mouth smile persist. Vest remains visible, with an upper horn partly cropped.",
+      "waveform": "Stereo traces remain visually tiny on unchanged full-scale axes; a small residual patch near 3.65-3.75 seconds is not an identified sound or a synchronization judgment. No audible-silence claim.",
+      "conclusion": "Vest, library, gaze lift, smile and closed-book setdown are retained, but horn/face design differs from the creator reference and an independent flat-palm action is unconfirmed. This is not full prompt compliance or an AV-quality ranking.",
+      "sound_identity": null,
+      "synchronization_score": null,
+      "automatic_offset_correction": null
+    }
+  ]
+}

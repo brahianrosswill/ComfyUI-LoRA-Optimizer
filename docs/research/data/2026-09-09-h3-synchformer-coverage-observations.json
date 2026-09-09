@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "completed_at_utc": "2026-09-09 08:10:52 UTC",
+  "status": "selected_contact_exclusion_hypothesis_not_supported",
+  "previous_goal_turn": "progress",
+  "current_goal_turn": "progress: reconstructed existing evaluator crop/time coverage, inspected all 35 selected frames, verified the quantizer scale, and identified a newer evaluator with actionable preflight risks",
+  "policy": "docs/research/data/2026-09-09-h3-synchformer-coverage-policy.json",
+  "prepared_sha256": "81d2f0d6c93d6ff926a86c0870b779948af63bd252b4e744bfff32d48773fdde",
+  "selection": "Exactly the prior three-source/five-range unblinded event diagnostic; not independent ratings or an unbiased merge comparison.",
+  "observer": "assistant visual still-frame inspection; no audio listening",
+  "cases": [
+    {
+      "case_id": "A09",
+      "source_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "selected_source_frames": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "selected_frames_excluded": [],
+      "model_covered_unique_source_frames": 115,
+      "excluded_source_frames": [
+        0,
+        1,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123
+      ],
+      "crop_area_fraction": 0.460093896713615,
+      "panels": [
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A09-f006-009.png",
+          "sha256": "11f8c10a34e6adc9be039ec03fae8ef9ffec0a2a9eb2574d7d1bc3e89802b942",
+          "source_frames": [
+            6,
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A09-f010-012.png",
+          "sha256": "fa085801fb0b39dbfb60d495dabbb662a12a90724fc9facd73887729ebfc693a",
+          "source_frames": [
+            10,
+            11,
+            12
+          ]
+        }
+      ],
+      "all_panels_inspected": true,
+      "contact_region_retained": true,
+      "observation": "Glove approaches in frames 6–7, reaches the bag by frame 8 and remains near it through the selected follow-through. The hand, contacted bag edge and upper body remain in the exact model crop. Some peripheral foot/floor content is excluded.",
+      "new_sync_score": null,
+      "sound_identity_confirmed": false
+    },
+    {
+      "case_id": "A11",
+      "source_sha256": "e1ce095ceeb89393224f0bceff8b6d50a3bc9adf5fc98941869ee6dc9491bc76",
+      "selected_source_frames": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38
+      ],
+      "selected_frames_excluded": [],
+      "model_covered_unique_source_frames": 115,
+      "excluded_source_frames": [
+        0,
+        1,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123
+      ],
+      "crop_area_fraction": 0.460093896713615,
+      "panels": [
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f012-015.png",
+          "sha256": "b4fbb0bc97f2faf7119a984a359a100f0af69adc85658b9a592d5dcef3a1ee66",
+          "source_frames": [
+            12,
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f016-018.png",
+          "sha256": "8d664f57f3b907ebf0d7bb29ef6866107672097e73c54b4a2228c8795a929c7e",
+          "source_frames": [
+            16,
+            17,
+            18
+          ]
+        },
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f032-035.png",
+          "sha256": "a1fa4c4f332d994fb6444040640a186795c80615a9fa863dcf1fcf3ffc6439ef",
+          "source_frames": [
+            32,
+            33,
+            34,
+            35
+          ]
+        },
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f036-038.png",
+          "sha256": "87f6a6f4baff286ac4594d8cf389f8274585ad10b7dc0271a2cac0bcd0733c70",
+          "source_frames": [
+            36,
+            37,
+            38
+          ]
+        }
+      ],
+      "all_panels_inspected": true,
+      "contact_region_retained": true,
+      "observation": "The extra extension around frames 15–16 and the later extension reaching the bag around frame 34 remain visible inside the crop. The preceding guard/reach and subsequent contact/follow-through are retained. Peripheral feet/background are partly cropped.",
+      "new_sync_score": null,
+      "sound_identity_confirmed": false
+    },
+    {
+      "case_id": "A07",
+      "source_sha256": "7b1acc15d6a42d5c0f39afd4dfc47a10523c78769f4f9b51d1c05df5f9612bc0",
+      "selected_source_frames": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38
+      ],
+      "selected_frames_excluded": [],
+      "model_covered_unique_source_frames": 115,
+      "excluded_source_frames": [
+        0,
+        1,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123
+      ],
+      "crop_area_fraction": 0.460093896713615,
+      "panels": [
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f012-015.png",
+          "sha256": "b609f22564bd6e1c3959c781848377f144b8b414787c07f1c34f1e8fb3eacf1e",
+          "source_frames": [
+            12,
+            13,
+            14,
+            15
+          ]
+        },
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f016-018.png",
+          "sha256": "8d1bbc2811c5880cb04d063034c0eb48586a49e517aeb89c3bc1cd99f6a8bf60",
+          "source_frames": [
+            16,
+            17,
+            18
+          ]
+        },
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f032-035.png",
+          "sha256": "8f9fdbf0c3b795222ffc16a6e44bafc0674d74acfd00afafc9141cd93c5cce77",
+          "source_frames": [
+            32,
+            33,
+            34,
+            35
+          ]
+        },
+        {
+          "path": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f036-038.png",
+          "sha256": "d2621a739164885e470825c8fee0c3aff4c2ed7644bf0a2abd29d80b97ed2325",
+          "source_frames": [
+            36,
+            37,
+            38
+          ]
+        }
+      ],
+      "all_panels_inspected": true,
+      "contact_region_retained": true,
+      "observation": "The guarded/no-additional-extension sequence at frames 12–18 and the later extension/contact around frame 34 are both visible inside the crop. The absence of the earlier additive-like action is not caused by crop exclusion. Peripheral foot/floor content is excluded.",
+      "new_sync_score": null,
+      "sound_identity_confirmed": false
+    }
+  ],
+  "quantizer": {
+    "grid": [
+      -2,
+      -1.7999999523162842,
+      -1.600000023841858,
+      -1.399999976158142,
+      -1.2000000476837158,
+      -1,
+      -0.800000011920929,
+      -0.6000000238418579,
+      -0.4000000059604645,
+      -0.20000000298023224,
+      0,
+      0.20000000298023224,
+      0.4000000059604645,
+      0.6000000238418579,
+      0.800000011920929,
+      1,
+      1.2000000476837158,
+      1.399999976158142,
+      1.600000023841858,
+      1.7999999523162842,
+      2
+    ],
+    "synthetic_quantizer_probes": [
+      {
+        "input_offset_seconds": -0.8,
+        "class_index": 6,
+        "class_seconds": -0.800000011920929,
+        "included_in_existing_near_zero_mass": false
+      },
+      {
+        "input_offset_seconds": -0.75,
+        "class_index": 6,
+        "class_seconds": -0.800000011920929,
+        "included_in_existing_near_zero_mass": false
+      },
+      {
+        "input_offset_seconds": -0.125,
+        "class_index": 9,
+        "class_seconds": -0.20000000298023224,
+        "included_in_existing_near_zero_mass": true
+      },
+      {
+        "input_offset_seconds": -0.08,
+        "class_index": 10,
+        "class_seconds": 0,
+        "included_in_existing_near_zero_mass": true
+      },
+      {
+        "input_offset_seconds": -0.04,
+        "class_index": 10,
+        "class_seconds": 0,
+        "included_in_existing_near_zero_mass": true
+      },
+      {
+        "input_offset_seconds": 0,
+        "class_index": 10,
+        "class_seconds": 0,
+        "included_in_existing_near_zero_mass": true
+      },
+      {
+        "input_offset_seconds": 0.04,
+        "class_index": 10,
+        "class_seconds": 0,
+        "included_in_existing_near_zero_mass": true
+      },
+      {
+        "input_offset_seconds": 0.08,
+        "class_index": 10,
+        "class_seconds": 0,
+        "included_in_existing_near_zero_mass": true
+      },
+      {
+        "input_offset_seconds": 0.125,
+        "class_index": 11,
+        "class_seconds": 0.20000000298023224,
+        "included_in_existing_near_zero_mass": true
+      },
+      {
+        "input_offset_seconds": 0.2,
+        "class_index": 11,
+        "class_seconds": 0.20000000298023224,
+        "included_in_existing_near_zero_mass": true
+      }
+    ],
+    "model_inference": false
+  },
+  "interpretation": {
+    "crop": "All selected frames are temporally covered, with the relevant hand/bag region retained. Crop/time-window exclusion is not supported as the explanation for these particular flagged events. This does not rule out feature-level attention or resolution limitations, nor certify coverage of uninspected events.",
+    "time_scale": "The official 200 ms class grid maps synthetic ±80 ms offsets to zero. Synthetic ±125 ms map to ±200 ms, also included in the three-class near-zero mass used in the frozen diagnostic. Those probes are quantization arithmetic, not model inference or human perceptual tolerances.",
+    "prior_energy_windows": "Earlier records concern energy maxima, not identified sound onsets. Local before/after-contact differences cannot be treated as verified delays or justify one global audio shift.",
+    "disposition": "Do not change Synchformer crops or scoring thresholds to chase R1. Keep its earlier natural-merge ranking rejection. No replacement listening judgments or held-out scores."
+  },
+  "newer_method_followup": "docs/research/data/2026-09-09-h3-fate-preflight.json",
+  "tests": {
+    "passed": 105,
+    "seconds": 0.24,
+    "scope": "Combined Qwen/Synchformer/calibration/coverage helper tests; no full production merger suite rerun."
+  },
+  "artifact_sha256": {
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-09-h3-synchformer-coverage-policy.json": "4d33a8639c947389431abdcf4476264c2e27f7af808ad5a8c113601a79f0c252",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-08-h3-av2-sync-seed03.json": "c9a7f77f53e7bc8fde622332ae83711822df0d0752d045d082755c1d79f3ab6c",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/docs/research/data/2026-09-09-h3-synchformer-checkpoint.json": "3cf7098325d460ec61e0e2af24c2eab5da3acca9211117ea67f8f7d3f517b705",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/scripts/h3_synchformer_coverage.py": "76296cbcdb2b462eaac17b08db5421f3aebf35c20929dcf5e501e16c4672f426",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/av2-sync-seed03-base/sync.json": "87aee14213d0a223bd4ae8e6269f8e6bd17de046b4529e2730e10441dd1699b9",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A09.json": "6c0ac468769bff01224e6bcd77b3dddd4c9e2916edcb03faeddda691c6d4fcbb",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-cinema-base_00001_.mp4": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A09-f006-009.png": "11f8c10a34e6adc9be039ec03fae8ef9ffec0a2a9eb2574d7d1bc3e89802b942",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A09-f010-012.png": "fa085801fb0b39dbfb60d495dabbb662a12a90724fc9facd73887729ebfc693a",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/av2-sync-seed03-repair-additive/sync.json": "44f67cf690961f3b2fe08db646fc6f0eae04545899838cd8e579867bbc10fade",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A11.json": "e13a7369849780dbd2c82228284b8c248d06a5ed9a032e5bc5c6fa86286f8a15",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-repair-additive_00001_.mp4": "e1ce095ceeb89393224f0bceff8b6d50a3bc9adf5fc98941869ee6dc9491bc76",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f012-015.png": "b4fbb0bc97f2faf7119a984a359a100f0af69adc85658b9a592d5dcef3a1ee66",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f016-018.png": "8d664f57f3b907ebf0d7bb29ef6866107672097e73c54b4a2228c8795a929c7e",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f032-035.png": "a1fa4c4f332d994fb6444040640a186795c80615a9fa863dcf1fcf3ffc6439ef",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A11-f036-038.png": "87f6a6f4baff286ac4594d8cf389f8274585ad10b7dc0271a2cac0bcd0733c70",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/av2-sync-seed03-repair-ct/sync.json": "4e0ca77e70ab36da30618b77631dd5360345e1e0148c5ca2c56d8e908ff28548",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/runs/rated-calibration-01/A07.json": "2fba0d4f493aade5ba023af9a5fcd92dadeee23152fd461ab5f00ac3f083beb2",
+    "/media/unraid/comfyui/output/h3_autotuner_study_20260908/av2-boxing-2026090803-combat-repair-ct_00001_.mp4": "7b1acc15d6a42d5c0f39afd4dfc47a10523c78769f4f9b51d1c05df5f9612bc0",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f012-015.png": "b609f22564bd6e1c3959c781848377f144b8b414787c07f1c34f1e8fb3eacf1e",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f016-018.png": "8d1bbc2811c5880cb04d063034c0eb48586a49e517aeb89c3bc1cd99f6a8bf60",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f032-035.png": "8f9fdbf0c3b795222ffc16a6e44bafc0674d74acfd00afafc9141cd93c5cce77",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/A07-f036-038.png": "d2621a739164885e470825c8fee0c3aff4c2ed7644bf0a2abd29d80b97ed2325",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/coverage-01/prepared.json": "81d2f0d6c93d6ff926a86c0870b779948af63bd252b4e744bfff32d48773fdde",
+    "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260909/synchformer/source/dataset/transforms.py": "d925db2897de7f373cf01ddb55128b011442cf9c6136998116663dc4787231a6"
+  },
+  "new_model_inferences": 0,
+  "new_human_labels": 0,
+  "heldout_access": false,
+  "comfy_contact": false,
+  "new_packages_installed": false,
+  "production_changed": false,
+  "committed": false,
+  "pushed": false,
+  "version_bumped": false,
+  "goal_complete": false,
+  "goal_status": "active"
+}

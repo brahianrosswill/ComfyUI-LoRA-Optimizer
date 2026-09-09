@@ -1,0 +1,72 @@
+{
+  "stage": "calibration",
+  "seed": 2026090831,
+  "pair": "series30_combat",
+  "plan_sha256": "110d58a4adeab1dce4c3ef288bc3036c0a1b3ff79a50d862c49818103b9c40c2",
+  "initial_blind_observations_sha256": "bdb7a8b72232a8d98036cadceb9df5e94511cf6e812e61a80e833c8f56c0208d",
+  "review_key_sha256": "c85cb34517175e1329cda9c4ac5c46e0a1dcc94f08db062f2081ea8a36078fce",
+  "inspector_sha256": "0db0ed94c6e97709ae774ade4944b768cc60586e3ef00117301f0d8adba5f0af",
+  "observer": "Assistant inspection of all 124 decoded frames per selected clip, alongside unchanged stereo waveforms; not human ratings or continuous playback",
+  "selection": "Post-unblinding exploratory follow-up of character-only, additive, stable winner and CT, matching the earlier Sully/Combat follow-up. Selected to resolve two action bursts versus exactly two punches. Not a new blind comparison or coverage of every method. Crossed seed-31 similarity scores were already exposed before this detailed inspection.",
+  "unique_frames_inspected": 496,
+  "full_motion_reviewed": false,
+  "audio_listened": false,
+  "human_ratings": [],
+  "quality_scores": null,
+  "synchronization_score": null,
+  "audio_classification": null,
+  "timing_note": "Zero-based frame numbers use decoded container PTS at 24 fps. Windows describe visible arm extension and proximity to the bag, not exact sub-frame contact onsets. Perspective, glove/bag occlusion and motion blur limit exact contact. Broadband waveform maxima are anonymous energy candidates, not sound identities, punch counts or perceptual synchronization scores. No source-video edit, gain change, timing shift or automatic correction.",
+  "cases": [
+    {
+      "job_id": "idm-series30-combat-2026090831-character-only",
+      "variant": "character_only",
+      "video_sha256": "dc69b4fba9db5df3fca537def7331c8e3136754e27e8f90c9e5a90f022f2ed1d",
+      "sync_record": ".h3-study-artifacts/20260908/character-crossed-sync-seed31/character-only/sync.json",
+      "sync_sha256": "a58b9ebdaa10194aa690e400b37863742428f02a4f2e54bb523dae06b71b280f",
+      "visibility": "Low-angle waist-up composition with a relatively small, dim face. Navy jacket and red gloves retained; hair and arms partly obscure the face during punching.",
+      "action": "Four distinct alternating-arm extension/recovery cycles, grouped as two combinations: approximate maximal-extension windows 19-20, 24-26, 41-43 and 47-49. The exact two-punch instruction is not met even by the character-only control. Gloves lower around frames 59-66 and remain down through frame 123 while the bag continues moving.",
+      "energy_peak_times_seconds": [0.9025, 1.0575, 1.7525, 2.0125],
+      "waveform_relation": "Four detected energy maxima accompany the two combinations. This happens to equal the visible cycle count here, but is not a calibrated count detector or evidence of perceptually correct sound timing."
+    },
+    {
+      "job_id": "idm-series30-combat-2026090831-additive",
+      "variant": "additive",
+      "video_sha256": "8b08b1ef039904baca2849cda355ff3220c92e8cdaf740ed2a067cc03fe8e117",
+      "sync_record": ".h3-study-artifacts/20260908/character-crossed-sync-seed31/additive/sync.json",
+      "sync_sha256": "8fa57dbb9deda4bffce5dfdcc34a1f3314fee4d03fa03fcb6b6b87ed53b17ff2",
+      "visibility": "Similar low-angle waist-up composition, navy jacket and red gloves; small head, arm/hair occlusion and motion blur limit fine identity judgment.",
+      "action": "Six visible alternating-arm extension/recovery cycles in two three-strike combinations, around frames 13-14, 19-20, 24-25, 37-38, 42-43 and 48-49. Bag-edge occlusion limits exact first contact. An enlarged first-combination sequence confirms that the glove extending again at frames 24-25 is a separate movement after the other arm retracts, not merely a bag rebound. Gloves lower around frames 59-66 and stay lowered through frame 123.",
+      "detail_grid": ".h3-study-artifacts/20260908/character-crossed-sync-seed31/additive/detail-020-027.png",
+      "detail_grid_sha256": "49d494334ae7f92a982893e187eb5ef3e74dcc68798eba435a51431efc5e340e",
+      "detail_extraction": "ffmpeg select between(n,20,27), original 640x384 pixels per cell, frame-index overlay, tile 4x2; source media unchanged",
+      "energy_peak_times_seconds": [0.5975, 0.9125, 1.0725, 1.5875, 1.7875, 1.9025, 2.0875, 2.1875],
+      "waveform_relation": "Eight detector maxima occur across the six visible extensions; multiple maxima can belong to the same broad event. No eight-punch inference or sound classification."
+    },
+    {
+      "job_id": "idm-series30-combat-2026090831-stable-tuner-winner",
+      "variant": "stable_tuner_winner",
+      "video_sha256": "e68097e7707cb2ab2a438d2915277f171c7aeb17fa2fd52462907c43d1fad0a0",
+      "sync_record": ".h3-study-artifacts/20260908/character-crossed-sync-seed31/stable-tuner-winner/sync.json",
+      "sync_sha256": "6070c037732f12dc6c43bf0feef9883321c57b731d3a45bde8eebeae1d406fcc",
+      "visibility": "Similar low-angle framing and coarse character depiction. Head remains in frame but small, with hair/arm occlusion and glove blur.",
+      "action": "Five visible extension/recovery cycles across two combinations: around frames 17-18, 21-23, 39, 42-44 and 48-49. The original-resolution second-combination grid confirms three separate alternating movements, including the short glove reach at frame 39 and its retraction before the other arm extends at 42. First contact of the short reach is not precisely resolved. Gloves lower around frames 59-66 and remain down through frame 123.",
+      "detail_grid": ".h3-study-artifacts/20260908/character-crossed-sync-seed31/stable-tuner-winner/detail-036-051.png",
+      "detail_grid_sha256": "b02e79e5c22640412ea17743a2095dcc62fe4237317ed3fe40c0e12a5224a848",
+      "detail_extraction": "ffmpeg select between(n,36,51), original 640x384 pixels per cell, frame-index overlay, tile 4x4; source media unchanged",
+      "energy_peak_times_seconds": [0.9025, 1.7525, 1.8425, 2.0875],
+      "waveform_relation": "Four detector maxima do not capture the five visible cycles. Earlier short reaches have much smaller waveform excursions than the larger later punches and may fall below the relative detector floor. This is a detector limitation, not proof that an impact sound is absent."
+    },
+    {
+      "job_id": "idm-series30-combat-2026090831-ct-merge",
+      "variant": "ct_merge",
+      "video_sha256": "59ab5df764ea42234a0292a1e360ba21620bbb7550508c26fe2be36ea644f957",
+      "sync_record": ".h3-study-artifacts/20260908/character-crossed-sync-seed31/ct-merge/sync.json",
+      "sync_sha256": "eeca3ec3707e759c732f7bec6908283b5b1262bc06d45d3a027fb5afacb49789",
+      "visibility": "Warmer, closer low-angle composition with dark face and long hair; navy jacket and red gloves retained. Stronger arm/hair occlusion during extension. Lighting/composition differences alone do not establish identity loss.",
+      "action": "Four clear alternating-arm extension/recovery cycles in two combinations, around frames 13-15, 19-21, 41-43 and 46-48. Both gloves return to a sustained guard after the second combination, then lower around frames 65-71 and remain down through frame 123. The settled ending is not unique to CT in this pair/seed; all four selected arms attain it. CT still exceeds exactly two punches.",
+      "energy_peak_times_seconds": [0.5975, 0.8825, 0.9675, 1.7575, 1.8425, 2.0075, 2.0875],
+      "waveform_relation": "Seven detected maxima occur across four visible cycles, again showing that multi-peak sound energy cannot be equated with punch count. No perceptual synchronization offset is inferred."
+    }
+  ],
+  "conclusion": "All four selected outputs exceed the exact two-punch target, including character-only, while all achieve a lowered-glove ending. Additive and the stable winner show additional visible cycles relative to character-only at this seed, but this exploratory four-arm slice is not a general method ranking. CT's earlier Sully-specific ending observation is not a unique benefit here. Separate identity, wardrobe, action count, ending and audio evidence; do not use raw waveform peak counts or head similarity as a composite quality judge."
+}

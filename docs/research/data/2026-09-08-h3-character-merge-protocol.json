@@ -1,0 +1,99 @@
+{
+  "status": "Prospective design; no character-plus-effect videos submitted or inspected",
+  "purpose": "Separate identity retention from intended second-concept success in H3 merging",
+  "preexisting_evidence": "Character-only qualification and prior AV2 calibration informed this design. Numerical export checks began before this protocol; no character merge render evidence informed it.",
+  "production_sha256": {
+    "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+    "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+  },
+  "profile": {
+    "server": "http://127.0.0.1:8189",
+    "diffusion": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "width": 640,
+    "height": 384,
+    "frames": 124,
+    "fps": 24,
+    "steps": 20,
+    "sampler": "res_multistep",
+    "scheduler": "simple",
+    "turbo": false
+  },
+  "characters": {
+    "sully": {
+      "strength": 1.0,
+      "sha256": "aadaaa4d03ccc09095e63153ba7ffeddf5659e5c51f6a1338d4581643a56bec9",
+      "subject": "h3sully, an adult male monster with thick green and purple fur, two short curved horns, a broad nose and expressive eyes",
+      "render_style": "3D CG",
+      "portrait_clothing": "a loose opaque navy vest",
+      "sport_clothing": "a loose opaque navy training vest and red boxing gloves"
+    },
+    "series30": {
+      "strength": 0.8,
+      "sha256": "5b02993e44cf59f874352d64751e5dc2806026402ecb879adc3133790d65e79d",
+      "subject": "ai30, a fictional adult Japanese woman in her thirties with long straight black hair",
+      "render_style": "Live-action",
+      "portrait_clothing": "an opaque white collared blouse",
+      "sport_clothing": "a loose opaque navy training jacket and red boxing gloves"
+    }
+  },
+  "effects": {
+    "cinema": {
+      "strength": 0.8,
+      "api_name": "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+      "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+      "version_id": 3278719,
+      "trigger": "ASTROCINEMAV01K2T",
+      "limits": "Style/detail success is not synonymous with brighter output or higher contrast. Preserve the character's specified medium; a monster becoming a human is identity loss, not a style win."
+    },
+    "combat": {
+      "strength": 0.8,
+      "api_name": "MiniMax H3/concept/H3_Combat_V2.safetensors",
+      "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+      "version_id": 3246572,
+      "trigger": "",
+      "limits": "Judge exact action count, contact and recovery separately from appearance. If the effect-only control does not help this prompt, that cell cannot establish capability preservation from merging."
+    }
+  },
+  "crossing": "Both characters crossed with both effects; character is NP subject slot 1 and effect is slot 2",
+  "variants": ["base", "character_only", "effect_only", "additive", "slerp", "ties", "stable_tuner_winner", "np_lora", "ct_merge"],
+  "merge_policy": {
+    "output_strength": 1.0,
+    "slerp": "Explicit global SLERP, not a per-prefix surrogate",
+    "ties": "Explicit global TIES; retain the optimizer's selected trim density/sign method and record them. A faithful full-target path is required before rendering; do not silently substitute rank-64 truncation.",
+    "stable_tuner_winner": "Exact replay of top-ranked stable-only top-three sweep, full-target scoring, no external labels or memory training",
+    "np_lora": {"version": 1, "subject_slot": 1, "style_slot": 2, "strength": 0.5, "rank": 0, "energy": 1.0},
+    "ct_merge": {"version": 1, "common_rank": 4, "residual_rank": 16, "scale": 1.0},
+    "compression": "Smart/native factor preservation where valid; quantify export errors independently. Dense TIES currently exceeds available all-in-memory headroom and is pending a memory-safe implementation path.",
+    "numerical_guard": "Stop and investigate if any audited additive/NP/CT target is non-finite or has relative FP32 export error above 0.0005. This diagnostic threshold was chosen after the first NP audit, before the remaining audits and all merge renders; it is not a perceptual quality threshold."
+  },
+  "splits": {
+    "calibration": {"seeds": [2026090831, 2026090832], "prompt_suffix": "calibration"},
+    "heldout": {"seeds": [2026090841, 2026090842], "prompt_suffix": "heldout"}
+  },
+  "prompt_expansion": "Use the selected character's subject/render_style/clothing values in the appropriate effect template, identically for all nine variants. Do not remove triggers from controls. Expand and hash exact strings in an execution plan before submission.",
+  "templates": {
+    "cinema_calibration": "integrated_multimodal_description: [Shot 1] ASTROCINEMAV01K2T. {render_style}, a medium close-up of {subject}, wearing {portrait_clothing}, seated beside a rain-streaked cafe window. The full head and both shoulders remain visible. The subject begins facing the camera, slowly turns the head toward the window into a three-quarter view, then faces the camera again with a small closed-mouth smile. One continuous static shot at normal speed. Warm light from a shaded table lamp and cool window fill reveal face and clothing texture. No speech, text or subtitles.\n\noverall_soundscape: Steady gentle rain against the window, quiet cafe ambience and faint clothing movement. No voices or impacts.\n\nnon_diegetic_music: N/A",
+    "cinema_heldout": "integrated_multimodal_description: [Shot 1] ASTROCINEMAV01K2T. {render_style}, a medium close-up of {subject}, wearing {portrait_clothing}, seated at a wooden table in a quiet library. The full head and both shoulders remain visible. The subject begins looking down at a closed blue book, slowly lifts the gaze toward the camera and gives a small closed-mouth smile, then rests one hand flat on the book. One continuous static shot at normal speed. A warm shaded reading lamp and cool window fill reveal face, clothing and paper texture. No speech, text or subtitles.\n\noverall_soundscape: Low steady room ambience, faint clothing rustle and a soft hand contact with the book. No voices or other impacts.\n\nnon_diegetic_music: N/A",
+    "combat_calibration": "integrated_multimodal_description: [Shot 1] {render_style}, a waist-up three-quarter view of {subject}, wearing {sport_clothing}, beside a suspended heavy punching bag in an empty gym. The head remains in frame and the bag does not hide the face. At normal real-time speed the subject throws two distinct straight punches into the bag, returns both gloves to guard after each punch, then lowers the gloves and becomes still. The bag swings away from each impact and back. No injuries or blood. One continuous stationary shot with warm overhead lamps and cool window fill. No speech, text or subtitles.\n\noverall_soundscape: Two distinct dull impacts at glove contact, light chain rattling, clothing movement and quiet gym ambience. No voices.\n\nnon_diegetic_music: N/A",
+    "combat_heldout": "integrated_multimodal_description: [Shot 1] {render_style}, a waist-up three-quarter view of {subject}, wearing {sport_clothing}, beside a suspended heavy punching bag in a plain training room lit by a broad side window. The head remains in frame and the bag does not hide the face. At normal real-time speed the subject delivers one left jab to the bag, returns the left glove to guard, then delivers one right straight punch, returns the right glove to guard and lowers both gloves. The bag swings away from each contact and gradually settles. No injuries or blood. One continuous stationary shot. No speech, text or subtitles.\n\noverall_soundscape: One short padded thump at each of the two glove contacts, light chain rattling, clothing movement and low room ambience. No voices.\n\nnon_diegetic_music: N/A"
+  },
+  "planned_matrix": {
+    "pairs": 4,
+    "variants_per_case": 9,
+    "seeds_per_pair": 4,
+    "physical_renders_if_all_gates_pass": 144,
+    "first_batch": "Calibration seed 2026090831, Series30/Cinema and Sully/Combat only (18 clips), after the required nine arms are numerically qualified",
+    "not_a_completion_claim": true
+  },
+  "evaluation_policy": {
+    "identity": "Use creator references as qualitative identity anchors and matched character-only clips to isolate merge-induced change. Inspect foreground/face details across multiple visible poses, not whole-frame pixel similarity.",
+    "effect": "Score intended style or exact action success separately. Identity-only preservation cannot win by discarding the effect adapter.",
+    "visibility": "Report occluded, absent, out-of-frame and low-resolution subjects, with evaluable coverage. Do not silently drop missing subjects or mirror opposite turns to raise similarity.",
+    "temporal_audio": "Keep temporal consistency, sound plausibility and event timing separate. Waveform energy is not a sound label; sparse frames are not full-motion review.",
+    "metrics": "No validated automatic identity/AV score is implemented yet. Any future evaluator needs calibration against the available controls and must be frozen before held-out inspection.",
+    "split_limits": "Both characters were already visually qualified. Held-out here means unseen prompt/seed outputs, not unseen identities. Do not fit ranking to held-out outputs.",
+    "reporting": "Keep missing labels, failures, ties and per-dimension tradeoffs explicit; do not fabricate human preferences or turn tensor statistics into AV quality labels."
+  },
+  "safety": "Use only the existing local render session; stop new work for unrelated queued jobs. User permits stopping idle local ComfyUI if necessary, but cache release sufficed. Do not touch the remote render server, commit, push, bump version or replace installed nodes."
+}

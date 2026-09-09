@@ -2,11 +2,88 @@
 import shutil
 import subprocess
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from scripts.h3_av_sync import audio_start, burst_candidates, envelope, frame_times, run, PAGE
+from scripts import h3_av_sync as sync
+
+
+@pytest.fixture
+def observed_case(tmp_path, monkeypatch):
+    from scripts.h3_character_benchmark import expected_graph
+    job = dict(id="observed-case", stage="calibration", seed=31, pair="sully_combat",
+               prompt="p", loras=[])
+    plan = dict(root=str(tmp_path), jobs=[job], prompt_text={"p": "Frozen synthetic prompt"})
+    plan_path, obs_path, key_path = [tmp_path / name for name in ("plan.json", "observations.json", "private-key.json")]
+    plan_path.write_text(json.dumps(plan))
+    video = tmp_path / "fixture.mp4"
+    video.write_bytes(b"synthetic fixture")
+    case = dict(blind_id="C01", job_id=job["id"], seed=31, media_sha256="copy",
+                original_sha256=sync.digest(video), pair="sully_combat")
+    key = dict(plan_sha256=sync.digest(plan_path), review_id="r", stage="calibration", seed=31, cases=[case])
+    key_path.write_text(json.dumps(key))
+    public_path = tmp_path / "public.json"
+    public_path.write_text(json.dumps(dict(plan_sha256=key["plan_sha256"], review_id="r", stage="calibration",
+        cases=[dict(blind_id="C01", media_sha256="copy", pair="sully_combat")])))
+    observations = dict(plan_sha256=key["plan_sha256"], review_id="r", stage="calibration", seed=31,
+        public_manifest_sha256=sync.digest(public_path), observations=[dict(blind_id="C01", pair="sully_combat")])
+    obs_path.write_text(json.dumps(observations))
+    run_dir = tmp_path / job["id"]
+    run_dir.mkdir()
+    history_path = run_dir / "history.json"
+    history_path.write_text(json.dumps(dict(prompt=[None, None, expected_graph(plan, job)])))
+    monkeypatch.setattr(sync, "output_video", lambda h: video)
+    monkeypatch.setattr(sync, "inspect_video", lambda video, sha, out, provenance: provenance)
+    return plan_path, obs_path, key_path, job["id"], tmp_path / "out"
+
+
+def test_observed_character_path_does_not_fabricate_human_ratings(observed_case):
+    provenance = sync.inspect_observed(*observed_case)
+    assert provenance["evidence_kind"] == "assistant_frame_observations"
+    assert provenance["human_ratings_supplied"] is False
+    assert "ratings_sha256" not in provenance
+    assert provenance["observations_sha256"] == sync.digest(observed_case[1])
+
+
+@pytest.mark.parametrize("change", ["heldout", "missing", "seed", "review", "media", "public", "graph"])
+def test_observed_character_scope_and_provenance_are_required(observed_case, change):
+    plan_path, obs_path, key_path, job, out = observed_case
+    if change in ("heldout", "missing", "seed", "review"):
+        value = json.loads(obs_path.read_text())
+        if change == "heldout":
+            value["stage"] = "heldout"
+        elif change == "missing":
+            value["observations"] = []
+        elif change == "seed":
+            value["seed"] = 32
+        else:
+            value["review_id"] = "different"
+        obs_path.write_text(json.dumps(value))
+    elif change == "media":
+        value = json.loads(key_path.read_text())
+        value["cases"][0]["original_sha256"] = "changed"
+        key_path.write_text(json.dumps(value))
+    elif change == "public":
+        key_path.with_name("public.json").write_text('{}')
+    else:
+        (plan_path.parent / job / "history.json").write_text(json.dumps(dict(prompt=[None, None, {}])))
+    with pytest.raises((ValueError, KeyError)):
+        sync.inspect_observed(*observed_case)
+    assert not out.exists()
+
+
+def test_original_rated_av_path_retains_ratings_provenance(observed_case):
+    plan_path, obs_path, key_path, job, out = observed_case
+    case = json.loads(key_path.read_text())["cases"][0]
+    ratings = obs_path.with_name("ratings.json")
+    ratings.write_text(json.dumps(dict(plan_sha256=sync.digest(plan_path), stage="calibration",
+        ratings=[dict(job_id=job, original_sha256=case["original_sha256"])])))
+    provenance = sync.inspect(plan_path, ratings, job, out)
+    assert provenance["ratings_sha256"] == sync.digest(ratings)
+    assert "observations_sha256" not in provenance
 
 
 def test_audio_clock_preserves_nonzero_start_and_rejects_gaps():

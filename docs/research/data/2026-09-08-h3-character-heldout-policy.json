@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "freeze_context_utc": "2026-09-08 17:20:26 UTC",
+  "purpose": "Prospective reporting policy for the remaining 72 already-planned character/effect comparisons. No new generation settings, methods, prompts or fitted ranking weights.",
+  "exposure": "Both identities were qualified and all 72 calibration cases were rendered, technically audited and sparsely inspected before this freeze. Four calibration similarity reports and two selected all-frame/waveform follow-ups are exposed. No held-out history exists in either execution plan at the pre-freeze check. Held-out means new prompt/seed outputs, not unseen identities or a double-blind human trial.",
+  "protocol": {
+    "path": "docs/research/data/2026-09-08-h3-character-merge-protocol.json",
+    "sha256": "b54c938768bc311b065479c6568700aa0b7ce303eadc37e0c8d9b3da535b9ecf"
+  },
+  "plans": [
+    {"path":"docs/research/data/2026-09-08-h3-character-benchmark-plan.json","sha256":"1f179b668839a4379a1743fd3c8f507b0202a254ccb5f47a3047f25a7a33ed40","pairs":["series30_cinema","sully_combat"],"calibration_histories_at_freeze":36,"heldout_histories_at_freeze":0},
+    {"path":"docs/research/data/2026-09-08-h3-character-crossed-plan.json","sha256":"110d58a4adeab1dce4c3ef288bc3036c0a1b3ff79a50d862c49818103b9c40c2","pairs":["series30_combat","sully_cinema"],"calibration_histories_at_freeze":36,"heldout_histories_at_freeze":0}
+  ],
+  "stage": "heldout",
+  "seeds": [2026090841, 2026090842],
+  "variants": ["base","character_only","effect_only","additive","slerp","ties","stable_tuner_winner","np_lora","ct_merge"],
+  "required_cases": 72,
+  "batch_order": [
+    {"plan_index":0,"seed":2026090841,"limit":18},
+    {"plan_index":1,"seed":2026090841,"limit":18},
+    {"plan_index":0,"seed":2026090842,"limit":18},
+    {"plan_index":1,"seed":2026090842,"limit":18}
+  ],
+  "calibration_evidence_sha256": {
+    "2026-09-08-h3-character-benchmark-seed31.json":"1680aac8c1c1222af8db727de9641ef0f73980ac55907327d731e452766c64fc",
+    "2026-09-08-h3-character-benchmark-seed32.json":"e0a8399404095a1ec9bd7dc728a31b47c21c829da43c4cc64932c712e595f44b",
+    "2026-09-08-h3-character-crossed-seed31.json":"16ed55e5d127ae2d7295f222f3cc8d80d11ed4c1400232f5b18fce90108f2862",
+    "2026-09-08-h3-character-crossed-seed32.json":"53c6fd5ad6c190f211e20c8bca2eaeba941f344bba7fad9205a10ae0186cae7f",
+    "2026-09-08-h3-character-seed31-blind-observations.json":"3c465168cb467a482d0bc28ca0f2ca1b9b4d7af514cf675773f8cb37c3824a2b",
+    "2026-09-08-h3-character-seed32-blind-observations.json":"878158996a2d2ef11fe60293b8a5dd8cc8e278cf52586096405f653fbc8e0857",
+    "2026-09-08-h3-character-crossed-seed31-blind-observations.json":"bdb7a8b72232a8d98036cadceb9df5e94511cf6e812e61a80e833c8f56c0208d",
+    "2026-09-08-h3-character-crossed-seed32-blind-observations.json":"5a77eb607f88a1eee57bb7ab5d73c5f9876987c3e4c1fc59974f156a88fcc35c",
+    "2026-09-08-h3-character-similarity-seed31.json":"3d56fcc733c7cf5389bc4fb1913d8ee3a94294848095e7a681b0dfc2b24e5b69",
+    "2026-09-08-h3-character-similarity-seed32.json":"f1fa085ea8ff063c41c6e0b596ce1d66a0bb8f7f8f8d60a22795500c3cd3c12b",
+    "2026-09-08-h3-character-crossed-similarity-seed31.json":"6fa77fd7cd45afa7c6a4ddc28dae811141ea8453649401ccc28baef2b5a62dc6",
+    "2026-09-08-h3-character-crossed-similarity-seed32.json":"01eeb36b91e5ffc7a8aba4bef1a89b43fbb4813c80cb7234602b4176904ebaba",
+    "2026-09-08-h3-character-frame-waveform-seed31.json":"30f74a180eda203b3a49142236f69567badf5e41a32a0e6a85eba92566037118",
+    "2026-09-08-h3-character-crossed-frame-waveform-seed31.json":"3f66b6d623331a7c54d0ed5083649e243cc31d2b5430006505f4809eccf8ab0f"
+  },
+  "review_helper_sha256": {
+    "h3_character_review.py":"3b9cc23c48af2d293f1b9758043a8a5304d35df9c3cd29c601850ddd1a24b899",
+    "h3_av_audit.py":"4eb434fae9f544ce2d7c7d9979b03116eb2dd945eccac5d4952049d774280410",
+    "h3_av_sync.py":"0db0ed94c6e97709ae774ade4944b768cc60586e3ef00117301f0d8adba5f0af",
+    "h3_av_review.py":"71407df68f92ebe4cc01ef9dd395d83e91b9b97cc03a7bbef938122e730dde40"
+  },
+  "technical_gates": [
+    "Revalidate both frozen execution plans, full 144-case disjoint union, installed asset identities and all prerequisite hashes before starting. Confirm all 72 calibration histories and zero held-out histories at first launch.",
+    "Run only existing local 8189, serial GPU execution, exact prepared profile and graph. Existing intent/receipt/WebSocket handling remains authoritative. Stop new submissions if unrelated work is queued; do not interrupt it or start a second server.",
+    "Audit every original output: exact executed graph, 124 decoded frames, dimensions/fps, video integrity and stereo audio. Keep full-scale flags, failed or incomplete cases explicit. No replacing unfavorable outputs or using favorable seeds as substitutes.",
+    "Create four independent 18-candidate method-blinded reviews; verify full decoded AV equality and metadata removal. Retain original media, creator references and matched character-only anchors without gain, timing or frame edits."
+  ],
+  "visual_review": {
+    "initial_scope": "All 72 held-out candidates: same 21 chronological 4-fps samples per clip and both creator references. Save public-ID observations for each complete 18-case block before opening its method mapping or any numerical comparison.",
+    "full_frame_scope": "All 72 candidates, including every control and method, receive all-124-frame chronological inspection with unchanged stereo waveform timelines. Scope is fixed before outcomes, not selected by apparent success or failure. Save a separate detailed observation record before method unblinding. Automated preparation may read private keys but must not expose their mapping to the observer before records are saved.",
+    "ambiguous_event_rule": "Inspect original-resolution contiguous event frames when small thumbnails obscure a contact or extra movement. Retain initial ambiguity and inspected frame ranges. If still occluded, report indeterminate contact/handedness rather than inventing a precise event. Do not count waveform peaks as visual actions.",
+    "identity": "Describe coarse reference features and visible fine face/head/horn differences across poses. Compare both creator reference and matched character-only baseline. Report subject absence, cropping, small size, shadow, pose and self-occlusion; do not silently drop hard frames. Background, clothing, lighting and pose changes alone are not identity failure.",
+    "combat": "Separate attempted punch cycles from confirmed bag contact; inspect specified left-jab then right-straight ordering where anatomy/perspective allows, guard recovery, total action count, glove-lowering ending and bag response. Exactly two action bursts is not exactly two punches. Preserve character-only/effect-only faults so they are not automatically attributed to merging.",
+    "cinema": "Separately inspect library/book presence, initial downward gaze, gaze lift, small closed-mouth smile, hand placement on the closed blue book, wardrobe and full-head/shoulder visibility. Style quality is not equivalent to stronger saturation/contrast or a changed rendering medium.",
+    "temporal": "Record observed feature switches, deformations, occlusions, frame discontinuities and action ordering with frame ranges. All-frame still inspection is not continuous-motion playback; do not claim otherwise."
+  },
+  "audio_policy": {
+    "waveform": "Retain decoded stereo PTS, continuous 5-ms min/max and RMS diagnostics and anonymous energy candidates. Compare visible event windows to energy groups descriptively; maxima are not sound labels, onsets, exact counts or synchronization quality scores.",
+    "listening": "No assistant listening or human AV rating is presumed. Sound identity, unwanted speech/music, realism and perceptual synchronization remain unassessed unless actually reviewed by an audio-capable path or a supplied human rating. Record provenance and keep any later human labels separate from assistant frame observations.",
+    "no_composite": "No weighted composite identity/effect/AV score and no fabricated zero for missing audio judgments. Technical amplitude flags are not preferences or proof of audible clipping."
+  },
+  "automatic_similarity": {
+    "apply_to_heldout": false,
+    "reason": "Calibration invalidates this head-patch cosine as an autonomous fine-identity ranking signal: Sully CT can nearly tie additive despite changed face/horns, and Sully/Cinema seed 32 base nearly ties additive while exceeding character-only despite a visibly different design. Retain all calibration results as negative evaluator evidence. Do not widen the calibration-only recipes or fit new masks/thresholds on held-out outputs.",
+    "learned_evaluator_feedback": false
+  },
+  "shipping_decision": {
+    "default_preservation": "Keep disconnected experimental behavior and current scoring weights/ranking formula unchanged. No automatic NP/CT preference or wardrobe-only bonus from these calibration results.",
+    "quality_evidence": "Report matched per-pair/per-seed trade-offs and all controls. Two subjects with correlated frames do not support population-level significance. A method is not an overall AV winner when sound has not been judged, or when identity preservation discards the requested second effect.",
+    "f08": "Candidate inactive-field deduplication is a separate reproduced correctness/search-efficiency experiment. Do not rewrite these nine baseline arms or claim that a replacement candidate improves quality. Any opt-in implementation needs unchanged-disconnected regression tests, active-parameter distinction tests, actual tensor equivalence and controlled efficiency measurements; changed winners require a separately recorded prospective render comparison.",
+    "completion": "This freeze or generation completion does not complete the overall goal. Finish all declared evaluations, tested fixes and efficiency checks, then give an evidence-backed shipping recommendation including unassessed AV dimensions and negative NP/CT/evaluator findings. No commit, push, version bump or installed-node replacement without separate approval."
+  }
+}

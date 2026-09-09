@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "stage": "prospective_calibration_only",
+  "previous_goal_turn": "progress: Qwen2.5 joint judge failed a frozen delay control; reject automatic ranking with that configuration",
+  "authorization": "User approved isolated local audiovisual evaluator setup and calibration on already-rated clips. No clip upload, production change or release operation.",
+  "source": "https://github.com/v-iashin/Synchformer",
+  "source_revision": "b66668a1521d7567cc760e5544b2b5b53179b687",
+  "checkpoint": "24-01-04T16-39-21",
+  "checkpoint_bytes": 1131153989,
+  "checkpoint_published_md5": "54037d261253aad8bd8ba82cdd7e71a7",
+  "checkpoint_url": "https://a3s.fi/swift/v1/AUTH_a235c0f452d648828f745589cde1219a/sync/sync_models/24-01-04T16-39-21/24-01-04T16-39-21.pt",
+  "source_audit": "Official inference uses both feature extractors embedded in the checkpoint. Set their ckpt_path to null. Do not invoke training/logging/download entrypoints. Load weights_only=True; inspect and explicitly justify any necessary safe globals before allowing them, never fall back to unrestricted pickle.",
+  "scope": "Only A05 Combat-only and A09 base from the existing hash-verified, previously rated seed03 calibration manifest. No new human labels, no held-out inputs or prompt/merge names in model inputs.",
+  "manifest": ".h3-study-artifacts/20260909/audio-evaluator/calibration-inputs-flat-01.json",
+  "parent_av_policy_sha256": "01c605ecc59713d90d856f4e1d5619402e6d4ce83d91bc8821f6ba31ccca241b",
+  "input_plan": {
+    "video": "Read actual source frame PTS. Map 25-fps target timestamps to nearest source frame, resize short side to 256 and use the checkpoint's deterministic 224-square center crop. Record all mappings and maximum timestamp error; no frame interpolation or original-media changes.",
+    "audio": "Reuse audited FFmpeg native-float decode, arithmetic stereo mean, librosa/soxr_hq 16 kHz; no gain normalization. Preserve original/muted/+750ms delay controls as copied whole-clip waveforms, no wrap.",
+    "window": "Official deterministic test transforms: crop first 5 seconds, then 14 overlapping segments of 16 frames at stride 8. Actual union is target frames 2..121, times 0.08..4.84 seconds, audio [0.08,4.88). Record omitted boundaries, not a whole-clip quality claim.",
+    "offset_handling": "Pass target offset_sec=0 and v_start_i_sec=0 because control delay was already applied to the waveform. Never double-shift. Official logits express audio advance; imposed audio delay should shift predicted offset negatively.",
+    "precision": "Official CUDA autocast float16 with FP32 model parameters, eval, inference mode; batch one, four CPU threads. Fixed seed, no search or best-of selection.",
+    "decoding_caveat": "Official repository warns PyAV versions affect results. This is an explicitly different, PTS-audited decode route; do not claim reproduction of original example probabilities. Compare timestamp coverage and deterministic transforms before inference."
+  },
+  "jobs": ["A05 original", "A05 muted", "A05 delay750", "A09 original", "A09 muted", "A09 delay750", "A05 original repeat", "A05 muted repeat", "A05 delay750 repeat"],
+  "admission": {
+    "technical": "All inputs finite and hash-recorded, exact official state keys and shapes, 21 finite logits and normalized probabilities; all cases retained including failure.",
+    "direction": "For A05, modal offset delayed minus original must be negative and within 0.4 seconds of -0.75 seconds (two 0.2-second classes). A09 descriptive, not a required monotonic source because its baseline was already poorly synchronized.",
+    "ranking": "For A05, probability mass in offset classes [-0.2,+0.2] must decrease under delay. Report full distributions and modal offset, not just a scalar.",
+    "repeat": "All three A05 conditions must reproduce modal class and probabilities within absolute tolerance 0.00001.",
+    "silence": "Offset-only classifier cannot identify whether a source is synchronizable. Record its raw silent distribution but always abstain on exact silent input. This is an explicit harness guard, not evidence of learned silence recognition or general synchronizability.",
+    "limits": "These necessary controls do not qualify a general AV preference evaluator, stereo evaluator or human-rating substitute. No held-out use without a separately justified frozen acceptance record; no merge-ranking integration from these two sources alone."
+  },
+  "stop_rule": "One frozen nine-case control battery. Preserve any integration failure and fix only documented mechanical issues; no fitting crops, offsets, model variants or thresholds to improve these source outcomes.",
+  "runtime_safety": "Check the existing 8189 ComfyUI queue before loading and each case; fail closed if busy or unknown. Require at least 20 GiB free before model load. Do not stop/unload processes. Local/offline inference and isolated research venv/caches only.",
+  "goal_complete": false
+}

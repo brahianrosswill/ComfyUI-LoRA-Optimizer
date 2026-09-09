@@ -76,6 +76,28 @@ def test_durable_record_preserves_timestamp_precision_and_export_identity(tmp_pa
         collect_merge_run(tmp_path)
 
 
+def test_mapped_record_separates_rounding_from_export_error_and_rejects_stale_audit(tmp_path):
+    export = tmp_path / "merged.safetensors"
+    export.write_bytes(b"fixture")
+    manifest = {"adapters": [], "mapped_export": True, "export": str(export), "export_size": 7}
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    check_path = tmp_path / "dense_export_check.json"
+    check = dict(groups_checked=1, all_targets=True,
+        manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        export_sha256=hashlib.sha256(export.read_bytes()).hexdigest(),
+        results=[dict(finite=True, exact_stored_values=True, relative_export_error=0.,
+                      relative_storage_rounding_error=.0016, relative_fp32_reference_error=.0016)])
+    check_path.write_text(json.dumps(check))
+    report = collect_merge_run(tmp_path)["dense_precision"]
+    assert report["exact_stored_components"] == 1
+    assert report["max_relative_export_error"] == 0.
+    assert report["max_relative_storage_rounding_error"] == .0016
+    export.write_bytes(b"changed")  # Same length: only a fresh hash catches this.
+    with pytest.raises(ValueError, match="mismatched dense"):
+        collect_merge_run(tmp_path)
+
+
 def test_frozen_av_matrix_has_matched_controls_and_disjoint_holdout():
     exports = {pair: {mode: {"api_name": f"{pair}-{mode}.safetensors"} for mode in modes}
                for pair, modes in EXPORT_RUNS.items()}
