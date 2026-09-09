@@ -141,9 +141,9 @@ MiniMax H3 uses the same fused-QKV idea under `blocks.N.attn.qkv_proj`, includin
 
 H3's FL2VA/T2VA and Ref2VA releases are separate transformer partitions with identical key names and shapes. Shape compatibility therefore cannot prove semantic compatibility: only merge LoRAs trained for the same partition and use the matching base checkpoint. Turbo/distillation LoRAs should retain their published `alpha/rank`, strength, and sampling schedule; use an additive merge or preserve the Turbo adapter when composing it with style/content adapters.
 
-### Special Case: WanVideo `_orig_mod` Keys
+### Wrapper boundary
 
-WanVideo models compiled with `torch.compile` prefix their keys with `_orig_mod.`. The normalizer detects this mismatch and strips the prefix so LoRA keys can match correctly against model weights.
+WanVideoWrapper-specific nodes have been removed. Their compiled `_orig_mod` key workaround is no longer exposed; use native ComfyUI `MODEL` loaders for WAN.
 
 ---
 
@@ -627,7 +627,7 @@ The optimizer outputs:
 - **MODEL** — the patched model ready for sampling
 - **CLIP** — the patched text encoder (if CLIP input was provided)
 - **STRING** — detailed analysis report with per-prefix strategy map and suggested max strength
-- **LORA_DATA** — the raw merged patches for use with Save Merged LoRA, Merged LoRA to Hook, or Merged LoRA to WanVideo
+- **LORA_DATA** — the raw merged patches for use with Save Merged LoRA or Merged LoRA to Hook
 
 ---
 
@@ -717,29 +717,28 @@ All nodes registered by the LoRA Optimizer:
 | `LoRAOptimizerSettings` | LoRA Optimizer Settings | Optimizer-specific settings: auto-strength, sparsification, compression, etc. |
 | `LoRAAutoTunerSettings` | LoRA AutoTuner Settings | Tuner-specific settings: top_n, scoring, diff cache, etc. |
 | `LoRAOptimizerSimple` | LoRA Optimizer | Simplified optimizer with sensible defaults, accepts optional `settings` and `tuner_data` |
-| `LoRAOptimizer` | LoRA Optimizer (Legacy) | All parameters on one node — for bridge workflow with `settings_source` |
+| `LoRAOptimizerInline` | LoRA Optimizer (Inline Chain) | Merge regular loader patches with exact call tracking where available |
+| `LoRAInlineChainOptions` | LoRA Inline Chain Options | Per-loader controls for the inline node |
 | `LoRAAutoTuner` | LoRA AutoTuner | Automated parameter sweep to rank merge configs |
 | `LoRAMergeSelector` | Merge Selector | Select alternative configs from AutoTuner results |
 | `LoRAConflictEditor` | LoRA Conflict Editor | Interactive conflict analysis with per-LoRA overrides |
 | `SaveMergedLoRA` | Save Merged LoRA | Export merged patches as standalone `.safetensors` |
 | `MergedLoRAToHook` | Merged LoRA to Hook | Wrap merged patches as conditioning hooks |
 | `LoRACompatibilityAnalyzer` | LoRA Compatibility Analyzer | Pre-merge planning: overlap analysis, grouping, optional node creation |
-| `WanVideoLoRAOptimizer` | WanVideo LoRA Optimizer (WIP) | Optimizer variant for WanVideo models |
-| `MergedLoRAToWanVideo` | Merged LoRA → WanVideo (WIP) | Bridge merged LORA_DATA to WanVideo wrapper models |
 
 ### Node Variants
 
 **LoRA Optimizer** (recommended):
 Exposes `model`, `lora_stack`, `output_strength`, `clip` (optional), and `clip_strength_multiplier`. Accepts optional `settings` (from a Settings node) and `tuner_data` (from AutoTuner) inputs. When no settings node is connected, uses built-in defaults: `auto_strength=enabled`, `optimization_mode=per_prefix`, `merge_refinement=none`, `patch_compression=smart`, `vram_budget=0.0`.
 
-**LoRA Optimizer (Legacy):**
-All parameters on one node. Has `settings_source` for the AutoTuner ↔ Optimizer bridge workflow. Superseded by LoRA Optimizer + Settings nodes for new workflows.
+**LoRA Optimizer (Inline Chain):**
+Captures regular loader patches with per-call MODEL/CLIP ownership, then runs the shared engine on stripped clones. The Legacy node is removed; use the current optimizer and Settings.
 
 **Settings nodes** (LoRA Merge Settings, LoRA Optimizer Settings, LoRA AutoTuner Settings):
 Separate shared and node-specific configuration from the main optimizer. Merge Settings feeds into Optimizer Settings or AutoTuner Settings, which feed into the optimizer's `settings` input.
 
-**WanVideo LoRA Optimizer:**
-Accepts `WANVIDEOMODEL` instead of `MODEL`, skips CLIP. Defaults differ from the standard optimizer: `normalize_keys=enabled` (WanVideo LoRAs come from many trainers), `cache_patches=disabled` (video models are large), `architecture_preset=dit`.
+**Native WAN:**
+Use standard `MODEL` loaders and the current optimizer. Wrapper-specific nodes are removed; see [migration](../node-migration.md).
 
 ---
 
@@ -911,10 +910,6 @@ Wraps merged patches as a **conditioning hook** (`HOOKS`) for per-conditioning L
 - **Scheduled application** — combine with hook keyframes for step-specific LoRA
 - **Regional conditioning** — apply LoRA to specific image regions
 - **Preserving the base model** — keep MODEL unpatched while using the merge through hooks
-
-### Merged LoRA → WanVideo
-
-Bridges `LORA_DATA` to a `WANVIDEOMODEL`. Handles the `_orig_mod.` key mismatch from `torch.compile` and injects patches in the format WanVideo's model loader expects.
 
 ---
 

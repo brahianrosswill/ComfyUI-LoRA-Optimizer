@@ -92,11 +92,10 @@ LoRA Stack (LoRA B)
          ↓
 LoRA Stack (LoRA C)
          ↓
-LoRA Conflict Editor ──► LORA_STACK ──► LoRA Optimizer (Legacy) ──► MODEL
-         │                                      ▲                 ──► CLIP
-         │                                      │
-         └── merge_strategy (STRING) ────────────┘
-                                          (strategy override)
+LoRA Conflict Editor ──► LORA_STACK ──► LoRA Optimizer ──► MODEL / CLIP
+         │                                  ▲
+         └── merge_strategy ──► LoRA Optimizer Settings
+                              (merge_strategy_override)
 ```
 
 **When to use:** When you have 3+ LoRAs and want to understand which ones conflict, or when you want to force specific LoRAs to only contribute in low-conflict or high-conflict regions.
@@ -106,7 +105,7 @@ LoRA Conflict Editor ──► LORA_STACK ──► LoRA Optimizer (Legacy) ─�
 2. Read the analysis report — it shows pairwise conflict ratios
 3. Adjust per-LoRA conflict modes if the auto-suggestions don't suit your needs
 4. Optionally override the merge strategy (e.g., force `slerp` or `consensus`)
-5. Connect both outputs to the optimizer
+5. Connect LORA_STACK to the optimizer and merge_strategy to Optimizer Settings' merge_strategy_override input
 
 ---
 
@@ -136,31 +135,11 @@ The AutoTuner ranks all configs by its composite score. Selection 1 = top-ranked
 
 ---
 
-## AutoTuner → Optimizer Bridge
+## Reusing AutoTuner results
 
-Use the AutoTuner to rank configs, then hand the winning settings to a downstream Legacy Optimizer for manual tweaking without rewiring the graph. This workflow requires the **LoRA Optimizer (Legacy)** node.
+Set AutoTuner to `output_mode=tuning_only`. Connect its unchanged MODEL/CLIP and `tuner_data` to the current **LoRA Optimizer**, and connect the same stack to both. Leave `settings` unconnected for replay; use **Merge Selector** for other candidates.
 
-```
-Load Checkpoint ──► MODEL ──► LoRA AutoTuner ──► MODEL ──► LoRA Optimizer (Legacy) ──► MODEL ──► KSampler
-                    CLIP ──►                 ──► CLIP  ──►                          ──► CLIP
-                                 ▲                                    ▲
-LoRA Stack ──────────────────────┘                                    │
-                     TUNER_DATA ───────────────────────────────────────┘
-```
-
-**Switch behavior** (via the Legacy optimizer's `settings_source`):
-- `settings_source = from_autotuner`
-  - AutoTuner applies the top-ranked merge.
-  - Legacy Optimizer becomes a passthrough and mirrors the winning settings in its widgets.
-- `settings_source = manual`
-  - AutoTuner passes the base model through.
-  - Legacy Optimizer takes over using its own widget settings, starting from the AutoTuner recommendation.
-- `settings_source = from_tuner_data`
-  - Legacy Optimizer reads settings from the connected `tuner_data` input.
-
-> **Note:** For new workflows, prefer using the **LoRA Optimizer** with a `tuner_data` connection from the AutoTuner instead of the bridge pattern.
-
-**When to use:** When you want the AutoTuner to narrow the search space first, then manually tweak merge quality, sparsification, or smoothing from a strong starting point.
+For manual changes, connect **LoRA Optimizer Settings**, which take priority over `tuner_data`. The removed Legacy bridge no longer synchronizes widgets. See [migration](../node-migration.md).
 
 ---
 
@@ -225,43 +204,11 @@ Merged LoRA to Hook (merge A) ──► HOOKS ──► Merged LoRA to Hook (mer
 
 ---
 
-## WanVideo Merge
+## Native WAN merge
 
-Merging LoRAs for WanVideo models.
+Use a native ComfyUI WAN loader returning `MODEL`, then the current optimizer or inline node. Native WAN normalization and DiT presets remain supported.
 
-### Direct Optimization
-
-```
-WanVideoModelLoader ──► WANVIDEOMODEL ──► WanVideo LoRA Optimizer ──► WANVIDEOMODEL ──► WanVideoSampler
-                                                    ▲
-                             LoRA Stack ────────────┘
-```
-
-### Chaining with Individual LoRAs
-
-Individual (non-merged) LoRAs go through the standard WanVideo path. The optimizer applies merged LoRAs on top.
-
-```
-WanVideoLoraSelect ──► WanVideoModelLoader ──► WANVIDEOMODEL ──► WanVideo LoRA Optimizer ──► Sampler
-  (individual LoRA)                                                        ▲
-                                                    LoRA Stack ────────────┘
-                                                   (LoRAs to merge)
-```
-
-### Via LORA_DATA Bridge
-
-If you prefer to use the standard LoRA Optimizer and then bridge the result:
-
-```
-LoRA Optimizer ──► LORA_DATA ──► Merged LoRA → WanVideo ──► WANVIDEOMODEL ──► Sampler
-                                       ▲
-WanVideoModelLoader ──► WANVIDEOMODEL ──┘
-```
-
-**Defaults for WanVideo:**
-- `normalize_keys=enabled` — WanVideo LoRAs come from many trainers
-- `cache_patches=disabled` — video models are large
-- `architecture_preset=dit` — DiT-tuned thresholds
+The WanVideoWrapper-specific optimizer and bridge have been removed. Wrapper workflows must be rebuilt around native loaders, not converted by simply changing a socket type. See [migration](../node-migration.md).
 
 ---
 

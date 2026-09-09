@@ -36,3 +36,5 @@ jobs:
         run: node tests/js/dynamic_migration.test.cjs
       - name: Real ComfyUI and safetensors round trip (isolated process)
         run: python tests/integration/comfy_roundtrip.py .comfy-integration
+      - name: Stock LoRA loader and inline parity (isolated process)
+        run: python tests/integration/inline_loader_roundtrip.py .comfy-integration

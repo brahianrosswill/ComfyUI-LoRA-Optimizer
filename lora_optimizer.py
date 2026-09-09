@@ -2774,10 +2774,11 @@ class _LoRAMergeBase:
         return _LoRAMergeBase._is_plain_additive_payload(payload)
 
     @staticmethod
-    def _reconstruct_chain_groups(patches, include_blocked=False):
+    def _reconstruct_chain_groups(patches, include_blocked=False, chain_records=None):
         """Reconstruct ordered per-LoRA groups from a ModelPatcher.patches dict.
 
-        Grouping: entries from one add_patches call all store the SAME
+        Stock-loader provenance identifies exact calls before any heuristic.
+        For unstamped loaders, entries from one add_patches call store the SAME
         strength_patch PyFloat object, so id(strength) is the group key.
         Repeated same-gid entries on one target key mean calls shared an
         interned float — repair by splitting on the per-target-key collision
@@ -2813,6 +2814,7 @@ class _LoRAMergeBase:
         blocked_gids = set()
         predecessors = {}
         seen = {}  # (base_gid, target_key) -> occurrence count (collision ordinal)
+        provenance = _loraopt_entry_provenance(patches, chain_records)
 
         for str_key, entry_list in patches.items():
             prior_gids = set()
@@ -2828,13 +2830,14 @@ class _LoRAMergeBase:
                     continue
 
                 strength, payload, _strength_model, offset, _function = entry
-                if not _LoRAMergeBase._is_lora_family_payload(payload):
+                source = provenance.get((str_key, id(entry)))
+                if not _LoRAMergeBase._is_lora_family_payload(payload) and not source:
                     if not capturable:
                         blocked_gids.update(prior_gids)
                         suffix_shape_blocked = True
                     continue
 
-                base_gid = id(strength)
+                base_gid = ("loader", source["call_id"]) if source else id(strength)
                 target_key = str_key if offset is None else (str_key, offset)
                 try:
                     hash(target_key)
@@ -2859,6 +2862,10 @@ class _LoRAMergeBase:
                     }
                     order_hint.append(gid)
                 group = by_id[gid]
+                if source:
+                    group["loader_id"] = source["call_id"]
+                    group["loader_complete"] = source["complete"]
+                    group["loader_name"] = source["name"] if source["complete"] else None
                 group["entries"][target_key] = payload
                 group["_all_entries"].append((str_key, entry))
                 group["_positions"].setdefault(str_key, pos)
@@ -2926,6 +2933,23 @@ class _LoRAMergeBase:
                 new_patches[key] = kept
         patcher.patches = new_patches
         patcher.patches_uuid = uuid.uuid4()
+        # Do not retain stripped source tensors or stale file identities on the
+        # output clone. Upstream attachments are shared, so replace, never edit.
+        host = _loraopt_attachable(patcher)
+        if host is not None:
+            records = host.get_attachment(LORAOPT_CHAIN_RECORDS_ATTACH) or []
+            remaining = {(key, id(entry)) for key, entries in new_patches.items()
+                         for entry in entries}
+            kept_records = []
+            for record in records:
+                entries = tuple((key, entry) for key, entry in record["entries"]
+                                if (key, id(entry)) in remaining)
+                if entries:
+                    kept_records.append(dict(record, entries=entries,
+                        complete=record.get("complete", True)
+                                 and len(entries) == len(record["entries"])))
+            host.set_attachments(LORAOPT_CHAIN_RECORDS_ATTACH, kept_records)
+            host.set_attachments(LORAOPT_CHAIN_NAMES_ATTACH, [])
 
     @staticmethod
     def _collect_lora_prefixes(active_loras):
@@ -3153,6 +3177,18 @@ class _LoRAMergeBase:
                     target_key, is_clip = prefix, False
                 elif prefix in clip_target_keys:
                     target_key, is_clip = prefix, True
+                elif isinstance(prefix, str) and prefix.endswith(".bias"):
+                    # Stock diff_b loads become literal bias targets. CLIP's
+                    # alias map usually lists only their sibling weight; do not
+                    # silently discard the captured bias after stripping it.
+                    weight_target = prefix[:-len(".bias")] + ".weight"
+                    if weight_target in model_target_keys:
+                        target_key, is_clip = prefix, False
+                    elif weight_target in clip_target_keys:
+                        target_key, is_clip = prefix, True
+                    else:
+                        dropped.append(prefix)
+                        continue
                 else:
                     dropped.append(prefix)
                     continue
@@ -9981,11 +10017,26 @@ class LoRAOptimizer(_LoRAMergeBase):
         # Build reverse key map: target_key → canonical prefix metadata
         # (used by SaveMergedLoRA to reconstruct standard LoRA key names)
         reverse_key_map = {}
+        clip_export_aliases = {}
+        if clip is not None and any(g["is_clip"] and g["label_prefix"] == g["target_key"]
+                                    for g in target_groups.values()):
+            # Captured CLIP keys are patcher targets, not loader aliases. Stock
+            # ComfyUI does not accept e.g. bare clip_l.* as a LoRA prefix. Keep
+            # runtime targets intact and choose a verified loader alias solely
+            # for serialization (including bias's corresponding weight alias).
+            for alias, target in comfy.lora.model_lora_keys_clip(clip.cond_stage_model, {}).items():
+                clip_export_aliases.setdefault(target, []).append(alias)
         for label_prefix, target_group in target_groups.items():
             target_key = target_group["target_key"]
             tkey = target_key[0] if isinstance(target_key, tuple) else target_key
+            canonical_prefix = label_prefix
+            if target_group["is_clip"] and label_prefix == tkey:
+                alias_target = tkey.removesuffix(".bias") + ".weight" if tkey.endswith(".bias") else tkey
+                aliases = clip_export_aliases.get(alias_target, ())
+                if aliases:
+                    canonical_prefix = self._choose_canonical_prefix(aliases)
             entry = {
-                "canonical_prefix": label_prefix,
+                "canonical_prefix": canonical_prefix,
                 "aliases": list(target_group["aliases"]),
             }
             reverse_key_map[target_key] = entry
@@ -10951,6 +11002,41 @@ class LoRAInlineChainOptions:
 # filenames onto the model/clip (see _install_lora_name_stamp). The inline
 # node reads it back to recover real names + file identity.
 LORAOPT_CHAIN_NAMES_ATTACH = "loraopt_chain_names"
+LORAOPT_CHAIN_RECORDS_ATTACH = "loraopt_chain_records_v1"
+
+
+def _loraopt_entry_provenance(patches, records):
+    """Match live patch tuples by identity, never by strength or tensor value.
+
+    Records retain the tuples themselves (no tensor copies), so Python ID reuse
+    cannot associate an unrelated new patch with an old file. Partial/stale
+    records may identify surviving calls, but cannot claim whole-file identity.
+    """
+    live = {(key, id(entry)): entry for key, entries in patches.items() for entry in entries}
+    result, collisions = {}, set()
+    for record in records or ():
+        if not isinstance(record, dict) or not record.get("call_id"):
+            continue
+        entries = record.get("entries", ())
+        matching = [(key, entry) for key, entry in entries
+                    if live.get((key, id(entry))) is entry]
+        source = dict(record, complete=record.get("complete", True)
+                      and len(matching) == len(entries))
+        for key, entry in matching:
+            identity = (key, id(entry))
+            if identity in result:
+                collisions.add(identity)
+            result[identity] = source
+    for identity in collisions:
+        result.pop(identity, None)
+    return result
+
+
+def _loraopt_patch_snapshot(obj):
+    host = _loraopt_attachable(obj)
+    patches = getattr(host, "patches", None)
+    return ({key: tuple(entries) for key, entries in patches.items()}
+            if isinstance(patches, dict) else None)
 
 
 def _loraopt_attachable(obj):
@@ -11025,6 +11111,16 @@ def _install_lora_name_stamp(target_cls=None):
 
     @functools.wraps(orig)
     def load_lora(self, *args, **kwargs):
+        # Snapshot only tuple references before loading. This records exact
+        # append boundaries even for cached files, integer/equal strengths,
+        # disjoint targets, zero-strength branches and fused-QKV slices.
+        before = (None, None)
+        try:
+            before = tuple(_loraopt_patch_snapshot(
+                kwargs.get(name, args[i] if i < len(args) else None))
+                for i, name in enumerate(("model", "clip")))
+        except Exception:
+            pass  # Provenance failure must not prevent the original loader.
         # Call the original FIRST, passing args through verbatim — a future
         # comfy that adds/reorders a load_lora param must never break loading.
         result = orig(self, *args, **kwargs)
@@ -11052,8 +11148,9 @@ def _install_lora_name_stamp(target_cls=None):
             entry = {"name": lora_name,
                      "strength_model": float(sm),
                      "strength_clip": float(sc)}
+            call_id, sequence = uuid.uuid4().hex, time.monotonic_ns()
             clip_out = result[1] if len(result) > 1 else None
-            for obj in (result[0], clip_out):
+            for branch, obj in enumerate((result[0], clip_out)):
                 tgt = _loraopt_attachable(obj)
                 if tgt is None:
                     continue
@@ -11061,6 +11158,22 @@ def _install_lora_name_stamp(target_cls=None):
                 # NEW list — never append in place (see docstring).
                 tgt.set_attachments(LORAOPT_CHAIN_NAMES_ATTACH,
                                     list(prev) + [entry])
+                after = _loraopt_patch_snapshot(obj)
+                prior = before[branch]
+                if after is None or prior is None:
+                    continue
+                # Only append-only changes qualify. Replaced/reordered patches
+                # belong to a custom loader path, not a verified stock call.
+                if any(len(after.get(key, ())) < len(old)
+                       or any(a is not b for a, b in zip(old, after[key]))
+                       for key, old in prior.items()):
+                    continue
+                added = tuple((key, patch) for key, patches in after.items()
+                              for patch in patches[len(prior.get(key, ())):])
+                records = tgt.get_attachment(LORAOPT_CHAIN_RECORDS_ATTACH) or []
+                tgt.set_attachments(LORAOPT_CHAIN_RECORDS_ATTACH,
+                    list(records) + [dict(entry, call_id=call_id, sequence=sequence,
+                                          entries=added, complete=True)])
         except Exception:
             return result
         return result
@@ -11427,7 +11540,9 @@ class LoRAOptimizerInline(LoRAOptimizer):
             resolved = None
             partial_blocked = ((model_group is not None and not model_mergeable)
                                or (clip_group is not None and not clip_mergeable))
-            if not partial_blocked:
+            partial_source = any(g is not None and not g.get("loader_complete", True)
+                                 for g in (model_group, clip_group))
+            if not partial_blocked and not partial_source:
                 if model_mergeable and model_names and i < len(model_names):
                     resolved = model_names[i]
                 if (not resolved and clip_mergeable and clip_names
@@ -11441,15 +11556,27 @@ class LoRAOptimizerInline(LoRAOptimizer):
     def execute_inline(self, model, output_strength, clip=None,
                        clip_strength_multiplier=1.0, settings=None,
                        chain_options=None):
+        def records(obj):
+            host = _loraopt_attachable(obj)
+            return (host.get_attachment(LORAOPT_CHAIN_RECORDS_ATTACH) or []) if host else []
+        model_records, clip_records = records(model), records(clip)
         raw_model_groups = self._reconstruct_chain_groups(
-            getattr(model, "patches", {}) or {}, include_blocked=True)
+            getattr(model, "patches", {}) or {}, include_blocked=True,
+            chain_records=model_records)
         clip_patcher = getattr(clip, "patcher", None) if clip is not None else None
         raw_clip_groups = (self._reconstruct_chain_groups(
-            getattr(clip_patcher, "patches", {}) or {}, include_blocked=True)
+            getattr(clip_patcher, "patches", {}) or {}, include_blocked=True,
+            chain_records=clip_records)
                        if clip_patcher is not None else [])
 
         model_groups = raw_model_groups
         clip_groups = raw_clip_groups
+
+        # Match actual loader-call IDs across branches, including empty holes.
+        # Sequence is recorded at loader completion, not inferred from the
+        # insertion order of disjoint state-dict keys or reused float objects.
+        exact_provenance = bool(model_records or clip_records) and all(
+            g.get("loader_id") for g in model_groups + clip_groups)
 
         # Recover real LoRA filenames stamped by stock/rgthree loaders (see
         # _install_lora_name_stamp). Names remain conservative unique-strength
@@ -11464,7 +11591,16 @@ class LoRAOptimizerInline(LoRAOptimizer):
             raw_clip_groups, clip_stamps, "strength_clip")
         canonical_stamps = self._canonical_chain_stamps(
             model_stamps, clip_stamps)
-        if canonical_stamps is not None:
+        if exact_provenance:
+            ordered_records = {r["call_id"]: r for r in model_records + clip_records}
+            call_ids = sorted(ordered_records, key=lambda key: (ordered_records[key]["sequence"], key))
+            model_by_id = {g["loader_id"]: g for g in model_groups}
+            clip_by_id = {g["loader_id"]: g for g in clip_groups}
+            model_groups = [model_by_id.get(key) for key in call_ids]
+            clip_groups = [clip_by_id.get(key) for key in call_ids]
+            model_names = [g.get("loader_name") if g else None for g in model_groups]
+            clip_names = [g.get("loader_name") if g else None for g in clip_groups]
+        elif canonical_stamps is not None:
             model_alignment = self._align_groups_to_stamps(
                 raw_model_groups, model_names, canonical_stamps,
                 "strength_model")
@@ -11783,8 +11919,11 @@ class LoRAOptimizerInline(LoRAOptimizer):
             lines.append("  architecture: unknown (inline capture) — set "
                          "architecture_preset via a Settings node for "
                          "arch-tuned thresholds.")
-        lines.append("  (verify this order matches your loader chain — disjoint "
-                     "LoRAs with equal strengths cannot always be ordered)")
+        if all(g is None or g.get("loader_id") for g in model_groups + clip_groups):
+            lines.append("  attribution: exact stock-loader call records (including branch-only slots).")
+        else:
+            lines.append("  (verify this order matches your loader chain — unstamped, disjoint "
+                         "LoRAs with equal strengths cannot always be ordered)")
         return "\n".join(lines) + "\n\n"
 
     @staticmethod
@@ -15315,90 +15454,6 @@ class LoRAMergeSelector(LoRAOptimizer):
                 auto_strength_floor, decision_smoothing)
 
 
-class WanVideoLoRAOptimizer(LoRAOptimizer):
-    """
-    WanVideo variant of the LoRA Optimizer. Accepts WANVIDEOMODEL instead of
-    MODEL, skips CLIP, and applies merged LoRA patches in-memory.
-
-    All merging algorithms (TIES, DARE/DELLA, SVD compression, auto-strength,
-    conflict analysis) are inherited from LoRAOptimizer. Wan LoRA key
-    normalization (LyCORIS, diffusers, Fun LoRA, finetrainer) is
-    already handled by the parent's _normalize_keys_wan.
-    """
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        base = LoRAOptimizer.INPUT_TYPES()
-        # Replace MODEL with WANVIDEOMODEL
-        base["required"]["model"] = ("WANVIDEOMODEL", {
-            "tooltip": "Your WanVideo model from WanVideoModelLoader."
-        })
-        # Remove CLIP-related inputs (WanVideo doesn't use CLIP)
-        base["optional"].pop("clip", None)
-        base["optional"].pop("clip_strength_multiplier", None)
-        base["optional"].pop("free_vram_between_passes", None)
-        # Change defaults for video models
-        base["optional"]["cache_patches"] = (["disabled", "enabled"], {
-            "default": "disabled",
-            "tooltip": "Keep the merge result in memory so re-running the workflow is instant. Disabled by default for large video models to save RAM."
-        })
-        base["optional"]["normalize_keys"] = (["enabled", "disabled"], {
-            "default": "enabled",
-            "tooltip": "Normalizes LoRA keys from different training tools (LyCORIS, diffusers, finetrainer, etc.) to a common format. Enabled by default for WanVideo LoRAs."
-        })
-        base["optional"]["architecture_preset"] = (["auto", "dit", "sd_unet", "llm"], {
-            "default": "dit",
-            "tooltip": "Architecture-aware threshold tuning. Default 'dit' for WanVideo models. "
-                       "'auto' detects from LoRA keys."
-        })
-        base["optional"].pop("tuner_data", None)
-        base["optional"].pop("settings_source", None)
-        return base
-
-    RETURN_TYPES = ("WANVIDEOMODEL", "STRING", "LORA_DATA")
-    RETURN_NAMES = ("model", "analysis_report", "lora_data")
-    FUNCTION = "optimize_merge"
-    CATEGORY = "LoRA Optimizer"
-    DESCRIPTION = (
-        "WanVideo LoRA Optimizer — merges multiple WanVideo LoRAs using "
-        "conflict-aware algorithms (TIES, DARE, auto-strength). "
-        "Connect after WanVideoModelLoader, before WanVideoSampler."
-    )
-
-    def _get_model_keys(self, model):
-        model_keys = super()._get_model_keys(model)
-        # WanVideo models have ._orig_mod. in state_dict keys from torch.compile.
-        # The core model_lora_keys_unet creates entries WITH _orig_mod, but LoRA
-        # files have prefixes WITHOUT it. Add stripped versions pointing to the
-        # original target keys so prefixes match.
-        augmented = {}
-        for prefix, target in model_keys.items():
-            if '._orig_mod.' in prefix or '._orig_mod' in prefix:
-                stripped = prefix.replace('._orig_mod.', '.').replace('._orig_mod', '')
-                if stripped not in model_keys:
-                    augmented[stripped] = target
-        model_keys.update(augmented)
-        return model_keys
-
-    def optimize_merge(self, model, lora_stack, output_strength, **kwargs):
-        kwargs.pop("clip", None)
-        kwargs.pop("clip_strength_multiplier", None)
-        kwargs.pop("free_vram_between_passes", None)
-        model_out, _clip, report, _, lora_data = super().optimize_merge(
-            model, lora_stack, output_strength,
-            clip=None, clip_strength_multiplier=1.0, **kwargs
-        )
-        return (model_out, report, lora_data)
-
-    @classmethod
-    def IS_CHANGED(cls, model, lora_stack, output_strength, **kwargs):
-        kwargs.pop("clip", None)
-        kwargs.pop("clip_strength_multiplier", None)
-        kwargs.pop("free_vram_between_passes", None)
-        return LoRAOptimizer.IS_CHANGED(
-            model, lora_stack, output_strength,
-            clip=None, clip_strength_multiplier=0, **kwargs
-        )
 
 
 class SaveMergedLoRA:
@@ -16402,60 +16457,6 @@ class MergedLoRAToHook:
         return (prev_hooks.clone_and_combine(hook_group),)
 
 
-class MergedLoRAToWanVideo:
-    """Applies merged LoRA patches to a WanVideo wrapper model."""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "wan_model": ("WANVIDEOMODEL",),
-            },
-            "optional": {
-                "lora_data": ("LORA_DATA",),
-            },
-        }
-
-    RETURN_TYPES = ("WANVIDEOMODEL",)
-    RETURN_NAMES = ("model",)
-    FUNCTION = "apply_patches"
-    CATEGORY = "LoRA Optimizer"
-    DESCRIPTION = (
-        "Bridges merged LoRA patches from the LoRA Optimizer to a WanVideo wrapper model. "
-        "Use this when the WanVideo wrapper exposes fewer keys than the core MODEL, "
-        "ensuring all merged patches reach the sampler via set_lora_params."
-    )
-
-    def apply_patches(self, wan_model, lora_data=None):
-        if lora_data is None:
-            return (wan_model,)
-
-        model_patches = lora_data.get("model_patches", {})
-        if not model_patches:
-            return (wan_model,)
-
-        output_strength = lora_data.get("output_strength", 1.0)
-        new_model = wan_model.clone()
-
-        # Inject merged patches in the format set_lora_params expects:
-        # patcher.patches[key] = [(strength, patch_obj, 1.0, None, None)]
-        #
-        # set_lora_params (custom_linear.py:101-106) looks up keys as
-        # "diffusion_model.{module_prefix}weight" and falls back to
-        # stripping "_orig_mod." — so our core-model keys will match.
-        applied = 0
-        for key, patch in model_patches.items():
-            patch_key = key if isinstance(key, str) else key[0]
-            current = new_model.patches.get(patch_key, [])
-            current.append((output_strength, patch, 1.0, None, None))
-            new_model.patches[patch_key] = current
-            applied += 1
-
-        new_model.patches_uuid = uuid.uuid4()
-
-        logging.info(f"[MergedLoRAToWanVideo] Applied {applied} merged patches "
-                     f"(output_strength={output_strength})")
-        return (new_model,)
 
 
 class LoRAConflictEditor(_LoRAMergeBase):
@@ -17669,7 +17670,6 @@ NODE_CLASS_MAPPINGS = {
     "LoRAExperimentalOptions": LoRAExperimentalOptions,
     "LoRAStack": LoRAStack,
     "LoRAStackDynamic": LoRAStackDynamic,
-    "LoRAOptimizer": LoRAOptimizer,
     "LoRAOptimizerSimple": LoRAOptimizerSimple,
     "LoRAInlineChainOptions": LoRAInlineChainOptions,
     "LoRAOptimizerInline": LoRAOptimizerInline,
@@ -17677,8 +17677,6 @@ NODE_CLASS_MAPPINGS = {
     "BuildAutoTunerPythonEvaluator": BuildAutoTunerPythonEvaluator,
     "LoRAConflictEditor": LoRAConflictEditor,
     "MergedLoRAToHook": MergedLoRAToHook,
-    "MergedLoRAToWanVideo": MergedLoRAToWanVideo,
-    "WanVideoLoRAOptimizer": WanVideoLoRAOptimizer,
     "LoRAAutoTuner": LoRAAutoTuner,
     "LoRAMergeSelector": LoRAMergeSelector,
     "SaveTunerData": SaveTunerData,
@@ -17698,7 +17696,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoRAExperimentalOptions": "LoRA Experimental Options",
     "LoRAStack": "LoRA Stack",
     "LoRAStackDynamic": "LoRA Stack (Dynamic)",
-    "LoRAOptimizer": "LoRA Optimizer (Legacy)",
     "LoRAOptimizerSimple": "LoRA Optimizer",
     "LoRAInlineChainOptions": "LoRA Inline Chain Options",
     "LoRAOptimizerInline": "LoRA Optimizer (Inline Chain)",
@@ -17706,8 +17703,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "BuildAutoTunerPythonEvaluator": "Build AutoTuner Python Evaluator",
     "LoRAConflictEditor": "LoRA Conflict Editor",
     "MergedLoRAToHook": "Merged LoRA to Hook",
-    "MergedLoRAToWanVideo": "(WIP) Merged LoRA → WanVideo",
-    "WanVideoLoRAOptimizer": "(WIP) WanVideo LoRA Optimizer",
     "LoRAAutoTuner": "LoRA AutoTuner",
     "LoRAMergeSelector": "Merge Selector",
     "SaveTunerData": "Save Tuner Data",

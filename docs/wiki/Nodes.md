@@ -191,47 +191,11 @@ When no `settings` node is connected, uses built-in defaults: `auto_strength=ena
 
 ---
 
-## LoRA Optimizer (Legacy)
+## Advanced optimizer controls
 
-> **Deprecated:** Superseded by **LoRA Optimizer** + **Settings nodes**. Use the Legacy variant only for the AutoTuner ↔ Optimizer bridge workflow (which requires `settings_source`).
+Connect **LoRA Optimizer Settings** and optional **LoRA Merge Settings** to the current optimizer for strategy, auto-strength, sparsification, refinement, compression and memory/device controls. The all-in-one Legacy node is removed; see [migration](../node-migration.md).
 
-Full-featured optimizer with all parameters on one node.
-
-### Inputs
-
-All inputs from the simple variant, plus:
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `auto_strength` | COMBO | enabled | `enabled` / `disabled` — interference-aware energy normalization |
-| `optimization_mode` | COMBO | per_prefix | `per_prefix`, `global`, `additive` |
-| `merge_refinement` | COMBO | none | `none`, `refine`, `full` |
-| `sparsification` | COMBO | disabled | `disabled`, `dare`, `della`, `dare_conflict`, `della_conflict` |
-| `sparsification_density` | FLOAT | 0.7 | Fraction of parameters to keep (0.01–1.0) |
-| `dare_dampening` | FLOAT | 0.0 | DAREx noise reduction (0–1.0, only affects DARE modes) |
-| `patch_compression` | COMBO | smart | `smart`, `aggressive`, `disabled` |
-| `svd_device` | COMBO | gpu | `gpu`, `cpu` — device for SVD compression |
-| `cache_patches` | COMBO | enabled | `enabled`, `disabled` — keep merge in RAM for re-execution |
-| `free_vram_between_passes` | COMBO | disabled | `enabled`, `disabled` — release GPU cache between passes |
-| `normalize_keys` | COMBO | enabled | `enabled`, `disabled` — architecture-aware key normalization |
-| `strategy_set` | COMBO | full | `full`, `no_slerp`, `basic` — strategy selection logic |
-| `architecture_preset` | COMBO | auto | `auto`, `sd_unet`, `dit`, `acestep_dit`, `llm` — numeric threshold tuning |
-| `auto_strength_floor` | FLOAT | -1.0 | Minimum auto-strength scale factor for orthogonal LoRAs (`-1` = architecture default) |
-| `decision_smoothing` | FLOAT | 0.25 | Smooth per-prefix decision metrics toward the surrounding block average (0 disables smoothing) |
-| `smooth_slerp_gate` | BOOLEAN | false | Use per-prefix cosine similarity for SLERP gate instead of collection average |
-| `vram_budget` | FLOAT | 0.0 | Fraction of free VRAM for keeping patches on GPU (0.0–1.0) |
-
-### Optional Inputs
-
-| Input | Type | Description |
-|-------|------|-------------|
-| `merge_strategy_override` | STRING | Force a specific merge strategy (connect from Conflict Editor) |
-| `tuner_data` | TUNER_DATA | Optional AutoTuner result used when `settings_source=from_autotuner` or `from_tuner_data` |
-| `settings_source` | COMBO | `manual`, `from_autotuner`, or `from_tuner_data`; controls whether widgets or AutoTuner config drive the node |
-
-### Outputs
-
-Same as the simple variant: `MODEL`, `CLIP`, `report` (STRING), `tuner_data` (TUNER_DATA), `LORA_DATA`.
+For tuned results, leave `settings` unconnected and connect `tuner_data`, or use **Merge Selector**.
 
 ---
 
@@ -241,7 +205,7 @@ Automated parameter sweep that ranks merge configurations.
 
 ### Inputs
 
-All inputs from the Legacy optimizer, plus:
+Required model, LoRA stack and output strength, with optional CLIP, normalization, architecture and memory controls, plus:
 
 | Input | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -299,7 +263,7 @@ Predicts a merge config via k-NN retrieval over the Hugging Face community cache
 
 | Output | Type | Description |
 |--------|------|-------------|
-| `tuner_data` | TUNER_DATA | Aggregated predicted configs — feed into LoRA Optimizer (`settings_source=from_tuner_data`) or Merge Selector |
+| `tuner_data` | TUNER_DATA | Aggregated predicted configs — feed into LoRA Optimizer (leave `settings` unconnected) or Merge Selector |
 | `estimator_report` | STRING | Predicted configs with aggregated scores and neighbor distances (says `No neighbors` when no family+combo-size match exists) |
 
 The first run downloads the community cache and builds a local k-NN index under `ComfyUI/models/estimator/` (~30–60s); later runs complete in seconds.
@@ -580,43 +544,6 @@ Wraps merged patches as conditioning hooks for per-prompt LoRA application.
 
 ---
 
-## WanVideo LoRA Optimizer (WIP)
+## Native WAN support
 
-Optimizer variant for WanVideo models via [kijai's WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper).
-
-### Differences from Standard Optimizer
-
-| Aspect | Standard | WanVideo |
-|--------|----------|----------|
-| Model input | `MODEL` | `WANVIDEOMODEL` |
-| CLIP | Supported | Not used |
-| `normalize_keys` default | enabled | **enabled** |
-| `cache_patches` default | enabled | **disabled** |
-| `architecture_preset` default | auto | **dit** |
-
-All merge algorithms work identically — TIES, DARE/DELLA, SVD compression, auto-strength, quality enhancements, key normalization.
-
-### Inputs/Outputs
-
-Same as the Legacy optimizer, but with `WANVIDEOMODEL` replacing `MODEL` and no CLIP inputs/outputs. Outputs `LORA_DATA` for Save Merged LoRA.
-
----
-
-## Merged LoRA → WanVideo (WIP)
-
-Bridges `LORA_DATA` to a WanVideo wrapper model.
-
-### Inputs
-
-| Input | Type | Required | Description |
-|-------|------|----------|-------------|
-| `wan_model` | WANVIDEOMODEL | Yes | WanVideo model to patch |
-| `lora_data` | LORA_DATA | No | Merged patches to apply |
-
-### Outputs
-
-| Output | Type | Description |
-|--------|------|-------------|
-| `WANVIDEOMODEL` | WANVIDEOMODEL | Patched WanVideo model |
-
-Handles the `_orig_mod.` key prefix mismatch from `torch.compile` automatically.
+The two WanVideoWrapper-specific nodes are removed. Use native ComfyUI WAN loaders returning `MODEL`, then the current optimizer or inline node. `WANVIDEOMODEL` and `MODEL` are not interchangeable. See [migration](../node-migration.md).

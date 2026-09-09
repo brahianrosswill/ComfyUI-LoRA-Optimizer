@@ -104,7 +104,6 @@ Restart ComfyUI. Nodes appear under the `loaders` category.
 | **Combination Generator** | Auto-generate 2-/3-way combos for AutoTuner dataset collection |
 | **Save Merged LoRA** | Export the merge as a standalone `.safetensors` file |
 | **Merged LoRA to Hook** | Apply merged LoRA per-conditioning instead of globally |
-| **LoRA Optimizer (Legacy)** | All parameters on one node (superseded by Optimizer + Settings) |
 
 Also accepts standard tuple-format stacks `(lora_name, model_strength, clip_strength)` from Efficiency Nodes, Comfyroll, and similar packs.
 
@@ -334,7 +333,7 @@ The **LoRA Optimizer** has two strength inputs that control the merged result gl
 
 **`decision_smoothing`** — blends each group's decision metrics toward the average of its surrounding block. This reduces jagged layer-to-layer mode flips when the stack is noisy.
 
-**`smooth_slerp_gate`** — when enabled, uses per-prefix cosine similarity (computed during analysis) instead of the collection average for the SLERP interpolation gate. This makes the SLERP weight vary per layer based on local alignment rather than using a single global value. Available on the LoRA Merge Settings node or the Legacy optimizer.
+**`smooth_slerp_gate`** — when enabled, uses per-prefix cosine similarity (computed during analysis) instead of the collection average for the SLERP interpolation gate. This makes the SLERP weight vary per layer based on local alignment rather than using a single global value. Available on the LoRA Merge Settings node.
 
 </details>
 
@@ -654,13 +653,13 @@ Results are stored in the public dataset [`ethanfel/lora-optimizer-community-cac
 
 ## LoRA Merge Estimator
 
-Skip the AutoTuner sweep when your stack is similar to combos already in the community cache. The Estimator analyzes your LoRAs once (Phase 1 only), then retrieves the k nearest combos from a prebuilt index of cached configs and emits `TUNER_DATA` with the aggregated top-N predicted configs. Feed that directly into the **LoRA Optimizer** (`settings_source=from_tuner_data`) to apply the predicted merge.
+Skip the AutoTuner sweep when your stack is similar to combos already in the community cache. The Estimator analyzes your LoRAs once (Phase 1 only), then retrieves the k nearest combos from a prebuilt index of cached configs and emits `TUNER_DATA` with the aggregated top-N predicted configs. Feed that directly into the **LoRA Optimizer** (leave `settings` unconnected) to apply the predicted merge.
 
 **Workflow:**
 ```
 LoRA Stack (Dynamic) ──► LoRA Merge Estimator ──► TUNER_DATA ──► LoRA Optimizer
-                              ▲                                   (settings_source
-Load Checkpoint ──► MODEL ────┘                                    =from_tuner_data)
+                              ▲                                   ▲
+Load Checkpoint ──► MODEL ────┴───────────────────────────────────┘
 ```
 
 The first run downloads the community cache and builds a local k-NN index under `ComfyUI/models/estimator/` (~30–60s). Subsequent runs reuse the index and complete in seconds — no Phase 2 sweep, no merge quality pass.
@@ -766,36 +765,11 @@ Generates LoRA combinations for **AutoTuner dataset collection**. It cycles thro
 
 ---
 
-### AutoTuner → Optimizer Bridge
+### Reusing AutoTuner results
 
-Chain the AutoTuner and the Legacy optimizer in a single model line for a "rank, then tweak" workflow. Only one node merges at a time — the other passes the model through. The Legacy optimizer's `settings_source` switch controls which node is authoritative, and the UI bridge keeps the paired widgets in sync.
+Set **LoRA AutoTuner** to `output_mode=tuning_only`, then connect its unchanged MODEL/CLIP and `tuner_data` to the current **LoRA Optimizer**. Connect the same LoRA Stack to both. Leave `settings` unconnected to replay the result; **Merge Selector** chooses another rank.
 
-<p align="center">
-  <a href="assets/bridge-workflow.png"><img src="assets/bridge-workflow.svg" alt="AutoTuner ↔ Optimizer Bridge workflow" width="700"></a>
-</p>
-
-```
-[Load Model] → [AutoTuner] → model → [Optimizer (Legacy)] → MODEL → sampler
-[LoRA Stack]  → [AutoTuner]
-[LoRA Stack]  → [Optimizer (Legacy)]
-               [AutoTuner] → tuner_data → [Optimizer (Legacy)]
-```
-
-| Legacy Optimizer `settings_source` | What happens |
-|----|----|
-| `from_autotuner` | AutoTuner merges → Legacy Optimizer passes through. Optimizer widgets show the winning config. |
-| `manual` | AutoTuner passes the base model through → Legacy Optimizer merges with its own widget settings. |
-| `from_tuner_data` | Legacy Optimizer reads settings from connected `tuner_data` input. |
-
-**Typical flow:**
-1. Start with `from_autotuner` — let the AutoTuner find the best config
-2. Inspect the Optimizer's widgets to see what won
-3. Switch to `manual` — the Optimizer takes over, starting from the AutoTuner's recommendation
-4. Tweak settings (merge_refinement, sparsification, etc.) and re-run
-
-Switching between modes is instant — the AutoTuner reuses its cached sweep results.
-
-> **Note:** The bridge workflow requires the **LoRA Optimizer (Legacy)** node. The simplified **LoRA Optimizer** uses Settings nodes and `tuner_data` input instead.
+For manual changes, connect **LoRA Optimizer Settings**; settings take priority over `tuner_data`. The Legacy optimizer and automatic widget bridge have been removed. See [node migration](docs/node-migration.md).
 
 ---
 
@@ -876,7 +850,7 @@ Load Checkpoint ──► Load LoRA #1 ──► Load LoRA #2 ──► ... ─�
                                           LoRA Inline Chain Options ──┘ chain_options (optional)
 ```
 
-**When to use it:** you already have a workflow full of Load LoRA nodes and want the optimizer's conflict-resolved merge without rebuilding it around a **LoRA Stack**. For new workflows, the Stack → Optimizer path is still preferred — loading from files gives the optimizer real names, metadata, and architecture auto-detection.
+**When to use it:** you already have a workflow full of Load LoRA nodes and want the optimizer's conflict-resolved merge without rebuilding it around a **LoRA Stack**. The Stack path remains useful when you prefer to manage file choices and metadata in one place.
 
 **Per-LoRA options live on the side node.** Connect a **LoRA Inline Chain Options** node to the inline node's `chain_options` input to set per-LoRA enable/strength/conflict/preserve options. **Leave `chain_options` unconnected to merge every captured LoRA with default options** — the inline node works standalone.
 
@@ -905,39 +879,14 @@ Non-LoRA patches on the incoming model — OFT/BOFT rotations, hooked entries, p
 - **Memory persists across sessions either way.** Both the file identity (stamped loaders) and the captured-content identity (unstamped) are stable across ComfyUI restarts, so a chain you tuned once is found again next run — unlike the per-session capture *names*, which change every restart.
 - **The captured-namespace fallback assumes the same ComfyUI version.** Its factors and key names depend on comfy's key-mapping / QKV-fusion, so a captured-content hash is only comparable across machines running the same comfy build. (File-identity reconciliation via stamped names is not affected — it hashes the file bytes.)
 
-**v1 limitations:**
-- **Fully-disjoint LoRAs at identical strengths** may be grouped or ordered ambiguously — the chain fingerprints reveal it when it happens.
-- **Model↔CLIP pairing is by chain order** — a `LoraLoaderModelOnly` or a TE-only LoRA file in the chain can shift clip attribution; the report warns when the model/clip group counts differ.
-- **Architecture detection reports `unknown` for inline capture** — set `architecture_preset` via a Settings node to get arch-tuned thresholds.
-- **WanVideo wrapper models are not supported** — use the dedicated **WanVideo LoRA Optimizer** below.
+**Capture boundaries:**
 
----
-
-### WanVideo LoRA Optimizer
-
-Variant of the LoRA Optimizer for **WanVideo models** (via [kijai's WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)). Accepts `WANVIDEOMODEL` instead of `MODEL`, skips CLIP, and applies merged patches in-memory.
-
-All merging algorithms are inherited — TIES, DARE/DELLA, SVD compression, auto-strength, per-prefix adaptive merge, merge refinement (KnOTS, orthogonalization, TALL-masks), and Wan key normalization (LyCORIS, diffusers, Fun LoRA, finetrainer, RS-LoRA) all work identically.
-
-**Basic workflow:**
-```
-WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA Optimizer → WANVIDEOMODEL → WanVideoSampler
-                                               ↑
-                        LoRA Stack ─────────────┘
-```
-
-**Chaining with individual LoRAs:** Individual (non-merged) LoRAs go through WanVideoLoraSelect → model loader as usual. Our optimizer applies merged LoRAs on top — both coexist in the model patcher.
-
-```
-WanVideoLoraSelect → WanVideoModelLoader → WANVIDEOMODEL → WanVideo LoRA Optimizer → Sampler
-                                                                    ↑
-                                             LoRA Stack ────────────┘
-```
-
-**Key defaults differ from the standard optimizer:**
-- `normalize_keys` = **enabled** — WanVideo LoRAs come from many trainers, normalization is commonly needed
-- `cache_patches` = **disabled** — video models are large, caching uses significant RAM
-- `architecture_preset` = **dit** — DiT-tuned thresholds (higher density floor, wider strength range)
+- Stock loaders and loaders calling the same stock method record exact patch ownership. Equal strengths, repeated files, disjoint targets and MODEL/CLIP-only slots no longer require strength-based guessing. The report says **exact stock-loader call records** when available.
+- Unstamped/custom loaders retain best-effort capture: disjoint equal-strength calls can be ambiguous. Check the report before using per-slot options. Restart ComfyUI after installing the fix so loaders execute with tracking enabled.
+- Unsupported/order-dependent patches stay on their original chain. Inline options control only captured additive branches.
+- Architecture detection uses captured keys and model hints; set a Settings preset if detection remains unknown.
+- Saved inline CLIP patches use stock-loadable aliases rather than bare patcher target names.
+- WanVideoWrapper-specific nodes are removed. Native WAN through ordinary ComfyUI `MODEL` loaders remains supported. See [node migration](docs/node-migration.md).
 
 </details>
 

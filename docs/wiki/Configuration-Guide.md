@@ -205,7 +205,7 @@ Auto-detects model architecture and remaps LoRA keys to a canonical format, enab
 |---------------|----------------------|
 | Mixing LoRAs from different trainers | All LoRAs from the same trainer |
 | Using Z-Image or MiniMax H3 LoRAs with fused QKV | Single-trainer workflows |
-| WanVideo LoRAs (enabled by default on WanVideo Optimizer) | When auto-detection picks the wrong architecture |
+| WAN LoRAs through native ComfyUI MODEL loaders | When auto-detection picks the wrong architecture |
 
 Supported architectures include FLUX, SDXL, Z-Image (Lumina2), MiniMax H3, Wan 2.1/2.2, LTX Video, Qwen-Image, ACE-Step, Ideogram 4, Anima, and Krea 2.
 
@@ -262,7 +262,7 @@ Controls what the AutoTuner outputs after the sweep.
 | Value | Behavior | When to Use |
 |-------|----------|-------------|
 | `merge` (default) | Applies the top-ranked config and outputs the merged model | Normal use — the AutoTuner both ranks and applies |
-| `tuning_only` | Skips the final merge, passes the base model through | Connect AutoTuner → LoRA Optimizer (Legacy) to apply the winning config via a separate optimizer node |
+| `tuning_only` | Skips the final merge, passes the base model through | Connect unchanged MODEL/CLIP and `tuner_data` to the current optimizer; leave its `settings` unconnected |
 
 `tuning_only` is useful when you want the AutoTuner to decide the settings but apply the merge through a dedicated Optimizer node with additional controls (e.g., a custom `merge_strategy_override`).
 
