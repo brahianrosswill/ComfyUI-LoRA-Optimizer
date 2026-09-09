@@ -1,0 +1,87 @@
+{
+  "plan_sha256": "4982928f36c1052dfc7092456d1d612a3277d94e549ef72d5eb618c27c1d7d20",
+  "ratings_record_sha256": "bfce769c991340b9f081ff61148c0025354968c2c6b934e73c527af07f46e0aa",
+  "diagnostic_script_sha256": "00fa276c6fc7bc084995bb7ce920c8fd996607a0c365a4b0bc703e8058a54537",
+  "stage": "calibration",
+  "seed": 2026090803,
+  "selection": "Three already-rated clips chosen for follow-up of R1's sync complaints: base, Combat/Repair additive and Combat/Repair CT. Selection and inspection are unblinded, not an unbiased mode comparison.",
+  "method": "All 124 frames per clip inspected in timestamped sheets, with selected contact sequences enlarged. Decoded audio PTS and sample counts checked for continuity, then both channels represented separately by 5 ms linear min/max and RMS bins. Full-resolution PNG frame stepping is available locally. No source media, gain or stream timing changed.",
+  "annotation_source": "Assistant visual inspection after seeing R1's ratings and the waveforms; not a second independent reviewer or audio listener.",
+  "audio_listened_by_assistant": false,
+  "sound_identity_confirmed": false,
+  "automatic_quality_score": null,
+  "automatic_sync_correction": null,
+  "frame_interval_seconds": 0.041666666666666664,
+  "timing_limit": "Frame-visible contact is not an exact physical impact instant. Energy maxima are not necessarily sound onsets or punch sounds. Relative positions are diagnostic hypotheses, not measured perceptual latency.",
+  "clips": [
+    {
+      "job_id": "av2-boxing-2026090803-combat-cinema-base",
+      "video_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "diagnostic_directory": "av2-sync-seed03-base",
+      "sync_json_sha256": "87aee14213d0a223bd4ae8e6269f8e6bd17de046b4529e2730e10441dd1699b9",
+      "frames_inspected": 124,
+      "audio_start_seconds": 0.0,
+      "audio_samples_per_channel": 165334,
+      "observations": [
+        {
+          "frames": [7, 8, 9, 10],
+          "visible_event": "The glove is short of the bag at frame 7 (0.292 s) and visibly at the bag in frame 8 (0.333 s); contact persists into later frames.",
+          "energy_peak_window_seconds": [0.41, 0.415],
+          "interpretation": "The dominant energy burst follows the start of visible contact. This supports examining local event timing, not assigning an exact audio delay."
+        }
+      ]
+    },
+    {
+      "job_id": "av2-boxing-2026090803-combat-repair-additive",
+      "video_sha256": "e1ce095ceeb89393224f0bceff8b6d50a3bc9adf5fc98941869ee6dc9491bc76",
+      "diagnostic_directory": "av2-sync-seed03-repair-additive",
+      "sync_json_sha256": "44f67cf690961f3b2fe08db646fc6f0eae04545899838cd8e579867bbc10fade",
+      "frames_inspected": 124,
+      "audio_start_seconds": 0.0,
+      "audio_samples_per_channel": 165334,
+      "visual_punch_count_estimate": 4,
+      "requested_punch_count": 2,
+      "observations": [
+        {
+          "frames": [13, 14, 15, 16, 17],
+          "visible_event": "Gloves retract near the head at 0.542-0.583 s. The next extension reaches the bag around frames 15-16 (0.625-0.667 s).",
+          "energy_peak_window_seconds": [0.55, 0.555],
+          "interpretation": "A strong burst precedes the next clearly visible contact frames. It may be an early event sound or another action sound; sound identity is unconfirmed. Smaller later peaks must not be silently substituted to declare synchronization."
+        },
+        {
+          "frames": [33, 34, 35, 36],
+          "visible_event": "A further extension reaches the bag around frame 34 (1.417 s), with visible contact in subsequent frames.",
+          "energy_peak_window_seconds": [1.495, 1.5],
+          "interpretation": "The main peak follows visible contact here, unlike the earlier burst. The observations do not justify applying one uniform stream shift."
+        }
+      ]
+    },
+    {
+      "job_id": "av2-boxing-2026090803-combat-repair-ct",
+      "video_sha256": "7b1acc15d6a42d5c0f39afd4dfc47a10523c78769f4f9b51d1c05df5f9612bc0",
+      "diagnostic_directory": "av2-sync-seed03-repair-ct",
+      "sync_json_sha256": "4e0ca77e70ab36da30618b77631dd5360345e1e0148c5ca2c56d8e908ff28548",
+      "frames_inspected": 124,
+      "audio_start_seconds": 0.0,
+      "audio_samples_per_channel": 165334,
+      "visual_punch_count_estimate": 3,
+      "requested_punch_count": 2,
+      "observations": [
+        {
+          "frames": [13, 14, 15, 16, 17],
+          "visible_event": "No corresponding additional extension/contact in the 0.542-0.708 s region examined in additive.",
+          "energy_peak_window_seconds": null,
+          "interpretation": "The large additive 0.55 s burst and its additional visual action are absent here; this is a clip-specific difference, not a global CT benefit."
+        },
+        {
+          "frames": [33, 34, 35, 36],
+          "visible_event": "A further extension reaches the bag around frame 34 (1.417 s), with contact visible through later frames.",
+          "energy_peak_window_seconds": [1.45, 1.455],
+          "interpretation": "A nearby energy burst is temporally plausible, but neither sound identity nor convincing perceived synchronization is independently confirmed."
+        }
+      ]
+    }
+  ],
+  "conclusion": "Frame/waveform comparison supplies concrete diagnostic locations and reveals action-count differences. It does not replace R1's listening judgments, establish a globally optimal merge, or justify fitting the ranker to these three selected clips.",
+  "future_evaluator_requirement": "Use independently identified visual contacts and sound onsets with one-to-one event association, unmatched-event reporting and uncertainty. Nearest-peak matching or global motion/audio cross-correlation alone can hide mismatches."
+}

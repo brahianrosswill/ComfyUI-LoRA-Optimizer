@@ -1,0 +1,789 @@
+{
+  "plan_sha256": "4982928f36c1052dfc7092456d1d612a3277d94e549ef72d5eb618c27c1d7d20",
+  "stage": "calibration",
+  "reviewer_count": 1,
+  "reviewer_id": "R1",
+  "provenance": [
+    {
+      "review_id": "2298ae831788d764f8df",
+      "labels_sha256": "562cc2e5886ea5093f6a40ae0a797c9b839a7937f796484382da2a711b9964a2",
+      "key_sha256": "2cb68ce41ff360e5bb6218a7689a5a723ace82b07658463a2ae608008435507f",
+      "submitted_at": "2026-09-08T11:04:36.592Z"
+    }
+  ],
+  "ratings": [
+    {
+      "pair": "combat_repair",
+      "variant": "ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-ct",
+      "blind_id": "C01",
+      "media_sha256": "d9dba8588d6e194db00f22d7dc2711104e377a35aaf21d9e78c8b09398a4fab3",
+      "original_sha256": "7b1acc15d6a42d5c0f39afd4dfc47a10523c78769f4f9b51d1c05df5f9612bc0",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 2,
+        "audio": 3,
+        "synchronization": 4,
+        "overall": 3
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-second",
+      "blind_id": "C06",
+      "media_sha256": "acae3975da5a0e45a05019baf42cd1c101e6d585bbdaa47f06596f7e7be9945c",
+      "original_sha256": "7909a3b21a77d8a32424391dc11a22eb94001afef69a208ceb72f6504deee654",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 2,
+        "audio": 2,
+        "synchronization": 3,
+        "overall": 2
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-combat",
+      "blind_id": "C08",
+      "media_sha256": "ade212c7abea7187fd9a13309724be6f399aba1a484c1ed64ce7f6c88162ced2",
+      "original_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 3,
+        "audio": 4,
+        "synchronization": 4,
+        "overall": 3
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-np",
+      "blind_id": "C09",
+      "media_sha256": "fb97db933704b1c1b6dde4acfd0446d782eee59a2492fb9725b98f1f9709dddd",
+      "original_sha256": "d51549ac49b5581d5b3a72ecea61dc9dd984cbce3cdbd4f9c26452c6b510c3b6",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 2,
+        "audio": 4,
+        "synchronization": 4,
+        "overall": 3
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-additive",
+      "blind_id": "C11",
+      "media_sha256": "001f55d01a2bfafab107f7ccec858c43be3aa60515409fa04691083ae6f972d2",
+      "original_sha256": "e1ce095ceeb89393224f0bceff8b6d50a3bc9adf5fc98941869ee6dc9491bc76",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 2,
+        "audio": 3,
+        "synchronization": 1,
+        "overall": 2
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-base",
+      "blind_id": "C12",
+      "media_sha256": "bb447c88682e0563a46af65fd078af9062b9f2fc91f7fde293c8fcd1ef9549e3",
+      "original_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "scores": {
+        "action": 3,
+        "temporal": 2,
+        "appearance": 2,
+        "audio": 2,
+        "synchronization": 1,
+        "overall": 2
+      },
+      "notes": "out of sync audio",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-winner",
+      "blind_id": "C14",
+      "media_sha256": "b482673644baf0cdc2d897722ffe761c165cbf0103d8c4a1d16d9ba6a50f4b8a",
+      "original_sha256": "26589d051b26f1255fb84e50de5a5cb3d605ec64e8181e9c9b177ad5cad43539",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 2,
+        "audio": 3,
+        "synchronization": 3,
+        "overall": 3
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-combat",
+      "blind_id": "C02",
+      "media_sha256": "ade212c7abea7187fd9a13309724be6f399aba1a484c1ed64ce7f6c88162ced2",
+      "original_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+      "scores": {
+        "action": 4,
+        "temporal": 4,
+        "appearance": 2,
+        "audio": 4,
+        "synchronization": 4,
+        "overall": 3
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-winner",
+      "blind_id": "C03",
+      "media_sha256": "4c212f1b0f8cef487e80375e52387ee99738a8860843269bd5784ccfcc97a5e5",
+      "original_sha256": "932acaacee0ea454f7199838b260cddafb90309e03e59d2f85069901fc8e03ca",
+      "scores": {
+        "action": 3,
+        "temporal": 2,
+        "appearance": 3,
+        "audio": 3,
+        "synchronization": 2,
+        "overall": 2
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-additive",
+      "blind_id": "C04",
+      "media_sha256": "3ce730ddd837a49faa129348ff7fb4c053c562b1495571ceb41bfecb2cef8ab1",
+      "original_sha256": "17abaf2cd5ad849726f6719ecf617397ddac1839399ee069290656a51aea3880",
+      "scores": {
+        "action": 3,
+        "temporal": 2,
+        "appearance": 2,
+        "audio": 3,
+        "synchronization": 3,
+        "overall": 2
+      },
+      "notes": "he use one arm and the movement it too fast for natural mouvement",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-ct",
+      "blind_id": "C05",
+      "media_sha256": "d663315655b619db5d7b6a3bf075712fff0520c2ffe8ef67fed0bf188db90178",
+      "original_sha256": "e7da469f7661037604d1cb355f2054aaebbb2ddc4396bd9075f85a999898acd5",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 3,
+        "audio": 3,
+        "synchronization": 3,
+        "overall": 3
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-second",
+      "blind_id": "C07",
+      "media_sha256": "ddeede302d7c11207b5176f2bac45a0dd3a5989c5f1312937587f2bc67da8857",
+      "original_sha256": "0a16600f44c2819c0a64b6d3101484f77895597f2e38ebb32a99abbab773a50a",
+      "scores": {
+        "action": 3,
+        "temporal": 3,
+        "appearance": 3,
+        "audio": 4,
+        "synchronization": 3,
+        "overall": 3
+      },
+      "notes": "",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-np",
+      "blind_id": "C10",
+      "media_sha256": "2f96e82bd2f6c88535ebb345022243d39e06a33eaa327964af958e1caf2f6f64",
+      "original_sha256": "0f193dc17fac4b936db03095f41904bf15d1dc5d284db6fa6a0cf72fc1fe8fc6",
+      "scores": {
+        "action": 2,
+        "temporal": 2,
+        "appearance": 2,
+        "audio": 3,
+        "synchronization": 3,
+        "overall": 2
+      },
+      "notes": "he use one arm and the movement it too fast for natural mouvement",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-base",
+      "blind_id": "C13",
+      "media_sha256": "bb447c88682e0563a46af65fd078af9062b9f2fc91f7fde293c8fcd1ef9549e3",
+      "original_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+      "scores": {
+        "action": 2,
+        "temporal": 3,
+        "appearance": 2,
+        "audio": 2,
+        "synchronization": 2,
+        "overall": 2
+      },
+      "notes": "out of sync punch",
+      "review_id": "2298ae831788d764f8df",
+      "reviewer_id": "R1"
+    }
+  ],
+  "summary": {
+    "rating_entries": 14,
+    "unique_videos": 12,
+    "groups": [
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "missing_variants": [],
+        "best_observed_overall": 3,
+        "best_observed_variants": [
+          "combat",
+          "ct",
+          "second"
+        ]
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090804,
+        "missing_variants": [
+          "additive",
+          "base",
+          "combat",
+          "ct",
+          "np",
+          "second",
+          "winner"
+        ],
+        "best_observed_overall": null,
+        "best_observed_variants": []
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "missing_variants": [],
+        "best_observed_overall": 3,
+        "best_observed_variants": [
+          "combat",
+          "ct",
+          "np",
+          "winner"
+        ]
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090804,
+        "missing_variants": [
+          "additive",
+          "base",
+          "combat",
+          "ct",
+          "np",
+          "second",
+          "winner"
+        ],
+        "best_observed_overall": null,
+        "best_observed_variants": []
+      }
+    ],
+    "stage_fully_reviewed": false,
+    "paired_comparisons": [
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "additive",
+        "ordinal_grade_differences": {
+          "action": -1,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": 0,
+          "synchronization": 0,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "winner",
+        "ordinal_grade_differences": {
+          "action": -1,
+          "temporal": 0,
+          "appearance": -1,
+          "audio": 0,
+          "synchronization": 1,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "combat",
+        "ordinal_grade_differences": {
+          "action": -2,
+          "temporal": -2,
+          "appearance": 0,
+          "audio": -1,
+          "synchronization": -1,
+          "overall": -1
+        },
+        "overall_preference": "baseline"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "second",
+        "ordinal_grade_differences": {
+          "action": -1,
+          "temporal": -1,
+          "appearance": -1,
+          "audio": -1,
+          "synchronization": 0,
+          "overall": -1
+        },
+        "overall_preference": "baseline"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "base",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": -1,
+          "appearance": 0,
+          "audio": 1,
+          "synchronization": 1,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "additive",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 1,
+          "appearance": 1,
+          "audio": 0,
+          "synchronization": 0,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "winner",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 1,
+          "appearance": 0,
+          "audio": 0,
+          "synchronization": 1,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "combat",
+        "ordinal_grade_differences": {
+          "action": -1,
+          "temporal": -1,
+          "appearance": 1,
+          "audio": -1,
+          "synchronization": -1,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "second",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": -1,
+          "synchronization": 0,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_cinema",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "base",
+        "ordinal_grade_differences": {
+          "action": 1,
+          "temporal": 0,
+          "appearance": 1,
+          "audio": 1,
+          "synchronization": 1,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "additive",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": 1,
+          "synchronization": 3,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "winner",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": 1,
+          "synchronization": 1,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "combat",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": -1,
+          "audio": 0,
+          "synchronization": 0,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "second",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": 2,
+          "synchronization": 1,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "np",
+        "baseline": "base",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 1,
+          "appearance": 0,
+          "audio": 2,
+          "synchronization": 3,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "additive",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": 0,
+          "synchronization": 3,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "winner",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": 0,
+          "synchronization": 1,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "combat",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": -1,
+          "audio": -1,
+          "synchronization": 0,
+          "overall": 0
+        },
+        "overall_preference": "tie"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "second",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 0,
+          "appearance": 0,
+          "audio": 1,
+          "synchronization": 1,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      },
+      {
+        "pair": "combat_repair",
+        "stage": "calibration",
+        "prompt": "boxing",
+        "seed": 2026090803,
+        "candidate": "ct",
+        "baseline": "base",
+        "ordinal_grade_differences": {
+          "action": 0,
+          "temporal": 1,
+          "appearance": 0,
+          "audio": 1,
+          "synchronization": 3,
+          "overall": 1
+        },
+        "overall_preference": "candidate"
+      }
+    ],
+    "repeated_controls": [
+      {
+        "original_sha256": "609ad1ac5ca27f27ee8bdfc984f953264f5aa61c55d1b66ef3443f453fe740ff",
+        "presentations": [
+          {
+            "review_id": "2298ae831788d764f8df",
+            "blind_id": "C08",
+            "pair": "combat_repair",
+            "variant": "combat"
+          },
+          {
+            "review_id": "2298ae831788d764f8df",
+            "blind_id": "C02",
+            "pair": "combat_cinema",
+            "variant": "combat"
+          }
+        ],
+        "grade_spread": {
+          "action": 1,
+          "temporal": 1,
+          "appearance": 1,
+          "audio": 0,
+          "synchronization": 0,
+          "overall": 0
+        }
+      },
+      {
+        "original_sha256": "b9bc0a850d41b75691b4ad6df72c1616118f9a01ab5517a6c317122b2de1a391",
+        "presentations": [
+          {
+            "review_id": "2298ae831788d764f8df",
+            "blind_id": "C12",
+            "pair": "combat_repair",
+            "variant": "base"
+          },
+          {
+            "review_id": "2298ae831788d764f8df",
+            "blind_id": "C13",
+            "pair": "combat_cinema",
+            "variant": "base"
+          }
+        ],
+        "grade_spread": {
+          "action": 1,
+          "temporal": 1,
+          "appearance": 0,
+          "audio": 0,
+          "synchronization": 1,
+          "overall": 0
+        }
+      }
+    ],
+    "inferential_statistics": null,
+    "learned_ranking": null,
+    "note": "One person's context-dependent ordinal ratings. Reused controls and shared prompt/seeds are not independent trials."
+  }
+}

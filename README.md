@@ -815,6 +815,8 @@ Two utility nodes for persisting AutoTuner results to disk:
 
 The evaluator callable receives keyword arguments: `model`, `clip`, `lora_data`, `config`, `context`, and `analysis_summary`.
 
+Connecting an evaluator forces complete candidate merges even when `scoring_speed` selects a fast subset. NaN and infinite scores are rejected. With `external_only`, a missing or invalid evaluation fails the sweep instead of silently ranking by internal weight statistics.
+
 ---
 
 ### Save Merged LoRA

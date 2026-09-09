@@ -158,6 +158,75 @@ def factor_svd(up, down, rank=0):
     return qb @ u[:, :n], s[:n], vh[:n] @ qa.T
 
 
+def merge_factors(factors, mode, cfg, source_indices=None, role_indices=None):
+    """Native factors of the merge, with signed strengths/alpha already baked.
+
+    Never materializes an output_width x input_width update. NP modifies only
+    the content down-factor; CT computes projected responses through factors
+    and returns its polar recomposition directly. The dense entry point below
+    remains the reference/fallback for unsupported payloads.
+    """
+    validate_method(mode, cfg)
+    if not factors:
+        raise UnsupportedMerge(f"{mode}: no factor inputs.")
+    ref = factors[0][0]
+    dtype = torch.float64 if ref.dtype == torch.float64 else torch.float32
+    pairs = []
+    shape = None
+    for up, down in factors:
+        if up.ndim != 2 or down.ndim != 2 or up.shape[1] != down.shape[0] or down.shape[0] < 1:
+            raise UnsupportedMerge(f"{mode}: expected nonempty compatible matrix factors.")
+        current = (up.shape[0], down.shape[1])
+        if shape is not None and shape != current:
+            raise UnsupportedMerge(f"{mode}: mismatched factor output shapes.")
+        shape = current
+        up, down = (f.to(device=ref.device, dtype=dtype) for f in (up, down))
+        if not torch.isfinite(up).all() or not torch.isfinite(down).all():
+            raise UnsupportedMerge(f"{mode}: non-finite input factors.")
+        pairs.append((up, down))
+    indices = list(range(len(pairs))) if source_indices is None else list(source_indices)
+    if len(indices) != len(pairs) or len(set(indices)) != len(indices):
+        raise UnsupportedMerge(f"{mode}: invalid factor source indices.")
+    if len(pairs) == 1:
+        return pairs[0]
+    if mode == "np_lora":
+        roles = [0, 1] if role_indices is None else role_indices
+        content_id, style_id = roles[cfg["subject_slot"] - 1], roles[cfg["style_slot"] - 1]
+        if content_id in indices and style_id in indices:
+            if len(pairs) != 2:
+                raise UnsupportedMerge("NP-LoRA requires a subject/style pair.")
+            if cfg["strength"]:
+                content_pos, style_pos = indices.index(content_id), indices.index(style_id)
+                style_up, style_down = pairs[style_pos]
+                _, s, vh = factor_svd(style_up, style_down, rank=cfg["rank"])
+                if s.numel() == style_down.shape[0] and cfg["energy"] == 1:
+                    # Full supported rank: span(V) == span(A.T). Canonical QR
+                    # depends only on A, so fused Q/K/V slices sharing A retain
+                    # bit-identical projected down factors. Checking support
+                    # first avoids inventing directions in rank-deficient B.
+                    vh = torch.linalg.qr(style_down.T, mode="reduced")[0].T
+                if s.numel() and cfg["energy"] < 1:
+                    n = int(torch.searchsorted(s.square().cumsum(0), s.square().sum() * cfg["energy"]).item()) + 1
+                    vh = vh[:n]
+                up, down = pairs[content_pos]
+                down = down - (cfg["strength"] / (1 + cfg["strength"])) * ((down @ vh.T) @ vh)
+                pairs[content_pos] = (up, down)
+        result = torch.cat([p[0] for p in pairs], 1), torch.cat([p[1] for p in pairs], 0)
+    else:
+        decomposed = [(p, factor_svd(*p, rank=cfg["residual_rank"])) for p in pairs]
+        live = [(p, svd) for p, svd in decomposed if svd[1].numel()]
+        if not live:
+            return ref.new_zeros((shape[0], 1), dtype=dtype), ref.new_zeros((1, shape[1]), dtype=dtype)
+        if len(live) == 1:
+            return live[0][0]  # same additive nonzero-contributor policy as dense
+        result = _ct_factor_output([svd for _, svd in live], cfg,
+            lambda uc: sum((uc.T @ up) @ down for (up, down), _ in live) / len(live))
+        result = cfg["scale"] * result[0], result[1]
+    if not all(torch.isfinite(f).all() for f in result):
+        raise UnsupportedMerge(f"{mode}: non-finite output factors.")
+    return result
+
+
 def merge(diffs_with_weights, mode, cfg, source_indices=None, role_indices=None, svd_factors=None):
     """Merge weighted 2D updates; bias/norm vectors remain strictly additive."""
     validate_method(mode, cfg)
@@ -207,9 +276,17 @@ def merge(diffs_with_weights, mode, cfg, source_indices=None, role_indices=None,
         return torch.zeros_like(weighted[0])
     if len(tasks) == 1:
         return tasks[0][0]  # unique/nonzero contributor: additive side policy
+    up, down = _ct_factor_output([(u, s, vh) for _, u, s, vh in tasks], cfg,
+                                lambda uc: sum(uc.T @ t[0] for t in tasks) / len(tasks))
+    return cfg["scale"] * (up @ down)
+
+
+def _ct_factor_output(tasks, cfg, projected_response):
+    """Shared CT direction math; callers supply an exact dense/factored response."""
+    dtype = tasks[0][0].dtype
     # SVD of concatenated thin bases equals eigendecomposition of the mean
     # projector, without allocating an output_width x output_width projector.
-    uc, support, _ = _svd(torch.cat([t[1] for t in tasks], dim=1))
+    uc, support, _ = _svd(torch.cat([t[0] for t in tasks], dim=1))
     k = min(cfg["common_rank"], support.numel())
     # Do not split a tied consensus eigenspace: its arbitrary SVD orientation
     # would otherwise make an unordered stack depend on adapter order/device.
@@ -220,13 +297,13 @@ def merge(diffs_with_weights, mode, cfg, source_indices=None, role_indices=None,
     uc = uc[:, :k]
     left, right, scales = [], [], []
     if uc.shape[1]:
-        response = sum((uc.T @ t[0] for t in tasks)) / len(tasks)
+        response = projected_response(uc)
         p, sc, vhc = _svd(response)
         if sc.numel():
             left.append(uc @ p)
             right.append(vhc.T)
             scales.append(sc.square().mean().sqrt().expand(sc.numel()))
-    for _, u, s, vh in tasks:
+    for u, s, vh in tasks:
         residual = u - uc @ (uc.T @ u)
         # Numerical cancellation must not become a unit direction in polar().
         residual = torch.where(residual.abs() < 8 * torch.finfo(dtype).eps,
@@ -241,10 +318,10 @@ def merge(diffs_with_weights, mode, cfg, source_indices=None, role_indices=None,
         right.append(vh.T[:, live])
         scales.append(s.square().mean().sqrt().expand(int(live.sum().item())))
     if not left:
-        return torch.zeros_like(weighted[0])
+        return tasks[0][0].new_zeros((tasks[0][0].shape[0], 1)), tasks[0][2].new_zeros((1, tasks[0][2].shape[1]))
     ul = _polar(torch.cat(left, dim=1))
     vr = _polar(torch.cat(right, dim=1))
-    return cfg["scale"] * ((ul * torch.cat(scales)) @ vr.T)
+    return ul * torch.cat(scales), vr.T
 
 
 class LoRAExperimentalOptions:

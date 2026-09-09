@@ -4551,6 +4551,62 @@ class TestCommunityHitPromotesToLocalMemory(unittest.TestCase):
 
 
 @unittest.skipIf(torch is None, "torch is not installed in this environment")
+class TestRenderEvaluatorIntegrity(unittest.TestCase):
+    def test_nonfinite_scores_are_not_valid_preferences(self):
+        for value in (float('nan'), float('inf'), -float('inf')):
+            with self.subTest(value=value), mock.patch.object(
+                    lora_optimizer, '_load_python_callable', return_value=lambda **kw: value):
+                result = lora_optimizer._run_autotuner_evaluator(
+                    {'module_path': 'test', 'callable_name': 'evaluate'},
+                    None, None, {}, {}, {})
+                self.assertIsNone(result['score'])
+                self.assertIn('error', result['details'])
+
+    def _run_sweep(self, evaluator, callback):
+        class Patcher:
+            def __init__(self):
+                self.model = types.SimpleNamespace(**{
+                    f'layer{i}': types.SimpleNamespace(weight=torch.zeros(8, 8))
+                    for i in range(6)})
+
+            def clone(self):
+                return Patcher()
+
+            def add_patches(self, patches, strength=1.0, strength_clip=None):
+                return list(patches)
+
+        gen = torch.Generator().manual_seed(331)
+        stack = [{'name': name, 'strength': 0.7, 'lora': {
+            key: value for i in range(6) for key, value in (
+                (f'alias_{i}.lora_up.weight', torch.randn(8, 2, generator=gen) * 0.1),
+                (f'alias_{i}.lora_down.weight', torch.randn(2, 8, generator=gen)),
+                (f'alias_{i}.alpha', torch.tensor(2.)))}}
+            for name in ('eval-a', 'eval-b')]
+        tuner = lora_optimizer.LoRAAutoTuner()
+        tuner._get_model_keys = lambda model: {f'alias_{i}': f'layer{i}.weight' for i in range(6)}
+        with mock.patch.object(lora_optimizer, '_load_python_callable', return_value=callback):
+            return tuner.auto_tune(Patcher(), stack, 1., top_n=2,
+                scoring_speed='turbo', scoring_svd='disabled', scoring_device='cpu',
+                memory_mode='disabled', cache_patches='disabled', diff_cache_mode='disabled',
+                record_dataset='disabled', community_cache='disabled', evaluator=evaluator)
+
+    def test_render_callback_receives_all_target_groups_at_turbo_speed(self):
+        counts = []
+        def callback(**kw):
+            counts.append(len(kw['lora_data']['model_patches']))
+            return 0.5
+        self._run_sweep({'module_path': 'test', 'callable_name': 'evaluate',
+                         'combine_mode': 'external_only'}, callback)
+        self.assertGreaterEqual(len(counts), 2)
+        self.assertEqual(set(counts), {6})
+
+    def test_external_only_failure_does_not_fall_back_to_weight_score(self):
+        with self.assertRaisesRegex(ValueError, 'external_only'):
+            self._run_sweep({'module_path': 'test', 'callable_name': 'evaluate',
+                             'combine_mode': 'external_only'}, lambda **kw: None)
+
+
+@unittest.skipIf(torch is None, "torch is not installed in this environment")
 class TestGroupPatchCache(unittest.TestCase):
     """Cross-candidate group patch cache: identical sweep results with the
     cache active vs disabled, and sound key semantics."""

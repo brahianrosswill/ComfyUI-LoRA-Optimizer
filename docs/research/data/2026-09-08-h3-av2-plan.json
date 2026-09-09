@@ -1,0 +1,1104 @@
+{
+  "version": 1,
+  "created_at": 1788864184.0877752,
+  "base": "http://127.0.0.1:8189",
+  "root": "/tmp/h3-autotuner-study-20260908",
+  "profile": "local",
+  "width": 640,
+  "height": 384,
+  "length": 124,
+  "steps": 20,
+  "source_sha256": {
+    "h3_benchmark.py": "013e8104e295c2bf2eb9593dee8e14fb4a19d33754bd02794ef708aa77ae3578",
+    "h3_render_study.py": "63706885f6a69675cd3fba72653b78402a0a52072b069efef7aa3af1479f400b"
+  },
+  "prompt_text": {
+    "boxing": "integrated_multimodal_description: [Shot 1] ASTROCINEMAV01K2T. Live-action, a medium-wide side view of an adult boxer in a grey tracksuit and red boxing gloves beside a suspended heavy punching bag in an empty gym. At normal real-time speed he throws two distinct straight punches into the bag, returns both gloves to his guard after each punch, then takes one step backward and stops. The bag swings away from each impact and back toward him. His feet remain grounded. No injuries or blood. One continuous stationary shot, warm overhead lamps, cool window fill, natural fabric texture.\n\noverall_soundscape: Two distinct dull impacts synchronized with glove contact, shoe squeaks, light chain rattling, and quiet gym ambience. No speech.\n\nnon_diegetic_music: N/A",
+    "padwork": "integrated_multimodal_description: [Shot 1] ASTROCINEMAV01K2T. Live-action, a stationary full-body side view of two adult athletes facing each other in an empty gym. On the left, an athlete wears a navy training shirt, black trousers and red boxing gloves. On the right, a trainer in a light grey shirt holds two black training pads. At normal real-time speed the athlete delivers one left straight punch to the raised pad, returns that glove to the guard, then lifts the right knee and delivers one right front kick to the lower pad. The trainer braces against each contact. The athlete puts the right foot back on the floor and both people settle into their original stance. Their clothing and positions remain consistent. One continuous shot, warm overhead lamps and cool window fill, natural fabric texture. No injuries or blood.\n\noverall_soundscape: One short padded thump at the glove contact, then a deeper padded thump at the foot contact. Quiet gym ambience, brief shoe squeaks and clothing rustle. No speech.\n\nnon_diegetic_music: N/A"
+  },
+  "exports": {
+    "combat_cinema": {
+      "additive": {
+        "source": "/tmp/h3-autotuner-study-20260908/combat-cinema-additive-01/merged.safetensors",
+        "sha256": "61cb3b79034b3bea791dba91f8ea619ca772882a6ccf3d23b9c6a1ed296c0a03",
+        "size": 620309608,
+        "manifest_sha256": "b16e61edd73d16bf9d4ed680f9a07431cf547cf8536b37e78f8e0ea9e796b328",
+        "api_name": "h3-autotuner-study-20260908/combat-cinema-additive-01.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-cinema-additive-01.safetensors"
+      },
+      "winner": {
+        "source": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/combat-cinema-winner-03/merged.safetensors",
+        "sha256": "3d5115ff1630ce21bf5c582e8232a8f78e5de869ad263236b49df45f19c7617e",
+        "size": 620309608,
+        "manifest_sha256": "cccf96bdc02e04c1df18f811388cf657b90abdf51e7c0b1d4df7d7c8a3a322e8",
+        "api_name": "h3-autotuner-study-20260908/combat-cinema-winner-03.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-cinema-winner-03.safetensors"
+      },
+      "np": {
+        "source": "/tmp/h3-autotuner-study-20260908/combat-cinema-np-01-native/merged.safetensors",
+        "sha256": "254df5991467a11c2543ea651b1b6806eb5b2d51121aed6c8eb83cc123e83e7d",
+        "size": 620309840,
+        "manifest_sha256": "8032003277c9fed0596a3bc80c385c09f0ab407f797d99eb263c0893f73eb146",
+        "api_name": "h3-autotuner-study-20260908/combat-cinema-np-01-native.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-cinema-np-01-native.safetensors"
+      },
+      "ct": {
+        "source": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/combat-cinema-ct-02-native/merged.safetensors",
+        "sha256": "0864db805bc66df1752230e15a6546c69465bace98d2479369fb4984dc2722b6",
+        "size": 1100257904,
+        "manifest_sha256": "d35b25f01ea278e307744d204dd1699f8cb75fca7a8198e6ae79f848616ab317",
+        "api_name": "h3-autotuner-study-20260908/combat-cinema-ct-02-native.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-cinema-ct-02-native.safetensors"
+      }
+    },
+    "combat_repair": {
+      "additive": {
+        "source": "/tmp/h3-autotuner-study-20260908/combat-repair-additive-01/merged.safetensors",
+        "sha256": "d6745018d90c5c30309818dbd8a3f10df48049c65388ba644ca7cf4476e85476",
+        "size": 620309600,
+        "manifest_sha256": "a22ae91c10eef8f2fcd91cb16fc617547c5c28b66720c67079e744a34f0430d1",
+        "api_name": "h3-autotuner-study-20260908/combat-repair-additive-01.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-repair-additive-01.safetensors"
+      },
+      "winner": {
+        "source": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/combat-repair-winner-02/merged.safetensors",
+        "sha256": "4029bd978d9ad8eac65a8c06f2594759fee21f5330b2d8083932629033438efa",
+        "size": 1263710080,
+        "manifest_sha256": "fd60b0c3fb5b150838ee93b8473d64073a4e7b34c39ea77c6eb56945c699d781",
+        "api_name": "h3-autotuner-study-20260908/combat-repair-winner-02.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-repair-winner-02.safetensors"
+      },
+      "np": {
+        "source": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/combat-repair-np-01-native/merged.safetensors",
+        "sha256": "383956ccd65c399b756f937d0687bb2f18df2c1b8ff84559d1886a37299870bc",
+        "size": 620309824,
+        "manifest_sha256": "a2799f8a0f40b6734e29e247d117b52697010bdd0415e1ed2eb1f458bcd02aab",
+        "api_name": "h3-autotuner-study-20260908/combat-repair-np-01-native.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-repair-np-01-native.safetensors"
+      },
+      "ct": {
+        "source": "/media/p5/ComfyUI-ZImage-LoRA-Merger/.h3-study-artifacts/20260908/combat-repair-ct-01-native/merged.safetensors",
+        "sha256": "83bc037af58b531df2c571dec3fe77942bbcd487151cdf6182ee20aaa067c8ef",
+        "size": 1100394080,
+        "manifest_sha256": "9706b76b6d1fc549084c891ea607d266215c9c764b9952501b4eb320b60ae563",
+        "api_name": "h3-autotuner-study-20260908/combat-repair-ct-01-native.safetensors",
+        "destination": "/media/p5/model_temps/h3-autotuner-study-20260908/combat-repair-ct-01-native.safetensors"
+      }
+    }
+  },
+  "jobs": [
+    {
+      "id": "av2-boxing-2026090803-combat-cinema-additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-cinema-winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-winner-03.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-repair-additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-repair-ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-ct-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-cinema-combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-cinema-second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-repair-np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-repair-second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "MiniMax H3/concept/Motion_Repair.safetensors",
+          0.6
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-repair-winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-winner-02.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-cinema-ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-ct-02-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-cinema-base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": []
+    },
+    {
+      "id": "av2-boxing-2026090803-combat-cinema-np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-repair-ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-ct-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-cinema-combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-repair-winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-winner-02.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-cinema-np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-cinema-second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-cinema-additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-cinema-base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": []
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-repair-second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "MiniMax H3/concept/Motion_Repair.safetensors",
+          0.6
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-repair-np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-cinema-ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-ct-02-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-repair-additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-boxing-2026090804-combat-cinema-winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-winner-03.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-cinema-ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-ct-02-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-repair-np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-repair-second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "MiniMax H3/concept/Motion_Repair.safetensors",
+          0.6
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-cinema-second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-cinema-combat",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-cinema-np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-repair-additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-cinema-winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-winner-03.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-cinema-base",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": []
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-cinema-additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-repair-ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-ct-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090811-combat-repair-winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-winner-02.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-repair-ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-ct-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-repair-np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-cinema-np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-np-01-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-cinema-ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-ct-02-native.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-cinema-additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-cinema-second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-repair-winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-winner-02.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-repair-second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "MiniMax H3/concept/Motion_Repair.safetensors",
+          0.6
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-cinema-combat",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "MiniMax H3/concept/H3_Combat_V2.safetensors",
+          0.8
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-cinema-winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-cinema-winner-03.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-repair-additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": [
+        [
+          "h3-autotuner-study-20260908/combat-repair-additive-01.safetensors",
+          1.0
+        ]
+      ]
+    },
+    {
+      "id": "av2-padwork-2026090812-combat-cinema-base",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "loras": []
+    }
+  ],
+  "cases": [
+    {
+      "pair": "combat_cinema",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-base"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-second"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-additive"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-winner"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-np"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-ct"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-base"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-second"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-additive"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-winner"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-np"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090803,
+      "job_id": "av2-boxing-2026090803-combat-repair-ct"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-base"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-second"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-additive"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-winner"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-np"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-ct"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "base",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-base"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "combat",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "second",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-repair-second"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "additive",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-repair-additive"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "winner",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-repair-winner"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "np",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-repair-np"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "ct",
+      "stage": "calibration",
+      "prompt": "boxing",
+      "seed": 2026090804,
+      "job_id": "av2-boxing-2026090804-combat-repair-ct"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-base"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "combat",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-second"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-additive"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-winner"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-np"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-ct"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-base"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "combat",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-repair-second"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-repair-additive"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-repair-winner"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-repair-np"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090811,
+      "job_id": "av2-padwork-2026090811-combat-repair-ct"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-base"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "combat",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-second"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-additive"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-winner"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-np"
+    },
+    {
+      "pair": "combat_cinema",
+      "variant": "ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-ct"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "base",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-base"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "combat",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-cinema-combat"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "second",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-repair-second"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "additive",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-repair-additive"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "winner",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-repair-winner"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "np",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-repair-np"
+    },
+    {
+      "pair": "combat_repair",
+      "variant": "ct",
+      "stage": "heldout",
+      "prompt": "padwork",
+      "seed": 2026090812,
+      "job_id": "av2-padwork-2026090812-combat-repair-ct"
+    }
+  ],
+  "protocol": {
+    "calibration": "boxing seeds 2026090803/04; preferences may inform candidate changes",
+    "heldout": "padwork seeds 2026090811/12; do not inspect before freezing the candidate policy",
+    "quality_source": "blinded full-video AND audio review, not descriptive metrics",
+    "np_roles": "Combat as content; capability pairs, NOT subject-identity validation",
+    "no_default_change_without_evidence": true
+  }
+}

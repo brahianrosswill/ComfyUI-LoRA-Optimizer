@@ -85,6 +85,59 @@ class ExperimentalMath(unittest.TestCase):
         dense_u, dense_s, dense_vh = torch.linalg.svd(-.7*up@down, full_matrices=False)
         torch.testing.assert_close((u2*s2)@vh2, (dense_u[:, :2]*dense_s[:2])@dense_vh[:2])
 
+    def test_native_factor_outputs_match_dense_reference_without_dense_svd(self):
+        pairs = [(self.rand(40, 2) * -.7, self.rand(2, 30)),
+                 (self.rand(40, 3) * .4, self.rand(3, 30))]
+        dense = [(u @ a, 1.) for u, a in pairs]
+        for mode, cfg in (("np_lora", NP), ("np_lora", {**NP, "rank": 1, "energy": .8}),
+                          ("ct_merge", CT), ("ct_merge", {**CT, "common_rank": 0, "scale": .6})):
+            with self.subTest(mode=mode, cfg=cfg):
+                expected = exp.merge(dense, mode, cfg)
+                with mock.patch.object(exp, "_svd", wraps=exp._svd) as svd:
+                    up, down = exp.merge_factors(pairs, mode, cfg)
+                torch.testing.assert_close(up @ down, expected)
+                self.assertLessEqual(down.shape[0], 5)
+                self.assertTrue(all(tuple(call.args[0].shape) != (40, 30) for call in svd.call_args_list))
+
+    def test_native_factor_zero_cancellation_and_role_policies(self):
+        up, down = self.rand(12, 2), self.rand(2, 9)
+        cases = [[(up, down), (-up, down)], [(up * 0, down), (up * 0, down)],
+                 [(up, down), (up * 0, down)], [(up, down), (up, down)]]
+        for pairs in cases:
+            for mode, cfg in (("np_lora", NP), ("ct_merge", CT)):
+                with self.subTest(mode=mode, nonzero=[bool(u.any()) for u, _ in pairs]):
+                    expected = exp.merge([(u @ a, 1.) for u, a in pairs], mode, cfg)
+                    u, a = exp.merge_factors(pairs, mode, cfg)
+                    torch.testing.assert_close(u @ a, expected)
+                    self.assertGreater(a.shape[0], 0)  # stock-loader-safe zero representation
+        pairs = [(up, down), (self.rand(12, 3), self.rand(3, 9))]
+        expected = exp.merge([(u @ a, 1.) for u, a in pairs], "np_lora", NP)
+        u, a = exp.merge_factors(pairs[::-1], "np_lora", NP, [8, 3], [3, 8])
+        torch.testing.assert_close(u @ a, expected)
+        u, a = exp.merge_factors(pairs[:1], "ct_merge", {**CT, "scale": 3.})
+        torch.testing.assert_close(u @ a, up @ down)
+
+    def test_native_np_zero_projection_preserves_exact_concatenation(self):
+        pairs = [(self.rand(12, 2), self.rand(2, 9)), (self.rand(12, 3), self.rand(3, 9))]
+        with mock.patch.object(exp, "factor_svd", side_effect=AssertionError("no decomposition")):
+            u, a = exp.merge_factors(pairs, "np_lora", {**NP, "strength": 0})
+        torch.testing.assert_close(u, torch.cat([p[0] for p in pairs], 1), atol=0, rtol=0)
+        torch.testing.assert_close(a, torch.cat([p[1] for p in pairs], 0), atol=0, rtol=0)
+
+    def test_native_np_full_style_subspace_has_canonical_shared_down_factor(self):
+        # H3 Q/K/V slices share A, but have different B. Full-rank style
+        # projection must produce exactly reusable down factors for refusion.
+        content_a, style_a = self.rand(2, 30), self.rand(3, 30)
+        outputs = []
+        for _ in range(3):
+            pairs = [(self.rand(40, 2), content_a), (self.rand(40, 3), style_a)]
+            u, a = exp.merge_factors(pairs, "np_lora", NP)
+            expected = exp.merge([(b @ d, 1.) for b, d in pairs], "np_lora", NP)
+            torch.testing.assert_close(u @ a, expected)
+            outputs.append(a)
+        self.assertTrue(torch.equal(outputs[0], outputs[1]))
+        self.assertTrue(torch.equal(outputs[0], outputs[2]))
+
     def test_ct_permutation_and_scale(self):
         ds = [(self.rand(), 1.), (self.rand(), -.3), (self.rand(), 2.)]
         result = exp.merge(ds, "ct_merge", CT)
@@ -256,10 +309,59 @@ class ExperimentalIntegration(unittest.TestCase):
             self.assertLess(float((delta-expected).norm()/expected.norm()), 2e-5)
             torch.testing.assert_close(delta, expected, atol=2e-4, rtol=2e-4)
 
+    def test_native_factor_merge_skips_pass_two_dense_preparation_and_compression(self):
+        self.model.model.layer = torch.nn.Linear(48, 64)
+        g = torch.Generator().manual_seed(83)
+        self.stack = []
+        dense = []
+        for i, (rank, alpha, strength) in enumerate(((2, -3., -.7), (3, 2., .4))):
+            up = torch.randn(64, rank, generator=g).bfloat16()
+            down = torch.randn(rank, 48, generator=g).bfloat16()
+            self.stack.append(dict(name=str(i), strength=strength, lora={
+                "layer.lora_A.weight": down, "layer.lora_B.weight": up, "layer.alpha": torch.tensor(alpha)}))
+            dense.append((up.float() @ down.float() * (alpha / rank), strength))
+        for mode, cfg in (("np_lora", NP), ("ct_merge", CT)):
+            for compression in ("disabled", "smart", "aggressive"):
+                with self.subTest(mode=mode, compression=compression), mock.patch.object(
+                        self.opt, "_prepare_group_diffs", wraps=self.opt._prepare_group_diffs) as prepare, mock.patch.object(
+                        self.opt, "_compress_to_lowrank", wraps=self.opt._compress_to_lowrank) as compress:
+                    result = self.opt.optimize_merge(self.model, self.stack, 1., optimization_mode="global",
+                        merge_strategy_override=mode, _experimental_config=cfg, cache_patches="disabled",
+                        patch_compression=compression)
+                    self.assertEqual(prepare.call_count, 1)  # analysis only, not Pass 2
+                    compress.assert_not_called()
+                    patch = result[4]["model_patches"]["layer.weight"]
+                    self.assertIsInstance(patch, m.LoRAAdapter)
+                    self.assertEqual(patch.weights[0].dtype, torch.float32)
+                    self.assertLessEqual(patch.weights[1].shape[0], 5)
+                    expected = exp.merge(dense, mode, cfg)
+                    self.assertLess(float((self.delta(result[4]) - expected).norm() / expected.norm()), 2e-5)
+
     def test_single_active_adapter_reports_skipped_experiments(self):
         self.stack[0]["strength"] = 0.
         result = self.tune(experimental_options=exp.DEFAULTS)
         self.assertIn("Experimental candidates skipped", result[2])
+
+    def test_experimental_compression_does_not_round_away_small_changes(self):
+        self.model.model.layer = torch.nn.Linear(48, 64)
+        generator = torch.Generator().manual_seed(72)
+        self.stack = []
+        dense = []
+        for i, weight in enumerate((.03, .8)):
+            up = torch.randn(64, 2, generator=generator).bfloat16()
+            down = torch.randn(2, 48, generator=generator).bfloat16()
+            self.stack.append(dict(name=str(i), strength=weight, lora={
+                "layer.lora_A.weight": down, "layer.lora_B.weight": up}))
+            dense.append((up.float() @ down.float(), weight))
+        for mode, cfg in (("np_lora", NP), ("ct_merge", CT)):
+            with self.subTest(mode=mode):
+                expected = exp.merge(dense, mode, cfg)
+                result = self.opt.optimize_merge(self.model, self.stack, 1.,
+                    optimization_mode="global", merge_strategy_override=mode,
+                    _experimental_config=cfg, patch_compression="aggressive",
+                    cache_patches="disabled")
+                delta = self.delta(result[4])
+                self.assertLess(float((delta - expected).norm() / expected.norm()), 2e-5)
 
     def test_legacy_and_simple_tuner_data_bridges_replay_experiments(self):
         result = self.tune(experimental_options=exp.DEFAULTS, output_mode="tuning_only")

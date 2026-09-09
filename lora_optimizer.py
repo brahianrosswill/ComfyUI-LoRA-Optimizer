@@ -250,7 +250,7 @@ AUTOTUNER_MEMORY_VERSION = 1
 # (weighted_sum), which preserves the dominant LoRA without oversaturating (it defines
 # the auto-strength reference). Changes per-prefix mode selection for imbalanced stacks;
 # bump re-tunes them.
-AUTOTUNER_ALGO_VERSION = "1.13.0"  # H3 fidelity, dense payloads, preprocessing propagation
+AUTOTUNER_ALGO_VERSION = "1.13.1"  # Cache revision: truthful conflict-sparsification skips/scoring
 
 
 def _warn_stale_tuner_data(tuner_data, context):
@@ -1167,6 +1167,16 @@ class _LoRAMergeBase:
             if 'lora_te1_' in keys_str or 'lora_te2_' in keys_str or any('text_encoder_2.' in k for k in keys):
                 return 'sdxl'
             return 'sd15'
+
+        # In a mixed diffusion/TE bundle, CLIP's generic self_attn.q_proj
+        # must not claim an otherwise ambiguous H3/DiT adapter as ACE-Step.
+        # Keep the legacy TE-only detector and the SD1/SDXL handling above.
+        diffusion_keys = [k for k in keys if not re.match(
+            r'^(?:base_model\.model\.)*(?:text_encoders?\.|text_encoder_2\.|'
+            r'lora_te[12]?_|clip_[lg]\.)', k)]
+        if diffusion_keys:
+            keys = diffusion_keys
+            keys_str = ' '.join(k.lower() for k in keys)
 
         # Ideogram 4: NextDiT-family single-stream DiT with the same
         # layers.N.attention.qkv pattern as Z-Image (Lumina2) — MUST be
@@ -4882,7 +4892,8 @@ class _LoRAMergeBase:
                      sparsification_density=0.7, sparsification_generator=None,
                      merge_refinement="none", dare_dampening=0.0,
                      keep_on_gpu=False, preserve_flags=None, experimental_config=None,
-                     source_indices=None, role_indices=None, experimental_factors=None):
+                     source_indices=None, role_indices=None, experimental_factors=None,
+                     sparsification_stats=None):
         """
         Merges a list of diffs with their weights.
         When compute_device is given, tensors are moved there for faster ops,
@@ -4896,6 +4907,8 @@ class _LoRAMergeBase:
         fraction, trimmed by sparsification, or deleted by TIES sign-election — but
         only that tagged LoRA, leaving ordinary multi-LoRA blends untouched.
         """
+        if sparsification_stats is not None:
+            sparsification_stats.update(applied=False, skipped=False)
         if len(diffs_with_weights) == 0:
             return None
         if preserve_flags is None:
@@ -4941,7 +4954,8 @@ class _LoRAMergeBase:
                     keep_on_gpu=True, preserve_flags=None,
                     experimental_config=experimental_config,
                     source_indices=rest_indices, role_indices=role_indices,
-                    experimental_factors=experimental_factors)
+                    experimental_factors=experimental_factors,
+                    sparsification_stats=sparsification_stats)
                 result = blended.to(device=dev, dtype=torch.float32) + preserved_sum
             else:
                 result = preserved_sum
@@ -4960,6 +4974,9 @@ class _LoRAMergeBase:
             if not torch.isfinite(result).all():
                 raise _experimental.UnsupportedMerge(f"{mode}: output dtype overflow.")
             return result.cpu() if to_cpu else result
+
+        if sparsification_stats is not None:
+            sparsification_stats["applied"] = sparsification != "disabled" and sparsification_density < 1.0
 
         # DARE/DELLA preprocessing for non-TIES modes
         # (TIES replaces its trim step instead — handled in the ties branch)
@@ -4980,7 +4997,8 @@ class _LoRAMergeBase:
                 if conflict_frac > 0.40:
                     del conflict_mask
                     is_conflict = False
-                    self._sparsification_skipped = getattr(self, '_sparsification_skipped', 0) + 1
+                    if sparsification_stats is not None:
+                        sparsification_stats.update(applied=False, skipped=True)
 
             if is_conflict:
                 is_dare = sparsification == "dare_conflict"
@@ -4997,7 +5015,9 @@ class _LoRAMergeBase:
                                        **kwargs)
                     diffs_with_weights[idx] = (diff.to(dtype), weight)
                 del conflict_mask
-            else:
+            elif sparsification in ("dare", "della"):
+                # A conflict-aware guard skip must NOT fall through to the
+                # unconditional DELLA branch (including for dare_conflict).
                 is_dare = sparsification == "dare"
                 sparsify_fn = (self._dare_sparsify if is_dare
                                else self._della_sparsify)
@@ -6317,6 +6337,10 @@ def _run_autotuner_evaluator(evaluator, model, clip, lora_data, config, analysis
         logging.warning(f"[LoRA AutoTuner] External evaluator returned invalid score: {score!r}")
         return {"score": None, "details": details}
 
+    if not math.isfinite(score):
+        logging.warning("[LoRA AutoTuner] External evaluator returned a non-finite score.")
+        return {"score": None, "details": {"error": "Non-finite evaluator score", "result": details}}
+
     if score < 0.0 or score > 1.0:
         # Silent clamping saturates everything to 1.0 for evaluators on a
         # 0-100/logit scale — with external_only the ranking then collapses
@@ -6758,6 +6782,8 @@ class LoRAOptimizer(_LoRAMergeBase):
         # byte-identical to pre-feature keys (existing caches remain valid).
         if star_eta < 100.0 or tame_layers > 0.0:
             h.update(f"|clean={star_eta},{tame_layers},{tame_threshold}".encode())
+        if sparsification in ("dare_conflict", "della_conflict"):
+            h.update(b"|conflict_skip=v2")
         return h.hexdigest()[:16]
 
     @staticmethod
@@ -7934,6 +7960,49 @@ class LoRAOptimizer(_LoRAMergeBase):
             "weights": per_lora_scales,
         }
 
+    def _build_experimental_factor_patch(self, target_group, active_loras, raw_n_loras,
+                                         mode, cfg, role_indices, model, clip,
+                                         compute_device, model_scale=1.0, rank_limit=0):
+        """Exact experimental low-rank output, or None for the dense fallback.
+
+        Caller excludes cleaning, conflict masks and preserve overlays. Retain
+        conservative fallback when any participant is absent/unsupported; never
+        silently omit a dense, filtered or malformed contributor.
+        """
+        is_clip = target_group["is_clip"]
+        try:
+            shape = self._resolve_target_shape(target_group["target_key"], is_clip, model, clip)
+        except (AttributeError, RuntimeError, IndexError):
+            return None
+        if len(shape) != 2 or (any(item.get("_precomputed_diffs") for item in active_loras)
+                and not self._virtual_group_is_linear_ok(target_group, active_loras, model, clip)):
+            return None
+        pairs, weights = [], {}
+        for i, item in enumerate(active_loras):
+            info = self._build_exact_linear_patch(target_group, [item], raw_n_loras, "weighted_sum",
+                                                  is_clip_key=is_clip, model_scale=model_scale)
+            if info is None:
+                return None
+            up, down = info["patch"].weights[:2]
+            if (up.ndim != 2 or down.ndim != 2 or (up.shape[0], down.shape[1]) != tuple(shape)
+                    or 2 * down.shape[0] >= min(shape)):
+                return None
+            pairs.append((up.to(compute_device), down.to(compute_device)))
+            weights[i] = info["weights"][0]
+        up, down = _experimental.merge_factors(pairs, mode, cfg,
+                                              source_indices=list(weights), role_indices=role_indices)
+        # Only use factors when they are actually smaller. Near-full-rank
+        # updates retain the established dense representation/compression path.
+        if (up.numel() + down.numel() >= shape[0] * shape[1]
+                or (rank_limit > 0 and down.shape[0] > rank_limit)):
+            return None
+        norm_sq = torch.trace((up.T @ up) @ (down @ down.T)).clamp(min=0)
+        if not torch.isfinite(norm_sq):
+            raise _experimental.UnsupportedMerge(f"{mode}: non-finite factored merge norm.")
+        rank = int(down.shape[0])
+        return {"patch": LoRAAdapter(set(), (up, down, float(rank), None, None, None)),
+                "weights": weights, "merged_norm": float(norm_sq.sqrt())}
+
     @staticmethod
     @functools.lru_cache(maxsize=4096)
     def _extract_block_name(prefix):
@@ -8771,7 +8840,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                                             star_eta, tame_layers, tame_threshold)
         cache_key = f"{cache_key}|base={self._model_revision(model, clip)}"
         if _experimental_config is not None:
-            cache_key += "|experimental=" + self._stable_data_hash(_experimental_config)
+            cache_key += "|experimental=v3:" + self._stable_data_hash(_experimental_config)
         if cache_patches == "enabled" and cache_key in self._merge_cache:
             model_patches, clip_patches, report, clip_strength_out, lora_data = self._merge_cache[cache_key]
             cached_output_strength = output_strength
@@ -9390,9 +9459,37 @@ class LoRAOptimizer(_LoRAMergeBase):
                         pf_conflict, max(pf_n_loras, 1), False,
                         linear_stats[0], linear_stats[1],
                         None,  # LoRAAdapter patches are scored from factors
+                        {"applied": False, "skipped": False},
                     )
                     _gc_store(_gc_key, result, is_clip_key)
                     return result
+
+            if (pf_mode in _experimental.MODES and not stack_has_conflict_modes
+                    and not stack_has_preserve and star_eta >= 100.0 and tame_layers <= 0.0):
+                _t_factor = _prof_t() if _merge_prof is not None else 0.0
+                info = self._build_experimental_factor_patch(
+                    target_group, active_loras, raw_n, pf_mode, _experimental_config,
+                    experimental_roles, model, clip, compute_device, model_scale=model_auto_scale,
+                    rank_limit=compress_rank if patch_compression == "aggressive" else 0)
+                if info is not None:
+                    if _merge_prof is not None:
+                        _prof_add("experimental_factors", _prof_t() - _t_factor)
+                    patch = info["patch"]
+                    if should_keep:
+                        p_bytes = self._estimate_single_patch_bytes(patch)
+                        if gpu_patch_bytes + p_bytes <= vram_budget_bytes:
+                            gpu_patch_bytes += p_bytes
+                        else:
+                            patch = self._move_patch_to_device(patch, torch.device("cpu"))
+                    else:
+                        patch = self._move_patch_to_device(patch, torch.device("cpu"))
+                    weights = info["weights"]
+                    input_norms_mean = sum(
+                        math.sqrt(max(pf.get("per_lora_norm_sq", {}).get(i, 0.0), 0.0)) * abs(w)
+                        for i, w in weights.items()) / len(weights)
+                    return (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict,
+                            max(pf_n_loras, 1), False, input_norms_mean, info["merged_norm"],
+                            None, {"applied": False, "skipped": False})
 
             _t_prep = _prof_t() if _merge_prof is not None else 0.0
             prepared = self._prepare_group_diffs(
@@ -9473,6 +9570,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                         if (up.ndim == down.ndim == 2 and (up.shape[0], down.shape[1]) == tuple(d.shape)
                                 and 2 * down.shape[0] < min(d.shape)):
                             experimental_factors[i] = (up, down)
+            sparsification_stats = {}
             merged_diff = self._merge_diffs(
                 diffs_list, pf_mode,
                 density=pf_density, majority_sign_method=pf_sign,
@@ -9491,6 +9589,7 @@ class LoRAOptimizer(_LoRAMergeBase):
                 source_indices=diff_indices,
                 role_indices=experimental_roles,
                 experimental_factors=experimental_factors,
+                sparsification_stats=sparsification_stats,
             )
             if _merge_prof is not None:
                 _prof_add(f"merge:{pf_mode}", _prof_t() - _t_merge)
@@ -9498,6 +9597,35 @@ class LoRAOptimizer(_LoRAMergeBase):
             diffs_list.clear()  # Free input diffs from GPU
             if merged_diff is None:
                 return None
+            # The guard was evaluated on the actual prepared updates, not on
+            # sampled Pass-1 conflict statistics. If it skipped, an otherwise
+            # plain linear merge can retain exactly the same native factors as
+            # its disabled-sparsification counterpart. Avoid rank padding/SVD
+            # and representation-dependent scoring. Cleaned/masked/cached
+            # dense inputs, preserved overlays and spatial targets stay dense.
+            if (sparsification_stats.get("skipped")
+                    and pf_mode in ("weighted_sum", "weighted_average", "normalize")
+                    and merge_refinement == "none" and not stack_has_preserve
+                    and not stack_has_conflict_modes and _diff_cache is None
+                    and star_eta >= 100.0 and tame_layers <= 0.0
+                    and merged_diff.ndim == 2
+                    and (not has_virtual_loras or self._virtual_group_is_linear_ok(
+                        target_group, active_loras, model, clip))):
+                info = self._build_exact_linear_patch(
+                    target_group, active_loras, raw_n, pf_mode,
+                    is_clip_key=is_clip_key, model_scale=model_auto_scale)
+                if info is not None:
+                    patch = info["patch"]
+                    if should_keep:
+                        p_bytes = self._estimate_single_patch_bytes(patch)
+                        if gpu_patch_bytes + p_bytes <= vram_budget_bytes:
+                            patch = self._move_patch_to_device(patch, compute_device)
+                            gpu_patch_bytes += p_bytes
+                    result = (target_key, is_clip_key, patch, pf_mode, label_prefix,
+                              pf_conflict, max(pf_n_loras, 1), False,
+                              input_norms_mean, merged_norm, None, sparsification_stats)
+                    _gc_store(_gc_key, result, is_clip_key)
+                    return result
             # "smart" compression is only allowed when the result has a known
             # rank upper bound that fits the budget and no rank-increasing mask
             # or refinement was applied. Dense captured diffs and LoKr/LoHa do
@@ -9519,7 +9647,12 @@ class LoRAOptimizer(_LoRAMergeBase):
                                 (patch_compression == "smart" and smart_compression_safe)))
             # Downcast from float32 to native weight dtype (e.g. fp16/bf16)
             # to halve memory — ComfyUI handles dtype conversion when applying
-            if storage_dtype is not None and merged_diff.dtype != storage_dtype:
+            # Experimental corrections can be smaller than BF16 rounding.
+            # Preserve FP32 through SVD and factor storage when compressing
+            # these opt-in methods; otherwise rounding can dominate NP's change.
+            preserve_experimental_precision = should_compress and pf_mode in _experimental.MODES
+            if (not preserve_experimental_precision and storage_dtype is not None
+                    and merged_diff.dtype != storage_dtype):
                 converted = merged_diff.to(storage_dtype)
                 # Finite fp32 merges can overflow native fp16 storage. Keep fp32
                 # in that case; never create an infinite patch to save memory.
@@ -9572,13 +9705,14 @@ class LoRAOptimizer(_LoRAMergeBase):
                     gpu_patch_bytes += p_bytes
                 else:
                     patch = self._move_patch_to_device(patch, torch.device("cpu"))
-            result = (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm, score_stats)
+            result = (target_key, is_clip_key, patch, pf_mode, label_prefix, pf_conflict, max(pf_n_loras, 1), is_compressed, input_norms_mean, merged_norm, score_stats, sparsification_stats)
             _gc_store(_gc_key, result, is_clip_key)
             return result
 
         lowrank_count = 0
         total_input_energy = 0.0
         total_merged_energy = 0.0
+        sparsification_summary = {"applied_groups": 0, "skipped_conflict_groups": 0}
 
         _overwrite_count = 0
         _overwrite_examples = []
@@ -9590,7 +9724,11 @@ class LoRAOptimizer(_LoRAMergeBase):
             if result is None:
                 return
             (target_key, is_clip_key, patch, used_mode, prefix, conflict,
-             n_loras, is_compressed, inp_norm, mrg_norm, score_stats) = result
+             n_loras, is_compressed, inp_norm, mrg_norm, score_stats, sp_stats) = result
+            # Aggregate on the collecting thread, including cache hits; instance
+            # counters race on CPU and lose skipped decisions on replay.
+            sparsification_summary["applied_groups"] += int(sp_stats.get("applied", False))
+            sparsification_summary["skipped_conflict_groups"] += int(sp_stats.get("skipped", False))
             total_input_energy += inp_norm
             total_merged_energy += mrg_norm
 
@@ -9754,11 +9892,10 @@ class LoRAOptimizer(_LoRAMergeBase):
                          f"{strategy_counts.get('weighted_average', 0)} avg, "
                          f"{strategy_counts.get('consensus', 0)} cons, "
                          f"{strategy_counts.get('ties', 0)} ties")
-        spars_skipped = getattr(self, '_sparsification_skipped', 0)
+        spars_skipped = sparsification_summary["skipped_conflict_groups"]
         if spars_skipped > 0:
             logging.info(f"[LoRA Optimizer]   Conflict-aware sparsification skipped for "
                          f"{spars_skipped} groups (base-rate noise from orthogonal LoRAs)")
-            self._sparsification_skipped = 0
         if compressed_count > 0:
             passthrough_count = lowrank_count - compressed_count
             logging.info(f"[LoRA Optimizer]   SVD-compressed: {compressed_count} patches "
@@ -9969,6 +10106,9 @@ class LoRAOptimizer(_LoRAMergeBase):
                 "bake_strength_clip": clip_strength_out,
             },
         }
+
+        if sparsification != "disabled":
+            lora_data["sparsification_summary"] = dict(sparsification_summary)
 
         # Cache patches for re-use (single entry to limit memory)
         if _experimental_config is not None:
@@ -12952,6 +13092,9 @@ class LoRAAutoTuner(LoRAOptimizer):
         import hashlib, json
         from functools import partial
 
+        if evaluator is not None and scoring_speed != "full":
+            logging.info("[LoRA AutoTuner] External evaluation requires complete candidate merges; prefix subsampling disabled.")
+            scoring_speed = "full"
         experimental_options = _experimental.options(experimental_options)
         if experimental_options is not None:
             # Community rankings have no experimental namespace. Strength-
@@ -13186,7 +13329,7 @@ class LoRAAutoTuner(LoRAOptimizer):
 
         evaluator_hash = ""
         if evaluator is not None:
-            evaluator_hash = (self._stable_data_hash(evaluator) + "|"
+            evaluator_hash = ("v2|" + self._stable_data_hash(evaluator) + "|"
                               + _evaluator_file_fingerprint(evaluator.get("module_path")))
 
         # Check AutoTuner cache
@@ -13205,10 +13348,10 @@ class LoRAAutoTuner(LoRAOptimizer):
             f"|spd={scoring_speed}|base={self._model_revision(model, clip)}"
             f"|asf={auto_strength_floor}|ds={decision_smoothing}|eh={evaluator_hash}"
             f"|sf={scoring_formula}|ssg={smooth_slerp_gate}|ctx={analysis_context}"
-            f"|mm={memory_mode}|cc={community_cache}".encode()
+            f"|mm={memory_mode}|cc={community_cache}|algo={AUTOTUNER_ALGO_VERSION}".encode()
         ).hexdigest()[:16]
         if experimental_options is not None:
-            at_cache_key += "|experimental=" + self._stable_data_hash(experimental_options)
+            at_cache_key += "|experimental=v3:" + self._stable_data_hash(experimental_options)
         # selection is deliberately NOT in the key: changing it replays the
         # selected config from the cached sweep instead of re-sweeping.
         # clear_and_run must always recompute — never serve the in-node cache.
@@ -14203,10 +14346,15 @@ class LoRAAutoTuner(LoRAOptimizer):
                     lora_svd=compute_lora_svd,
                     _inline_stats=_inline)
             t_score_elapsed = time.time() - t_score
+            cand_sparsification = lora_data.get("sparsification_summary") if lora_data else None
+            # Unknown/legacy payloads keep the old conservative discount.
+            # A verified no-op cannot artificially inflate output sparsity.
+            sparsification_applied = (config["sparsification"] != "disabled" and
+                (cand_sparsification is None or cand_sparsification["applied_groups"] > 0))
             # --- Post-scoring adjustments ---
             if scoring_formula == "v1":
                 # Legacy scoring: conditional sparsity discount, old composite weights
-                if config["sparsification"] != "disabled":
+                if sparsification_applied:
                     measured["sparsity_fit"] *= 0.5
                 cv_s = max(0.0, 1.0 - measured["norm_cv"])
                 if measured.get("effective_rank_mean", 0) > 0:
@@ -14232,7 +14380,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                 measured["energy_ratio"] = energy_ratio
                 measured["energy_preservation"] = energy_preservation
                 # Discount sparsity_fit when sparsification artificially inflates it
-                if config["sparsification"] != "disabled":
+                if sparsification_applied:
                     measured["sparsity_fit"] *= 0.5
                 # Recompute composite score.
                 # Energy preservation is gated on orthogonality, not on SVD
@@ -14269,6 +14417,10 @@ class LoRAAutoTuner(LoRAOptimizer):
             ) if evaluator else None
             external_score = external_eval.get("score") if external_eval else None
             combine_mode = evaluator.get("combine_mode", "blend") if evaluator else "blend"
+            if evaluator is not None and combine_mode == "external_only" and external_score is None:
+                raise ValueError(
+                    "AutoTuner external_only evaluation failed; refusing to rank by weight statistics. "
+                    f"Details: {external_eval.get('details') if external_eval else 'Missing evaluator configuration'}")
             eval_weight = max(0.0, min(1.0, float(evaluator.get("weight", 0.5)))) if evaluator else 0.5
             final_score = measured["composite_score"]
             if external_score is not None:
@@ -14339,6 +14491,8 @@ class LoRAAutoTuner(LoRAOptimizer):
                     "effective_rank_mean": measured.get("effective_rank_mean", 0.0),
                     "sparsity_mean": measured.get("sparsity_mean", 0.0),
                     "norm_cv": measured.get("norm_cv", 0.0),
+                    **({"sparsification_summary": dict(cand_sparsification)}
+                       if cand_sparsification is not None else {}),
                     **({"energy_ratio": measured.get("energy_ratio", 1.0),
                         "energy_preservation": measured.get("energy_preservation", 0.5)}
                        if scoring_formula == "v2" else
@@ -14854,6 +15008,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                     spars_info += f", dampening={c['dare_dampening']}"
                 spars_info += ")"
                 lines.append(f"    Sparsification: {spars_info}")
+                if "sparsification_summary" in m:
+                    sp = m["sparsification_summary"]
+                    lines.append(f"    Actual: {sp['applied_groups']} groups sparsified, "
+                                 f"{sp['skipped_conflict_groups']} conflict-guard skips")
             else:
                 lines.append(f"    Sparsification: disabled")
             strat_set = c.get('strategy_set', 'full')
@@ -14888,7 +15046,7 @@ class LoRAAutoTuner(LoRAOptimizer):
                    experimental_options=None):
         evaluator_hash = ""
         if evaluator is not None:
-            evaluator_hash = (cls._stable_data_hash(evaluator) + "|"
+            evaluator_hash = ("v2|" + cls._stable_data_hash(evaluator) + "|"
                               + _evaluator_file_fingerprint(evaluator.get("module_path")))
         identity = (cls._model_revision(model, clip), cls._compute_cache_key(lora_stack, output_strength, clip_strength_multiplier, 'disabled'), cls._per_lora_merge_signature(lora_stack),
                 output_strength, clip_strength_multiplier, top_n,
@@ -14896,9 +15054,10 @@ class LoRAAutoTuner(LoRAOptimizer):
                 architecture_preset,
                 vram_budget, community_cache, scoring_speed, scoring_formula, output_mode,
                 auto_strength_floor, decision_smoothing, smooth_slerp_gate, evaluator_hash,
-                memory_mode, selection, record_dataset, star_eta, tame_layers, tame_threshold)
+                memory_mode, selection, record_dataset, star_eta, tame_layers, tame_threshold,
+                AUTOTUNER_ALGO_VERSION)
         exp = _experimental.options(experimental_options)
-        return identity + (cls._stable_data_hash(exp),) if exp is not None else identity
+        return identity + ("experimental-v3", cls._stable_data_hash(exp)) if exp is not None else identity
 
     def _run_phase1_for_estimator(self, model, clip, lora_stack,
                                   normalize_keys="enabled",

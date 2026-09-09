@@ -171,7 +171,48 @@ for mode, cfg in (('np_lora', dict(version=1, subject_slot=1, style_slot=2, stre
                 actual = comfy.lora.calculate_weight(reloaded_patcher.patches[key], weight.clone(), key)
                 torch.testing.assert_close(actual, expected, atol=3e-6, rtol=3e-5, msg=mode + ': ' + key)
     del exp_result, loaded_model, loaded_exp_clip, reloaded_patcher
-print("PASS: real ComfyUI mapping/application, partial QKV, signed alpha, dense AdaLN/bias/norm, LoCon, fp32 export, atomic rejection, signed CLIP weights/bias, NP-LoRA/CT-Merging round trips and metadata")
+# Larger tiny matrices exercise native experimental factors rather than the
+# dense fallback, including partial-QKV refusion and signed CLIP strengths.
+native_base = ModelPatcher(TinyH3(), torch.device('cpu'), torch.device('cpu'))
+native_base.model.diffusion_model.blocks[0].attn.qkv_proj = torch.nn.Linear(48, 768)
+native_clip = TinyClip()
+getattr(native_clip.cond_stage_model.clip_l.transformer.text_model.encoder.layers, '0').self_attn.q_proj = torch.nn.Linear(48, 64)
+native_stack = []
+for i, (rank, alpha, strength, te_strength) in enumerate(((2, -3., -.7, -.3), (3, 2., .4, .6))):
+    tensors = {}
+    for module, rows in ((prefix + '.to_q', 256), (te, 64)):
+        tensors.update({module + '.lora_A.weight': torch.randn(rank, 48).bfloat16(),
+                        module + '.lora_B.weight': (torch.randn(rows, rank) * .01).bfloat16(),
+                        module + '.alpha': torch.tensor(alpha)})
+    native_stack.append(dict(name='native-' + str(i), lora=tensors, strength=strength,
+                             clip_strength=te_strength, h3_layout='comfy', _architecture='minimax_h3'))
+for mode, cfg in (('np_lora', dict(version=1, subject_slot=1, style_slot=2, strength=.5, rank=0, energy=1.)),
+                  ('ct_merge', dict(version=1, common_rank=1, residual_rank=2, scale=.6))):
+    native_result = opt.optimize_merge(native_base, native_stack, 1.3, clip=native_clip,
+        optimization_mode='global', merge_strategy_override=mode, _experimental_config=cfg,
+        patch_compression='smart', normalize_keys='enabled', cache_patches='disabled')
+    native_data = native_result[4]
+    qpatch = native_data['model_patches'][target]
+    assert isinstance(qpatch, m.LoRAAdapter)
+    assert qpatch.weights[1].shape[0] <= 5
+    torch.testing.assert_close(m._LoRAMergeBase._expand_patch_to_diff(qpatch)[256:], torch.zeros(512, 48))
+    assert all(isinstance(p, m.LoRAAdapter) for p in native_data['clip_patches'].values())
+    with tempfile.TemporaryDirectory() as tmp:
+        native_path = m.SaveMergedLoRA().save_lora(native_data, tmp, 'native-' + mode)[0]
+        native_loaded, native_loaded_clip = comfy.sd.load_lora_for_models(
+            native_base, native_clip, load_file(native_path), 1., 1.)
+        for patches, reloaded_patcher, module, strength in (
+                (native_data['model_patches'], native_loaded, native_base.model, native_data['output_strength']),
+                (native_data['clip_patches'], native_loaded_clip.patcher, native_clip.cond_stage_model, native_data['clip_strength'])):
+            assert set(reloaded_patcher.patches) == set(patches)
+            for key, patch in patches.items():
+                weight = module.state_dict()[key].float()
+                expected = comfy.lora.calculate_weight([(strength, patch, 1., None, None)], weight.clone(), key)
+                actual = comfy.lora.calculate_weight(reloaded_patcher.patches[key], weight.clone(), key)
+                torch.testing.assert_close(actual, expected, atol=3e-6, rtol=3e-5, msg=mode + ': native ' + key)
+    del native_result, native_loaded, native_loaded_clip, reloaded_patcher
+del native_base, native_clip
+print("PASS: real ComfyUI mapping/application, partial QKV, signed alpha, dense AdaLN/bias/norm, LoCon, fp32 export, atomic rejection, signed CLIP weights/bias, dense and native-factor NP-LoRA/CT-Merging round trips and metadata")
 # Release while Comfy's modules are still alive (avoid interpreter-shutdown
 # ModelPatcher destructor warnings masking useful test output).
 del result, reloaded, base, opt, clip, clip_result, loaded_clip, _

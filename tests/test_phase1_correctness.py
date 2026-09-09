@@ -88,6 +88,23 @@ class Phase1Correctness(unittest.TestCase):
         sd.update(factors('text_encoder.text_model.encoder.layers.0.self_attn.q_proj'))
         self.assertEqual(self.opt._detect_architecture(sd), 'sd15')
 
+    def test_partial_h3_model_hint_is_not_hijacked_by_clip_projection_keys(self):
+        prefix = 'diffusion_model.blocks.0.attn.to_q'
+        sd = factors(prefix, rows=256, cols=48)
+        sd.update(factors('text_encoder.text_model.encoder.layers.0.self_attn.q_proj'))
+        normalized = self.opt._normalize_stack([entry(sd, h3_layout='comfy')],
+                                              'enabled', _arch_hint='minimax_h3')
+        self.assertEqual(self.opt._detected_arch, 'minimax_h3')
+        self.assertIn(prefix + '.lora_B.weight', normalized[0]['lora'])
+
+    def test_diffusion_detection_ignores_explicit_te_keys_but_te_only_is_unchanged(self):
+        te = factors('text_encoder.text_model.encoder.layers.0.self_attn.q_proj')
+        self.assertEqual(self.opt._detect_architecture(te), 'acestep')
+        for sd, expected in ((factors('blocks.0.self_attn.q'), 'wan'),
+                             (factors('layer'), 'unknown')):
+            with self.subTest(expected=expected):
+                self.assertEqual(self.opt._detect_architecture({**sd, **te}), expected)
+
     def test_invalid_header_alpha_rejected(self):
         for alpha in ('NaN', 'Infinity', 'invalid'):
             with self.subTest(alpha=alpha), self.assertRaisesRegex(ValueError, 'alpha'):

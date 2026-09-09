@@ -1,0 +1,1336 @@
+{
+  "study": "2026-09-08 H3 local pilot",
+  "scope": "One cup prompt, two seeds; unblinded sampled-frame inspection; descriptive metrics, no audiovisual preference score.",
+  "artifact_root": "/tmp/h3-autotuner-study-20260908",
+  "merge_runs": [
+    {
+      "pair": "combat_cinema",
+      "action": "merge",
+      "mode": "additive",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "7bfc80e424ca7806ea3f421a008b286196401b2915ad04729f1c6210ae2e8962",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/combat-cinema-additive-01/merged.safetensors",
+      "export_size": 620309608,
+      "patch_compression": "aggressive",
+      "elapsed_seconds": 11.755246271990472,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "combat-cinema-additive-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE ｜Fight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ]
+    },
+    {
+      "pair": "combat_repair",
+      "action": "merge",
+      "mode": "additive",
+      "strengths": [
+        0.8,
+        0.6
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "b4e1e0930203b33f325ae94e708b5a3aa0d1b65622f493c7769b11be1c641f99",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/combat-repair-additive-01/merged.safetensors",
+      "export_size": 620309600,
+      "patch_compression": "aggressive",
+      "elapsed_seconds": 10.43584282899974,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 2476961792,
+      "peak_cuda_reserved": 3116367872,
+      "run": "combat-repair-additive-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE ｜Fight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/Motion_Repair.safetensors",
+          "sha256": "a678a3657cefd5c2c2712f892da2f71be53c3f252e335557e918854f8abc579f",
+          "model_name": "BUNNY General Motion Continuity Repair",
+          "civitai_version_id": 3268186,
+          "tensor_count": 416
+        }
+      ]
+    },
+    {
+      "pair": "combat_repair",
+      "action": "tune",
+      "strengths": [
+        0.8,
+        0.6
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "b4e1e0930203b33f325ae94e708b5a3aa0d1b65622f493c7769b11be1c641f99",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "elapsed_seconds": 89.00121489001322,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 17587511296,
+      "peak_cuda_reserved": 18660458496,
+      "run": "combat-repair-tune-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/H3_Combat_V2.safetensors",
+          "sha256": "5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+          "model_name": "MiniMax H3 Combat BASE ｜Fight Motion / Impact / Drama Booster",
+          "civitai_version_id": 3246572,
+          "tensor_count": 416
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/Motion_Repair.safetensors",
+          "sha256": "a678a3657cefd5c2c2712f892da2f71be53c3f252e335557e918854f8abc579f",
+          "model_name": "BUNNY General Motion Continuity Repair",
+          "civitai_version_id": 3268186,
+          "tensor_count": 416
+        }
+      ],
+      "analysis_summary": {
+        "n_loras": 2,
+        "prefix_count": 312,
+        "avg_conflict_ratio": 0.49770887717706025,
+        "avg_excess_conflict": 0.0009823655861052852,
+        "avg_subspace_overlap": 0.015698339210199384,
+        "avg_cosine_sim": 0.017688382539166783,
+        "magnitude_ratio": 2.029159397478499,
+        "decision_smoothing": 0.25
+      },
+      "top_n": [
+        {
+          "rank": 1,
+          "score_heuristic": 0.89,
+          "score_measured": 0.5614442470589416,
+          "score_external": null,
+          "score_final": 0.5614442470589416,
+          "config": {
+            "merge_mode": "per_prefix_auto",
+            "sparsification": "disabled",
+            "sparsification_density": 0.7,
+            "dare_dampening": 0,
+            "merge_refinement": "none",
+            "auto_strength": "enabled",
+            "optimization_mode": "per_prefix",
+            "strategy_set": "full"
+          },
+          "metrics": {
+            "norm_preservation": 0.8550947699695826,
+            "effective_rank_mean": 0,
+            "sparsity_mean": 0.1284234123632634,
+            "norm_cv": 0.7339583306086438,
+            "energy_ratio": 1.3321321124448522,
+            "energy_preservation": 1
+          }
+        },
+        {
+          "rank": 2,
+          "score_heuristic": 0.89,
+          "score_measured": 0.4853494824269041,
+          "score_external": null,
+          "score_final": 0.4853494824269041,
+          "config": {
+            "merge_mode": "per_prefix_auto",
+            "sparsification": "disabled",
+            "sparsification_density": 0.7,
+            "dare_dampening": 0,
+            "merge_refinement": "none",
+            "auto_strength": "enabled",
+            "optimization_mode": "per_prefix",
+            "strategy_set": "no_slerp"
+          },
+          "metrics": {
+            "norm_preservation": 0.7086806270795373,
+            "effective_rank_mean": 0,
+            "sparsity_mean": 0.09684457972000998,
+            "norm_cv": 0.8229901945862118,
+            "energy_ratio": 1.1526949730140872,
+            "energy_preservation": 1
+          }
+        }
+      ]
+    },
+    {
+      "pair": "vbvr_cinema",
+      "action": "merge",
+      "mode": "additive",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "f7860078b99e7d432ceb116056e7d33123dd48bd92c5c11ad91c25c30828c60e",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/vbvr-cinema-additive-01/merged.safetensors",
+      "export_size": 375794656,
+      "patch_compression": "aggressive",
+      "elapsed_seconds": 7.261623900994891,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 1859297280,
+      "peak_cuda_reserved": 2497708032,
+      "run": "vbvr-cinema-additive-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+          "sha256": "372597997f646301dea204bf00e899b0f470254d7b9ac345e7b7417cc2140b34",
+          "model_name": "H3 - LTX 2.3 - I2V T2V Video Reasoning lora VBVR",
+          "civitai_version_id": 3220766,
+          "tensor_count": 208
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ]
+    },
+    {
+      "pair": "vbvr_cinema",
+      "action": "merge",
+      "mode": "ct_merge",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "7bfc80e424ca7806ea3f421a008b286196401b2915ad04729f1c6210ae2e8962",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/vbvr-cinema-ct-01/merged.safetensors",
+      "export_size": 1335963696,
+      "patch_compression": "aggressive",
+      "elapsed_seconds": 14.288058632024331,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 1859297280,
+      "peak_cuda_reserved": 2499805184,
+      "run": "vbvr-cinema-ct-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+          "sha256": "372597997f646301dea204bf00e899b0f470254d7b9ac345e7b7417cc2140b34",
+          "model_name": "H3 - LTX 2.3 - I2V T2V Video Reasoning lora VBVR",
+          "civitai_version_id": 3220766,
+          "tensor_count": 208
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ]
+    },
+    {
+      "pair": "vbvr_cinema",
+      "action": "merge",
+      "mode": "ct_merge",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "b4e1e0930203b33f325ae94e708b5a3aa0d1b65622f493c7769b11be1c641f99",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/vbvr-cinema-ct-02-fp32/merged.safetensors",
+      "export_size": 1419456416,
+      "patch_compression": "aggressive",
+      "elapsed_seconds": 12.359886098012794,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 1859297280,
+      "peak_cuda_reserved": 2499805184,
+      "run": "vbvr-cinema-ct-02-fp32",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+          "sha256": "372597997f646301dea204bf00e899b0f470254d7b9ac345e7b7417cc2140b34",
+          "model_name": "H3 - LTX 2.3 - I2V T2V Video Reasoning lora VBVR",
+          "civitai_version_id": 3220766,
+          "tensor_count": 208
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ]
+    },
+    {
+      "pair": "vbvr_cinema",
+      "action": "merge",
+      "mode": "np_lora",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "7bfc80e424ca7806ea3f421a008b286196401b2915ad04729f1c6210ae2e8962",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/vbvr-cinema-np-01/merged.safetensors",
+      "export_size": 1335963728,
+      "patch_compression": "aggressive",
+      "elapsed_seconds": 11.906066657975316,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 1859297280,
+      "peak_cuda_reserved": 2497708032,
+      "run": "vbvr-cinema-np-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+          "sha256": "372597997f646301dea204bf00e899b0f470254d7b9ac345e7b7417cc2140b34",
+          "model_name": "H3 - LTX 2.3 - I2V T2V Video Reasoning lora VBVR",
+          "civitai_version_id": 3220766,
+          "tensor_count": 208
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ]
+    },
+    {
+      "pair": "vbvr_cinema",
+      "action": "merge",
+      "mode": "np_lora",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "b4e1e0930203b33f325ae94e708b5a3aa0d1b65622f493c7769b11be1c641f99",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/vbvr-cinema-np-02-fp32/merged.safetensors",
+      "export_size": 1419456448,
+      "patch_compression": "aggressive",
+      "elapsed_seconds": 10.84986676601693,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 1859297280,
+      "peak_cuda_reserved": 2497708032,
+      "run": "vbvr-cinema-np-02-fp32",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+          "sha256": "372597997f646301dea204bf00e899b0f470254d7b9ac345e7b7417cc2140b34",
+          "model_name": "H3 - LTX 2.3 - I2V T2V Video Reasoning lora VBVR",
+          "civitai_version_id": 3220766,
+          "tensor_count": 208
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ]
+    },
+    {
+      "pair": "vbvr_cinema",
+      "action": "tune",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "7bfc80e424ca7806ea3f421a008b286196401b2915ad04729f1c6210ae2e8962",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "elapsed_seconds": 36.28909523301991,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 17776566272,
+      "peak_cuda_reserved": 19027460096,
+      "run": "vbvr-cinema-tune-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+          "sha256": "372597997f646301dea204bf00e899b0f470254d7b9ac345e7b7417cc2140b34",
+          "model_name": "H3 - LTX 2.3 - I2V T2V Video Reasoning lora VBVR",
+          "civitai_version_id": 3220766,
+          "tensor_count": 208
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "analysis_summary": {
+        "n_loras": 2,
+        "prefix_count": 312,
+        "avg_conflict_ratio": 0.5004166109174224,
+        "avg_excess_conflict": 0.0012016710245921376,
+        "avg_subspace_overlap": 0.006053364561559538,
+        "avg_cosine_sim": -0.0015428329212103977,
+        "magnitude_ratio": 26.27374007494557,
+        "decision_smoothing": 0.25
+      },
+      "top_n": [
+        {
+          "rank": 1,
+          "score_heuristic": 0.89,
+          "score_measured": 0.6881640021548914,
+          "score_external": null,
+          "score_final": 0.6881640021548914,
+          "config": {
+            "merge_mode": "per_prefix_auto",
+            "sparsification": "disabled",
+            "sparsification_density": 0.7,
+            "dare_dampening": 0,
+            "merge_refinement": "none",
+            "auto_strength": "enabled",
+            "optimization_mode": "per_prefix",
+            "strategy_set": "full"
+          },
+          "metrics": {
+            "norm_preservation": 5.793848993113408,
+            "effective_rank_mean": 0,
+            "sparsity_mean": 0.16622378798918083,
+            "norm_cv": 0.5561195716685791,
+            "energy_ratio": 1.4915575362915279,
+            "energy_preservation": 1
+          }
+        },
+        {
+          "rank": 2,
+          "score_heuristic": 0.89,
+          "score_measured": 0.6881640021548914,
+          "score_external": null,
+          "score_final": 0.6881640021548914,
+          "config": {
+            "merge_mode": "per_prefix_auto",
+            "sparsification": "disabled",
+            "sparsification_density": 0.7,
+            "dare_dampening": 0,
+            "merge_refinement": "none",
+            "auto_strength": "enabled",
+            "optimization_mode": "per_prefix",
+            "strategy_set": "basic"
+          },
+          "metrics": {
+            "norm_preservation": 5.793848993113408,
+            "effective_rank_mean": 0,
+            "sparsity_mean": 0.16622378798918083,
+            "norm_cv": 0.5561195716685791,
+            "energy_ratio": 1.4915575362915279,
+            "energy_preservation": 1
+          }
+        },
+        {
+          "rank": 3,
+          "score_heuristic": 0.8656648880422473,
+          "score_measured": 0.4406292970150274,
+          "score_external": null,
+          "score_final": 0.4406292970150274,
+          "config": {
+            "merge_mode": "per_prefix_auto",
+            "sparsification": "della_conflict",
+            "sparsification_density": 0.7,
+            "dare_dampening": 0,
+            "merge_refinement": "none",
+            "auto_strength": "enabled",
+            "optimization_mode": "per_prefix",
+            "strategy_set": "full"
+          },
+          "metrics": {
+            "norm_preservation": 6.057428111823706,
+            "effective_rank_mean": 0,
+            "sparsity_mean": 0.28878586912740817,
+            "norm_cv": 0.5299555368425369,
+            "energy_ratio": 1.5423974260243827,
+            "energy_preservation": 1
+          }
+        }
+      ]
+    },
+    {
+      "pair": "vbvr_cinema",
+      "action": "replay",
+      "strengths": [
+        0.8,
+        0.8
+      ],
+      "checkpoint": "/media/p5/Comfyui/models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "checkpoint_size": 20970379616,
+      "checkpoint_mtime_ns": 1788468997480069600,
+      "shape_only_base": true,
+      "tame_layers": 0,
+      "source_sha256": {
+        "lora_optimizer.py": "7bfc80e424ca7806ea3f421a008b286196401b2915ad04729f1c6210ae2e8962",
+        "experimental_merge.py": "ee06dfec919b97b87cc7f55d9e3ac11f9f8b4434766ab6c913d30db93860d9ac"
+      },
+      "export": "/tmp/h3-autotuner-study-20260908/vbvr-cinema-winner-01/merged.safetensors",
+      "export_size": 375794656,
+      "tuner_data": "/tmp/h3-autotuner-study-20260908/vbvr-cinema-tune-01/tuner_data.json",
+      "patch_compression": "smart",
+      "elapsed_seconds": 6.668451614998048,
+      "torch_version": "2.11.0+cu130",
+      "cuda_device": "NVIDIA GeForce RTX 5090",
+      "peak_cuda_allocated": 1859297280,
+      "peak_cuda_reserved": 2497708032,
+      "run": "vbvr-cinema-winner-01",
+      "adapters": [
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+          "sha256": "372597997f646301dea204bf00e899b0f470254d7b9ac345e7b7417cc2140b34",
+          "model_name": "H3 - LTX 2.3 - I2V T2V Video Reasoning lora VBVR",
+          "civitai_version_id": 3220766,
+          "tensor_count": 208
+        },
+        {
+          "path": "/media/p5/ComfyUI-Model-CIFS-Cache/loras/MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+          "sha256": "cf7d8e1aeec12c757e0b557591fe493b2f50590a1e0e7b017e29e7268a39496b",
+          "model_name": "Cinematic Style LoRA + Detail Enhancer for MiniMax H3",
+          "civitai_version_id": 3278719,
+          "tensor_count": 416
+        }
+      ],
+      "selected_config": {
+        "merge_mode": "per_prefix_auto",
+        "sparsification": "disabled",
+        "sparsification_density": 0.7,
+        "dare_dampening": 0,
+        "merge_refinement": "none",
+        "auto_strength": "enabled",
+        "optimization_mode": "per_prefix",
+        "strategy_set": "full"
+      }
+    }
+  ],
+  "precision_checks": [
+    {
+      "mode": "ct_merge",
+      "all_targets": false,
+      "groups_checked": 24,
+      "elapsed_seconds": 0.8533072700083721,
+      "run": "vbvr-cinema-ct-01",
+      "max_relative_export_error": 0.0024072982275621553,
+      "max_error_to_method_change": 0.0020817251498625126,
+      "all_finite": true
+    },
+    {
+      "mode": "ct_merge",
+      "all_targets": true,
+      "groups_checked": 312,
+      "elapsed_seconds": 9.111036644986598,
+      "run": "vbvr-cinema-ct-02-fp32",
+      "max_relative_export_error": 0.000004101275891841911,
+      "max_error_to_method_change": 0.000003401216413817452,
+      "all_finite": true
+    },
+    {
+      "mode": "np_lora",
+      "all_targets": false,
+      "groups_checked": 24,
+      "elapsed_seconds": 0.6582780340104364,
+      "run": "vbvr-cinema-np-01",
+      "max_relative_export_error": 0.002453836307988018,
+      "max_error_to_method_change": 3.9544739857647015,
+      "all_finite": true
+    },
+    {
+      "mode": "np_lora",
+      "all_targets": true,
+      "groups_checked": 312,
+      "elapsed_seconds": 3.6059149560169317,
+      "run": "vbvr-cinema-np-02-fp32",
+      "max_relative_export_error": 0.0000028731999180984047,
+      "max_error_to_method_change": 0.0016235435596413167,
+      "all_finite": true
+    }
+  ],
+  "renders": [
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-additive-01_00001_.mp4",
+      "video_sha256": "dbc9e78bf76c3bcfa953aebd992d8a5c118dec37c6fe266e7b946fc92951de62",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0024936918634921312,
+      "frame_difference_p95": 0.00541212223470211,
+      "near_static_frame_fraction": 0.18699186991869918,
+      "luma_mean": 0.2334131896495819,
+      "luma_std": 0.1864403337240219,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.2780238687992096,
+        "rms": 0.004862774163484573,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.810077519379845,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-additive-01",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-9ba28975cb5b4aa6b5eae1302a90be60",
+        "prompt_name": "cup",
+        "seed": 2026090801,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-additive.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-additive-01",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "3c7738c1-b281-49ae-8bd8-b5d9e80b1704",
+      "status": "success",
+      "execution_seconds": 40.495
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-additive-02_00001_.mp4",
+      "video_sha256": "6fcabe3cced5f1f352a2cb23038fec2d27820d31e4f36093ecc1a86037761370",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0015758508816361427,
+      "frame_difference_p95": 0.003201389219611883,
+      "near_static_frame_fraction": 0.2845528455284553,
+      "luma_mean": 0.21853335201740265,
+      "luma_std": 0.13526970148086548,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.18383730947971344,
+        "rms": 0.0039424472488462925,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8992248062015504,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-additive-02",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-796a909e04294c5eaeb3c8a5bdf7c53c",
+        "prompt_name": "cup",
+        "seed": 2026090802,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-additive.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-additive-02",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "4aca1205-789c-46c3-9c4c-45221b4c9ea4",
+      "status": "success",
+      "execution_seconds": 30.91
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-base-01_00001_.mp4",
+      "video_sha256": "17b5f02dbdcc9a9586b437f91de239fcc18163695a7f8bb564d3623ecf037956",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0026037225034087896,
+      "frame_difference_p95": 0.006433849222958088,
+      "near_static_frame_fraction": 0.21138211382113822,
+      "luma_mean": 0.2365972101688385,
+      "luma_std": 0.220098614692688,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.20371830463409424,
+        "rms": 0.004958378151059151,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.2868217054263566,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-base-01",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-5cf893f46d554bcebac5911ef9287186",
+        "prompt_name": "cup",
+        "seed": 2026090801,
+        "loras": [],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-base-01",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "7bee8549-83aa-4494-9036-40a1e39b0d61",
+      "status": "success",
+      "execution_seconds": 92.379
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-base-02_00001_.mp4",
+      "video_sha256": "ec040d30077a915dd75c605094381105181091e8cfaa6ebbd20404760c80f3a0",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0022478383034467697,
+      "frame_difference_p95": 0.005167892202734947,
+      "near_static_frame_fraction": 0.2601626016260163,
+      "luma_mean": 0.20459112524986267,
+      "luma_std": 0.18679073452949524,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.1889999806880951,
+        "rms": 0.0038022706285119057,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8798449612403101,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-base-02",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-6fa1aabb9f5a4c788bea430da243b19c",
+        "prompt_name": "cup",
+        "seed": 2026090802,
+        "loras": [],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-base-02",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "ada354d3-b77d-4aa4-a173-2ddba6e355c6",
+      "status": "success",
+      "execution_seconds": 35.184
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-cinema-01_00001_.mp4",
+      "video_sha256": "3c51871d8b1186a2b6d66673249a2d2d463c301266b055d876ce7bffdfe7516c",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0030952077358961105,
+      "frame_difference_p95": 0.006517591420561075,
+      "near_static_frame_fraction": 0.12195121951219512,
+      "luma_mean": 0.2162141352891922,
+      "luma_std": 0.17792119085788727,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.21039558947086334,
+        "rms": 0.004598304629325867,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8604651162790697,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-cinema-01",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-7354e37b911348039310661b43f8330b",
+        "prompt_name": "cup",
+        "seed": 2026090801,
+        "loras": [
+          [
+            "MiniMax H3/style/Cinema-MH3-V02_000010000.safetensors",
+            ".8"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-cinema-01",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "eaa6cc5e-29b3-49bb-abd5-a3bdc69b9ec7",
+      "status": "success",
+      "execution_seconds": 41.161
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-ct-fp32-01_00001_.mp4",
+      "video_sha256": "efb39ea943362d843e0da68f79913f9f7ed8c7323596b357d87dd4d494035dbb",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.001888263737782836,
+      "frame_difference_p95": 0.004917790647596121,
+      "near_static_frame_fraction": 0.3821138211382114,
+      "luma_mean": 0.2339888960123062,
+      "luma_std": 0.18861493468284607,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.02903643250465393,
+        "rms": 0.0013246193993836641,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.7170542635658915,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-ct-fp32-01",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-be3336a34a3d4f8c9dc93eb3dfd51a84",
+        "prompt_name": "cup",
+        "seed": 2026090801,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-ct-fp32.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-ct-fp32-01",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "52e6679a-f961-4b42-8089-1533bdbba0b3",
+      "status": "success",
+      "execution_seconds": 32.262
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-ct-fp32-02_00001_.mp4",
+      "video_sha256": "6f568abc753a159045363c0e6d9f0b3623929a1318a291f2e814316c01a3179c",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0015381023986265063,
+      "frame_difference_p95": 0.0030818781815469265,
+      "near_static_frame_fraction": 0.4146341463414634,
+      "luma_mean": 0.2368854433298111,
+      "luma_std": 0.14996086061000824,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.19867826998233795,
+        "rms": 0.004128915257751942,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8333333333333334,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-ct-fp32-02",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-1fa117aa82804d51ac7d1beb7b862e84",
+        "prompt_name": "cup",
+        "seed": 2026090802,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-ct-fp32.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-ct-fp32-02",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "3656792a-7244-48fe-a21d-a939f07170f7",
+      "status": "success",
+      "execution_seconds": 40.766
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-np-fp32-01_00001_.mp4",
+      "video_sha256": "3f070968fb96d78b8db79f95d535f916a5fba80e86ff508b9dcc60fd05c00d74",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0026161684654653072,
+      "frame_difference_p95": 0.005786407273262739,
+      "near_static_frame_fraction": 0.18699186991869918,
+      "luma_mean": 0.23230867087841034,
+      "luma_std": 0.18679474294185638,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.2519899904727936,
+        "rms": 0.004756895825266838,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8062015503875969,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-np-fp32-01",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-83642a4b3f4a45fd9f820dde771f5977",
+        "prompt_name": "cup",
+        "seed": 2026090801,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-np-fp32.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-np-fp32-01",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "21199bd1-9266-4240-bb27-409a07f9b8dc",
+      "status": "success",
+      "execution_seconds": 42.127
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-np-fp32-02_00001_.mp4",
+      "video_sha256": "977b72aecf91aae1be78a5ce284a9823d5aedb413a227f1da6c867431dc122f7",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0016055871965363622,
+      "frame_difference_p95": 0.003304151352494955,
+      "near_static_frame_fraction": 0.3008130081300813,
+      "luma_mean": 0.22124016284942627,
+      "luma_std": 0.1375105232000351,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.18218642473220825,
+        "rms": 0.00392161263152957,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8992248062015504,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-np-fp32-02",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-d7d1c28d5f7f482386277039ae8b6c7a",
+        "prompt_name": "cup",
+        "seed": 2026090802,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-np-fp32.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-np-fp32-02",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "8a99b836-a5e6-46be-ad00-5722c6143da5",
+      "status": "success",
+      "execution_seconds": 37.908
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-vbvr-01_00001_.mp4",
+      "video_sha256": "648a79fbf7a9970086a04caf2497745f23f3c72910f3425fec8fdc6a7608a63d",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0024821285624057055,
+      "frame_difference_p95": 0.005833895411342382,
+      "near_static_frame_fraction": 0.21138211382113822,
+      "luma_mean": 0.2405322641134262,
+      "luma_std": 0.22497591376304626,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.166469007730484,
+        "rms": 0.004079416859894991,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.5,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-vbvr-01",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-4a4270e23d234333a856d0fe6ed85e16",
+        "prompt_name": "cup",
+        "seed": 2026090801,
+        "loras": [
+          [
+            "MiniMax H3/concept/VBVR_H3_attn_only.safetensors",
+            ".8"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-vbvr-01",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "9c702bbc-25f2-46ff-9144-e3ed96bf4cf5",
+      "status": "success",
+      "execution_seconds": 63.393
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-winner-01_00001_.mp4",
+      "video_sha256": "0a3961dae851b00a13f9c07fe68a04d17b7a3a7d26e14b925369ac3efd86f33d",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.0028688530437648296,
+      "frame_difference_p95": 0.006332261022180319,
+      "near_static_frame_fraction": 0.15447154471544716,
+      "luma_mean": 0.22742706537246704,
+      "luma_std": 0.1912682056427002,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.21113087236881256,
+        "rms": 0.004298938438296318,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8488372093023255,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-winner-01",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-06b5ce3f8bf049528388eb79d3cba5a1",
+        "prompt_name": "cup",
+        "seed": 2026090801,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-winner.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-winner-01",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "8f89c381-1ef9-45f7-bccc-845c9bd7ade1",
+      "status": "success",
+      "execution_seconds": 54.072
+    },
+    {
+      "video": "/media/unraid/comfyui/output/h3_autotuner_study_20260908/local-cup-winner-02_00001_.mp4",
+      "video_sha256": "422c0b369dfc770aaedf2196e14d9bee8c9d4065ef3c8a2634f586c2560b9264",
+      "decoded_frames": 124,
+      "frame_difference_mean": 0.001713239005766809,
+      "frame_difference_p95": 0.0038906249683350325,
+      "near_static_frame_fraction": 0.3333333333333333,
+      "luma_mean": 0.2086513489484787,
+      "luma_std": 0.13149115443229675,
+      "quality_score": null,
+      "note": "Motion/luma/audio statistics are descriptive, not preference or synchronization scores.",
+      "audio": {
+        "samples": 165334,
+        "sample_rate": 32000,
+        "peak": 0.084246926009655,
+        "rms": 0.0023131240159273148,
+        "clipped_fraction": 0,
+        "quiet_20ms_fraction": 0.8643410852713178,
+        "listened": false,
+        "synchronization_score": null
+      },
+      "run": "local-cup-winner-02",
+      "manifest": {
+        "base": "http://127.0.0.1:8189",
+        "client_id": "h3-study-6245116471d143d38859b9347540d9c1",
+        "prompt_name": "cup",
+        "seed": 2026090802,
+        "loras": [
+          [
+            "h3-autotuner-study-20260908/vbvr-cinema-winner.safetensors",
+            "1"
+          ]
+        ],
+        "output_prefix": "h3_autotuner_study_20260908/local-cup-winner-02",
+        "turbo": false,
+        "steps": 20,
+        "profile": "local",
+        "width": 640,
+        "height": 384,
+        "length": 124,
+        "quality_claim": null
+      },
+      "prompt_id": "bf924952-c861-4fce-8ef8-adb723a55772",
+      "status": "success",
+      "execution_seconds": 36.737
+    }
+  ],
+  "generation_graph_example": {
+    "1": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    "2": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "type": "minimax",
+        "device": "default"
+      }
+    },
+    "3": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+      }
+    },
+    "4": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+      }
+    },
+    "5": {
+      "class_type": "MiniMaxH3ImageToVideo",
+      "inputs": {
+        "clip": [
+          "2",
+          0
+        ],
+        "vae": [
+          "3",
+          0
+        ],
+        "prompt": "integrated_multimodal_description: [Shot 1] ASTROCINEMAV01K2T. Live-action, a medium shot of an adult man in a blue work shirt sitting at a wooden kitchen table. A red ceramic cup rests in front of him. He reaches with his right hand, grasps the handle, lifts the cup to his lips, takes one sip, and sets it back in its original position. One continuous shot at normal speed. His left hand stays on the table. Warm light from a shaded lamp and cool window fill reveal natural skin and fabric texture. The camera remains stationary.\n\noverall_soundscape: Quiet room ambience, a small sipping sound, and one ceramic tap when the cup returns to the table. No speech.\n\nnon_diegetic_music: N/A",
+        "width": 640,
+        "height": 384,
+        "length": 124
+      }
+    },
+    "6": {
+      "class_type": "RandomNoise",
+      "inputs": {
+        "noise_seed": 2026090801
+      }
+    },
+    "7": {
+      "class_type": "KSamplerSelect",
+      "inputs": {
+        "sampler_name": "res_multistep"
+      }
+    },
+    "8": {
+      "class_type": "BasicScheduler",
+      "inputs": {
+        "model": [
+          "1",
+          0
+        ],
+        "scheduler": "simple",
+        "steps": 20,
+        "denoise": 1
+      }
+    },
+    "9": {
+      "class_type": "BasicGuider",
+      "inputs": {
+        "model": [
+          "1",
+          0
+        ],
+        "conditioning": [
+          "5",
+          0
+        ]
+      }
+    },
+    "10": {
+      "class_type": "SamplerCustomAdvanced",
+      "inputs": {
+        "noise": [
+          "6",
+          0
+        ],
+        "guider": [
+          "9",
+          0
+        ],
+        "sampler": [
+          "7",
+          0
+        ],
+        "sigmas": [
+          "8",
+          0
+        ],
+        "latent_image": [
+          "5",
+          1
+        ]
+      }
+    },
+    "11": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": [
+          "10",
+          0
+        ],
+        "vae": [
+          "3",
+          0
+        ]
+      }
+    },
+    "12": {
+      "class_type": "VAEDecodeAudio",
+      "inputs": {
+        "samples": [
+          "10",
+          0
+        ],
+        "vae": [
+          "4",
+          0
+        ]
+      }
+    },
+    "13": {
+      "class_type": "CreateVideo",
+      "inputs": {
+        "images": [
+          "11",
+          0
+        ],
+        "audio": [
+          "12",
+          0
+        ],
+        "fps": 24
+      }
+    },
+    "14": {
+      "class_type": "SaveVideo",
+      "inputs": {
+        "video": [
+          "13",
+          0
+        ],
+        "filename_prefix": "h3_autotuner_study_20260908/local-cup-base-01",
+        "format": "mp4",
+        "format.codec": "h264",
+        "format.codec.encoding": "re-encode",
+        "format.codec.encoding.crf": 16
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "created_at_utc": "2026-09-08 11:21:12 UTC",
+  "plan_sha256": "4982928f36c1052dfc7092456d1d612a3277d94e549ef72d5eb618c27c1d7d20",
+  "calibration_ratings_seen_sha256": "bfce769c991340b9f081ff61148c0025354968c2c6b934e73c527af07f46e0aa",
+  "reviewer_count": 1,
+  "calibration_seeds_rated": [2026090803],
+  "calibration_seeds_unrated": [2026090804],
+  "heldout_seeds": [2026090811, 2026090812],
+  "heldout_rendered_at_freeze": false,
+  "heldout_inspected_at_freeze": false,
+  "production_sha256": {
+    "lora_optimizer.py": "3d245ea08cda5aa4faf49cec9a878a93a521cb2bc71088d989f30c1d63346145",
+    "experimental_merge.py": "36bd479c1961dc6d2e5c79e1d3a79202e3149f47b1025483912f72ac1a3b57d4"
+  },
+  "candidate_policy": "Retain the frozen AV2 matrix, strengths, NP/CT parameters, exact exports and internal ranker without any preference-driven change.",
+  "primary_descriptive_hypothesis": "R1's first-seed CT-over-additive overall preference may repeat on the other calibration seed and held-out padwork. This is not a general-quality or default-selection claim.",
+  "comparison_policy": "Report all seven arms per pair/seed and all six dimensions. Preserve ties, missing labels and repeated-control variation; shared clips and overlapping pairs are not independent trials. Compare NP/CT with additive, stable winner and individual adapters, not just base.",
+  "allowed_preference_free_work": [
+    "Render the remaining 24 physical held-out clips serially on the existing local server when its queue is idle.",
+    "Verify prepared/executed graphs, whole-clip decode, streams and review-remux fidelity.",
+    "Prepare separate blinded review pages without displaying held-out clips or frame grids.",
+    "Perform frame-waveform diagnostics on already-reviewed calibration clips; retain uncertainty and do not convert them into audiovisual preferences."
+  ],
+  "not_authorized_by_this_record": [
+    "Fitting candidate selection to held-out outputs or inventing human labels.",
+    "Expanding the render matrix, rerolling undesirable clips or changing model/runtime profiles.",
+    "Changing disconnected behavior, installing updates, publishing, committing, pushing or version bumping."
+  ]
+}
